@@ -1,0 +1,40 @@
+@PACKAGE_INIT@
+
+# camxiom package config for the pure-CMake (non-ament) install path. The same
+# camxiom:: targets are exported in a ROS 2 / ament workspace via the ament
+# index; this file is only used when camxiom was installed as a standalone
+# CMake package. It re-discovers the public-interface dependencies that the
+# exported targets reference, then pulls in the target definitions.
+
+include(CMakeFindDependencyMacro)
+
+# Runtime core: Eigen3 is part of camxiom_core's PUBLIC interface.
+find_dependency(Eigen3)
+
+# camxiom_core links OpenMP::OpenMP_CXX privately; as a static library that
+# dependency propagates into the exported link interface, so consumers must be
+# able to resolve the imported target.
+if(@CAMXIOM_WITH_OPENMP@)
+  find_dependency(OpenMP)
+endif()
+
+# camxiom_calib publicly links Ceres (only built when CAMXIOM_WITH_CERES).
+# The floor is the version camxiom was actually compiled against: camxiom_calib
+# is a static library, so consumers must resolve a Ceres at least as new as the
+# headers its object code was built with (2.0 and 2.1+ differ in the
+# Manifold-API call compiled into pnp_solver).
+if(@CAMXIOM_WITH_CERES@)
+  find_dependency(Ceres @Ceres_VERSION@)
+endif()
+
+# Optional interop layers compiled into camxiom_core.
+if(@CAMXIOM_WITH_OPENCV@)
+  find_dependency(OpenCV COMPONENTS core imgproc calib3d)
+endif()
+if(@CAMXIOM_WITH_ROS@)
+  find_dependency(sensor_msgs)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/camxiomTargets.cmake")
+
+check_required_components(camxiom)

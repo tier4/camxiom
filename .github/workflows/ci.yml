@@ -1,0 +1,202 @@
+name: CI
+
+# camxiom is developed on aarch64 (Jetson/tegra) where the x86 SIMD kernels
+# (src/detail/simd_*.cpp, gated on __SSE2__ / __AVX2__) compile to EMPTY
+# translation units and the batch/{float,double}.cpp paths fall back to scalar.
+# That means the SIMD implementation is never built or exercised on the dev
+# machine. This workflow builds + tests camxiom on x86_64 so the SIMD kernels
+# are actually compiled and the scalar<->SIMD parity tests (BatchChar.*,
+# LutChar.*, JacobianBatchChar.*) run against real vector code (LOADMAP T2).
+#
+# Two variants:
+#   * sse2-baseline: default x86-64 (SSE2 is part of the x86-64 baseline, so
+#     CAMXIOM_HAS_SSE2 is defined and the SSE2 kernels compile; __AVX2__ is not
+#     defined, so the AVX2 kernels stay off -> exercises the SSE2 path).
+#   * avx2: adds -mavx2 -mfma so __AVX2__ is defined and CAMXIOM_HAS_AVX2 lights
+#     up the AVX2 kernels -> exercises the AVX2 path.
+#
+# The x86-core-simd job is core-only (-DCAMXIOM_WITH_CERES=OFF): the
+# SIMD/batch/lut/jacobian code under test lives entirely in camxiom_core
+# (Eigen-only), and the two SIMD variants stay fast. OpenCV is installed so
+# the interop tests (LOADMAP T1) run here too.
+#
+# The full-ceres job builds the complete library (ubuntu-24.04 ships
+# Ceres 2.2.0 in apt, satisfying the find_package(Ceres 2.2) gate) so the
+# calibration layer's test binaries (calib/init/pnp/uncertainty) also run on
+# x86 instead of only on the aarch64 dev machine.
+#
+# The sanitizers job rebuilds the full library with ASan+UBSan as a
+# memory-error / undefined-behaviour net (e.g. signed-overflow, OOB reads)
+# that a plain Release build cannot catch.
+#
+# The ros-interop job builds core-only inside a ros:humble container so the
+# sensor_msgs compat layer (src/compat/ros.cpp) and camxiom_ros_compat_test
+# run in CI at all — no plain-ubuntu job can install sensor_msgs. Ceres stays
+# off there (jammy apt only carries 2.0).
+#
+# Every plain-CMake Test step asserts a floor on the EXECUTED test count:
+# GTest/Python3 are QUIET-detected at configure time, so a silently broken
+# detection would otherwise turn CI green while running almost nothing.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  x86-core-simd:
+    name: x86_64 core + SIMD (${{ matrix.variant }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: sse2-baseline
+            cxxflags: ""
+          - variant: avx2
+            cxxflags: "-mavx2 -mfma"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            g++ \
+            libeigen3-dev \
+            libgtest-dev \
+            libopencv-dev
+
+      - name: Show compiler SIMD macros
+        run: |
+          echo "CXXFLAGS='${{ matrix.cxxflags }}'"
+          echo | g++ -std=c++17 ${{ matrix.cxxflags }} -dM -E - \
+            | grep -E '__SSE2__|__AVX2__|__FMA__' || echo "(no matching SIMD macros)"
+
+      - name: Configure (core-only, Ceres off)
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DCAMXIOM_WITH_CERES=OFF \
+            -DCMAKE_CXX_FLAGS="${{ matrix.cxxflags }}"
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Test
+        run: |
+          ctest --test-dir build --output-on-failure 2>&1 | tee ctest.log
+          total=$(grep -oE 'out of [0-9]+' ctest.log | tail -1 | grep -oE '[0-9]+')
+          echo "tests executed: ${total:-0}"
+          test "${total:-0}" -ge 15
+
+  full-ceres:
+    name: x86_64 full (Ceres + OpenCV)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            g++ \
+            libeigen3-dev \
+            libgtest-dev \
+            libopencv-dev \
+            libceres-dev
+
+      - name: Configure (full, Ceres on)
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DCAMXIOM_WITH_CERES=ON
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Test
+        run: |
+          ctest --test-dir build --output-on-failure 2>&1 | tee ctest.log
+          total=$(grep -oE 'out of [0-9]+' ctest.log | tail -1 | grep -oE '[0-9]+')
+          echo "tests executed: ${total:-0}"
+          test "${total:-0}" -ge 30
+
+  sanitizers:
+    name: x86_64 ASan + UBSan (full)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            g++ \
+            libeigen3-dev \
+            libgtest-dev \
+            libopencv-dev \
+            libceres-dev
+
+      - name: Configure (ASan + UBSan)
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBUILD_TESTING=ON \
+            -DCAMXIOM_WITH_CERES=ON \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined"
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Test
+        env:
+          ASAN_OPTIONS: "detect_leaks=0"
+          UBSAN_OPTIONS: "print_stacktrace=1"
+        run: |
+          ctest --test-dir build --output-on-failure 2>&1 | tee ctest.log
+          total=$(grep -oE 'out of [0-9]+' ctest.log | tail -1 | grep -oE '[0-9]+')
+          echo "tests executed: ${total:-0}"
+          test "${total:-0}" -ge 30
+
+  ros-interop:
+    name: ROS 2 humble interop (core-only)
+    runs-on: ubuntu-latest
+    container: ros:humble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            g++ \
+            libeigen3-dev \
+            python3-colcon-common-extensions \
+            ros-humble-ament-cmake-gtest \
+            ros-humble-sensor-msgs
+
+      - name: Build + test (colcon, ament path)
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          colcon build --packages-select camxiom \
+            --cmake-args -DCMAKE_BUILD_TYPE=Release -DCAMXIOM_WITH_CERES=OFF
+          colcon test --packages-select camxiom --event-handlers console_direct+
+          colcon test-result --verbose
+          # The whole point of this job: the ROS compat test must have run
+          # (ament_add_gtest writes one result file per test executable).
+          test -f build/camxiom/test_results/camxiom/camxiom_ros_compat_test.gtest.xml

@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>camxiom</name>
+  <version>0.1.0</version>
+  <description>
+    Unified camera geometry library: one ray/pixel API across pinhole,
+    fisheye, omnidirectional, double-sphere and EUCM models, with a
+    Ceres-based PnP / intrinsic calibrator and optional ROS 2 / OpenCV
+    interfaces.
+  </description>
+  <maintainer email="kosuke.tokuda.2@tier4.jp">Kosuke Tokuda</maintainer>
+
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>eigen</depend>
+  <depend>libceres-dev</depend>
+  <!-- Optional interop layers: compiled into camxiom only when present at build
+       time (see CMakeLists.txt). Declared here so a ROS/colcon build resolves
+       them; a plain non-ROS CMake build ignores package.xml entirely. -->
+  <depend>sensor_msgs</depend>
+  <depend>libopencv-dev</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <!-- Used directly for the API-snapshot CTest (CMakeLists find_package's it
+       explicitly; declared here rather than relying on the transitive pull
+       through ament_cmake_gtest). -->
+  <test_depend>ament_cmake_test</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

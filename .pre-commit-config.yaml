@@ -1,0 +1,15 @@
+# Pre-commit hooks for camxiom.
+#
+#   pip install pre-commit        # or: pipx install pre-commit
+#   pre-commit install            # run clang-format automatically on `git commit`
+#   pre-commit run --all-files    # format the whole tree now
+#
+# Requires `clang-format` (LLVM 14+) on PATH.
+repos:
+  - repo: local
+    hooks:
+      - id: clang-format
+        name: clang-format
+        entry: clang-format -i
+        language: system
+        files: ^(src|include|tests|benchmarks)/.*\.(cpp|hpp)$

@@ -1,0 +1,43 @@
+# colcon / ament build outputs
+build/
+install/
+log/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+compile_commands.json
+
+# Build artifacts
+*.o
+*.obj
+*.so
+*.so.*
+*.a
+*.lib
+*.dll
+*.dylib
+
+# Test outputs
+test_results/
+*.gtest.xml
+
+# Editors / IDEs
+.vscode/
+.idea/
+.cache/
+
+# Local agent worktrees / state (not part of the library)
+.claude/
+*.swp
+*~
+.DS_Store
+
+# Python (in case pybind11 build/test produces artifacts)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
