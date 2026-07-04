@@ -1,0 +1,66 @@
+# MkDocs configuration for the camxiom documentation site (GitHub Pages ready).
+#
+# Local preview:
+#   pip install mkdocs-material
+#   mkdocs serve            # http://127.0.0.1:8000
+#
+# Publish to GitHub Pages (once a GitHub remote exists):
+#   mkdocs gh-deploy        # builds and pushes to the gh-pages branch
+# or wire the same into CI (e.g. a GitHub Actions job running mkdocs gh-deploy --force).
+
+site_name: camxiom
+site_description: >-
+  Unified C++17 camera-geometry library — one ray/pixel API across pinhole,
+  fisheye, omnidirectional, double sphere and EUCM models, with a Ceres-based
+  PnP / intrinsic calibrator and optional ROS 2 / OpenCV interfaces.
+# site_url / repo_url: fill in when the GitHub repository is published, e.g.
+# repo_url: https://github.com/<org>/camxiom
+# site_url: https://<org>.github.io/camxiom/
+
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Camera models: camera-models.md
+  - API reference:
+      - Projection: api/projection.md
+      - Batch projection: api/batch.md
+      - Jacobians: api/jacobians.md
+      - Inverse LUT: api/lut.md
+      - Remap & rectification: api/remap.md
+      - CameraInfo interchange: api/camera-info.md
+      - Calibration: api/calibration.md
+      - Model conversion: api/conversion.md
+      - ROS / OpenCV interop: api/interop.md
+  - Design:
+      - Architecture: design/architecture.md
+      - Error handling: design/error-handling.md
+      - Numerical strategy: design/numerical-strategy.md
+      - Thread safety: design/thread-safety.md
