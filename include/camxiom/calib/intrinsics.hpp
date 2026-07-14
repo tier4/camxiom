@@ -64,6 +64,21 @@ struct CalibrationOptions
   double principal_point_reference_x{0.0};
   double principal_point_reference_y{0.0};
   double principal_point_bound_relative_tolerance{0.10};
+  /// Soft Gaussian prior pulling cx/cy toward a caller-supplied reference
+  /// (typically the image centre): two extra residuals
+  /// ((cx-ref_x)/sigma, (cy-ref_y)/sigma) appended to the objective (MAP).
+  /// Complements — does not replace — the hard box bounds above: on
+  /// narrow-FOV data the principal point is near-unobservable and otherwise
+  /// drifts along a flat valley onto a bound. WHEN a prior is warranted and
+  /// how tight sigma is are the caller's policy; camxiom only applies it.
+  /// The prior information (1/sigma^2 on the cx/cy diagonal) is included in
+  /// the uncertainty / observability diagnostics so parameter_std reflects
+  /// the objective actually minimised. rms_reprojection_error_px is never
+  /// affected (reprojection-only by construction). Pixel units.
+  bool apply_principal_point_prior{false};
+  double principal_point_prior_reference_x{0.0};
+  double principal_point_prior_reference_y{0.0};
+  double principal_point_prior_sigma_px{0.0};
   /// When true (default), calibrate() also fills the parameter uncertainty
   /// and the observability diagnostic on CalibrationResult. That costs one
   /// extra full-Jacobian pass at the solution plus small (p x p, p<=~20) linear

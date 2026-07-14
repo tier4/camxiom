@@ -39,6 +39,7 @@ camxiom::calib | struct CalibrationView
 camxiom::calib | using optimizer::PnpFlag
 camxiom::calib::CalibrationOptions | bool apply_initial_value_bounds
 camxiom::calib::CalibrationOptions | bool apply_principal_point_bounds
+camxiom::calib::CalibrationOptions | bool apply_principal_point_prior
 camxiom::calib::CalibrationOptions | bool compute_per_point_residuals
 camxiom::calib::CalibrationOptions | bool estimate_uncertainty
 camxiom::calib::CalibrationOptions | double bound_relative_tolerance
@@ -46,6 +47,9 @@ camxiom::calib::CalibrationOptions | double function_tolerance
 camxiom::calib::CalibrationOptions | double huber_loss_delta
 camxiom::calib::CalibrationOptions | double parameter_tolerance
 camxiom::calib::CalibrationOptions | double principal_point_bound_relative_tolerance
+camxiom::calib::CalibrationOptions | double principal_point_prior_reference_x
+camxiom::calib::CalibrationOptions | double principal_point_prior_reference_y
+camxiom::calib::CalibrationOptions | double principal_point_prior_sigma_px
 camxiom::calib::CalibrationOptions | double principal_point_reference_x
 camxiom::calib::CalibrationOptions | double principal_point_reference_y
 camxiom::calib::CalibrationOptions | int image_height
@@ -446,6 +450,7 @@ camxiom::optimizer | enum class PnpCostType : std::uint8_t
 camxiom::optimizer | struct PnpBound
 camxiom::optimizer | struct PnpInitialGuess
 camxiom::optimizer | struct PnpOptimizerOptions
+camxiom::optimizer | struct PnpPrincipalPointPrior
 camxiom::optimizer | struct PnpSolverOptions
 camxiom::optimizer | struct PnpSummary
 camxiom::optimizer | struct [[nodiscard]] PnpResult
@@ -469,6 +474,10 @@ camxiom::optimizer::PnpOptimizerOptions | double function_tolerance
 camxiom::optimizer::PnpOptimizerOptions | double gradient_tolerance
 camxiom::optimizer::PnpOptimizerOptions | double parameter_tolerance
 camxiom::optimizer::PnpOptimizerOptions | int max_num_iterations
+camxiom::optimizer::PnpPrincipalPointPrior | bool enabled
+camxiom::optimizer::PnpPrincipalPointPrior | double reference_x
+camxiom::optimizer::PnpPrincipalPointPrior | double reference_y
+camxiom::optimizer::PnpPrincipalPointPrior | double sigma_px
 camxiom::optimizer::PnpSolver | PnpResult solve( const ObjectPointSets &object_points, const ImagePointSets &image_points, const PnpInitialGuess &initial_guess, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
 camxiom::optimizer::PnpSolver | PnpSolver &operator=(PnpSolver &&) noexcept
 camxiom::optimizer::PnpSolver | PnpSolver &operator=(const PnpSolver &) = delete
@@ -483,6 +492,7 @@ camxiom::optimizer::PnpSolverOptions | PnpBound lower_bound
 camxiom::optimizer::PnpSolverOptions | PnpBound upper_bound
 camxiom::optimizer::PnpSolverOptions | PnpCostType cost_type
 camxiom::optimizer::PnpSolverOptions | PnpOptimizerOptions solver_options
+camxiom::optimizer::PnpSolverOptions | PnpPrincipalPointPrior principal_point_prior
 camxiom::optimizer::PnpSolverOptions | bool print_summary
 camxiom::optimizer::PnpSolverOptions | double huber_loss_delta
 camxiom::optimizer::PnpSummary | bool converged

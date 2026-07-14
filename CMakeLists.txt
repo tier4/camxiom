@@ -502,6 +502,7 @@ if(BUILD_TESTING)
         target_include_directories(camxiom_calib_uncertainty_test PRIVATE
           ${CMAKE_CURRENT_SOURCE_DIR}/src)
       endif()
+      camxiom_add_gtest(camxiom_calib_prior_test tests/calib_prior_test.cpp)
       camxiom_add_gtest(camxiom_dlt_pnp_test tests/dlt_pnp_test.cpp)
       camxiom_add_gtest(camxiom_pnp_huber_test tests/pnp_huber_test.cpp)
       camxiom_add_gtest(camxiom_double_sphere_test tests/double_sphere_test.cpp)

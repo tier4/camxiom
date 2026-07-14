@@ -63,6 +63,22 @@ struct PnpBound
   }
 };
 
+/// Soft Gaussian prior on the principal point: two extra residuals
+/// r = ((cx - reference_x)/sigma_px, (cy - reference_y)/sigma_px) appended to
+/// the reprojection objective (MAP estimate). This is a MECHANISM: the caller
+/// decides when a prior is warranted (e.g. narrow-FOV lenses where cx/cy is
+/// near-unobservable) and how tight sigma_px should be. Ignored when
+/// FIX_PRINCIPAL_POINTS is set, and irrelevant on the pose-only Gauss-Newton
+/// fast path (intrinsics are fixed there). Never a hard constraint; the box
+/// bounds above remain the backstop. PnpResult::rmse stays reprojection-only.
+struct PnpPrincipalPointPrior
+{
+  bool enabled{false};
+  double reference_x{0.0};
+  double reference_y{0.0};
+  double sigma_px{0.0};
+};
+
 enum class PnpCostType : std::uint8_t { AUTO_DIFF = 0, ANALYTICAL = 1 };
 
 /// Backend-agnostic optimizer controls.
@@ -88,6 +104,7 @@ struct PnpSolverOptions
   PnpBound upper_bound{PnpBound::createUpperBound()};
   PnpBound lower_bound{PnpBound::createLowerBound()};
   PnpCostType cost_type{PnpCostType::ANALYTICAL};
+  PnpPrincipalPointPrior principal_point_prior{};
 };
 
 struct PnpInitialGuess
