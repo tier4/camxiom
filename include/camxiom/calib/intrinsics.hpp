@@ -260,12 +260,16 @@ using optimizer::PnpFlag;
 ///
 /// `lock_flags` is caller-supplied and decides which intrinsic /
 /// distortion / projection parameters are held fixed in the Ceres pass.
-/// The caller MUST pass per-model identifiability locks: KB4
-/// FIX_DIST_2|FIX_DIST_3, MEI/DS/EUCM FIX_PROJECTION_PARAMS, pinhole NONE.
-/// Leaving non-identifiable distortion/projection parameters free will
-/// drive the solve into the aliasing failure described in the
-/// CalibrationResult observability notes (huge parameter values while the
-/// reprojection RMS still looks fine).
+/// camxiom does not prescribe a lock policy: which parameters to free,
+/// and when, is the application's strategy decision. Identifiability
+/// fact to inform that decision: KB4's high-order terms (k3, k4) and
+/// the MEI/DS/EUCM projection parameters (xi/alpha/beta) can be
+/// unobservable from narrow-coverage planar-board data and/or a
+/// cold-start seed; freeing them under those conditions can converge to
+/// an aliasing minimum (huge parameter values while the reprojection
+/// RMS still looks fine — see the CalibrationResult observability
+/// notes). The C4 observability diagnostics detect this after the
+/// solve; lock flags and box bounds are the tools to prevent it.
 ///
 /// @param views          One CalibrationView per board observation.
 /// @param initial_model   Fully specified seed (e.g. from getDefaultSeed

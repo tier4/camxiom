@@ -259,6 +259,7 @@ if(CAMXIOM_WITH_CERES)
     # calib/ — single-pass intrinsics calibration (D46, strategy-free).
     src/calib/intrinsics.cpp
     src/calib/convert.cpp
+    src/calib/mapping_compare.cpp
   )
   add_library(camxiom::calib ALIAS camxiom_calib)
 
@@ -490,6 +491,7 @@ if(BUILD_TESTING)
       camxiom_add_gtest(camxiom_pinhole_opencv_test tests/pinhole_opencv_test.cpp)
       camxiom_add_gtest(camxiom_pinhole_zhang_test tests/pinhole_zhang_test.cpp)
       camxiom_add_gtest(camxiom_calib_intrinsics_test tests/calib_intrinsics_test.cpp)
+      camxiom_add_gtest(camxiom_mapping_compare_test tests/mapping_compare_test.cpp)
       camxiom_add_gtest(camxiom_model_convert_test tests/model_convert_test.cpp)
       camxiom_add_gtest(camxiom_calib_uncertainty_test tests/calib_uncertainty_test.cpp)
       # C5: this test also unit-tests the internal pure helpers

@@ -76,6 +76,30 @@ camxiom::calib::CalibrationView | std::vector<Eigen::Vector2d> image_points
 camxiom::calib::CalibrationView | std::vector<Eigen::Vector3d> world_points
 namespace camxiom::calib
 
+=== include/camxiom/calib/mapping_compare.hpp ===
+camxiom::calib | [[nodiscard]] MappingComparison compareProjectionMappings( const CameraModel &model_a, const CameraModel &model_b, const MappingDomainSpec &spec )
+camxiom::calib | [[nodiscard]] MappingDomainReport validateMappingDomain( const CameraModel &model, const MappingDomainSpec &spec )
+camxiom::calib | struct MappingComparison
+camxiom::calib | struct MappingDomainReport
+camxiom::calib | struct MappingDomainSpec
+camxiom::calib::MappingComparison | StatusCode status
+camxiom::calib::MappingComparison | double max_angular_delta_rad
+camxiom::calib::MappingComparison | double p95_angular_delta_rad
+camxiom::calib::MappingComparison | double rms_angular_delta_rad
+camxiom::calib::MappingComparison | int both_valid
+camxiom::calib::MappingComparison | int lattice_points
+camxiom::calib::MappingComparison | int neither_valid
+camxiom::calib::MappingComparison | int only_a_valid
+camxiom::calib::MappingComparison | int only_b_valid
+camxiom::calib::MappingDomainReport | StatusCode status
+camxiom::calib::MappingDomainReport | int lattice_points
+camxiom::calib::MappingDomainReport | int valid_points
+camxiom::calib::MappingDomainSpec | int image_height
+camxiom::calib::MappingDomainSpec | int image_width
+camxiom::calib::MappingDomainSpec | int lattice_cols
+camxiom::calib::MappingDomainSpec | int lattice_rows
+namespace camxiom::calib
+
 === include/camxiom/calibration.hpp ===
 
 === include/camxiom/camera_info_yaml.hpp ===
@@ -218,6 +242,15 @@ namespace camxiom::init
 
 === include/camxiom/init/pinhole_opencv.hpp ===
 camxiom::init | [[nodiscard]] StatusCode estimatePinholeOpenCv( const std::vector<PlanarObservation> &views, int image_width, int image_height, double aspect_ratio, Eigen::Matrix3d &K_out )
+camxiom::init | [[nodiscard]] StatusCode estimatePinholeOpenCv( const std::vector<PlanarObservation> &views, int image_width, int image_height, double aspect_ratio, Eigen::Matrix3d &K_out, PinholeInitDiagnostics *diagnostics, double max_normal_condition_number )
+camxiom::init | inline constexpr double kDefaultMaxNormalConditionNumber = 3e4
+camxiom::init | struct PinholeInitDiagnostics
+camxiom::init::PinholeInitDiagnostics | bool solution_positive
+camxiom::init::PinholeInitDiagnostics | double fx
+camxiom::init::PinholeInitDiagnostics | double fy
+camxiom::init::PinholeInitDiagnostics | double normal_condition_number
+camxiom::init::PinholeInitDiagnostics | double normal_max_singular_value
+camxiom::init::PinholeInitDiagnostics | double normal_min_singular_value
 namespace camxiom::init
 
 === include/camxiom/init/pinhole_zhang.hpp ===

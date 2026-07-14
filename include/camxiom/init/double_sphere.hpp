@@ -85,9 +85,10 @@ struct DSInitResult
 /// Phase B (Ceres polish with xi and alpha locked): PnpSolver refines
 /// (fx, fy, cx, cy, all per-view poses) starting from the Phase A heuristic
 /// seed. xi and alpha are held at their seed values via
-/// PnpFlag::FIX_PROJECTION_PARAMS: identification of these non-linear
-/// projection parameters is deferred to the downstream full calibration
-/// with more data and multi-seed restarts.
+/// PnpFlag::FIX_PROJECTION_PARAMS within this routine. Whether (and when)
+/// a downstream calib::calibrate pass frees these non-linear projection
+/// parameters is the caller's policy decision; identifying them typically
+/// needs more data than this initializer requires.
 ///
 /// If phaseBLooksUsable() rejects the Ceres result we fall back to the
 /// Phase A heuristic K + estimatePoseDLT poses and still return OK (Phase

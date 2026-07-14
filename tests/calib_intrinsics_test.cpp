@@ -25,15 +25,19 @@
 // validator bug that previously caused DEGENERATE_CONFIG from the magic seed
 // on wide-FOV KB4 data was fixed in D47; KB4 now follows the same pattern).
 //
-// CRITICAL LOCK TABLE (D29/D30 — MS1-4/MS1-5 aliasing lesson):
+// Lock configuration used by these tests (NOT a library contract — lock
+// policy is the caller's strategy decision; calibrate() only applies the
+// flags it is given. D29/D30 record the aliasing background):
 //   PINHOLE:         PnpFlag::NONE
 //   FISHEYE_THETA:   PnpFlag::FIX_DIST_2 | FIX_DIST_3  (k3=k4=0 == seed)
 //   OMNIDIRECTIONAL: PnpFlag::FIX_PROJECTION_PARAMS      (xi=1.0 == seed)
 //   DOUBLE_SPHERE:   PnpFlag::FIX_PROJECTION_PARAMS      (xi=-0.2, alpha=0.5 == seed)
 //   EUCM:            PnpFlag::FIX_PROJECTION_PARAMS      (alpha=0.5, beta=1.0 == seed)
-// GT projection/high-order-distortion params MUST equal the seed for each
-// locked model — a locked parameter cannot move off the seed. This mirrors
-// the exact contract established and verified in the MS1 tests.
+// GT projection/high-order-distortion params equal the seed for each locked
+// model because a locked parameter cannot move off the seed. Note this means
+// these tests exercise the locked configurations only: they do not establish
+// identifiability of the locked parameters either way (no GT != seed
+// counter-coverage yet).
 //
 // All tests are deterministic (std::mt19937 seed 42). No rand().
 
@@ -168,9 +172,10 @@ CalibrationOptions makeDefaultOptions(int w = 640, int h = 480)
 // ---------------------------------------------------------------------------
 // GT model builders for each projection type.
 //
-// CRITICAL: the GT projection/high-order-distortion params MUST equal
-// getDefaultSeed's locked seed values. See the LOCK TABLE at the top of this
-// file and D29/D30.
+// Test-internal consistency requirement: the GT projection/high-order-
+// distortion params must equal getDefaultSeed's locked seed values (a locked
+// parameter cannot move off the seed). See the lock-configuration note at the
+// top of this file and D29/D30.
 //
 // All use sensor 640x480, GT fx=fy=250 (vs. seed: PINHOLE h/2=240, KB4 h/pi≈153,
 // MEI/DS/EUCM h/2=240). Using 250 for all non-pinhole models to be clearly
