@@ -26,14 +26,18 @@ namespace camxiom::double_sphere
 
 PixelResult64 rayToPixel64(const CameraModel64 &model, const Eigen::Vector3d &ray_direction)
 {
-  return impl::rayToPixel<double>(model, ray_direction);
+  return impl::rayToPixel<double>(
+    model, ray_direction, detail_impl::prepareProjection(model.projection)
+  );
 }
 
 RayResult64 pixelToRay64(
   const CameraModel64 &model, const Pixel2d &pixel, const SolverOptions64 &solver_options
 )
 {
-  return impl::pixelToRay<double>(model, pixel, solver_options);
+  return impl::pixelToRay<double>(
+    model, pixel, solver_options, detail_impl::prepareProjection(model.projection)
+  );
 }
 
 }  // namespace camxiom::double_sphere

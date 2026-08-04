@@ -46,7 +46,8 @@ namespace camxiom::omnidirectional::impl
 
 template <typename T>
 inline PixelResultT<T> rayToPixel(
-  const CameraModelT<T> &model, const Eigen::Matrix<T, 3, 1> &ray_direction
+  const CameraModelT<T> &model, const Eigen::Matrix<T, 3, 1> &ray_direction,
+  const detail_impl::PreparedProjectionT<T> &prepared
 )
 {
   using detail_impl::invalidPixelResult;
@@ -85,9 +86,8 @@ inline PixelResultT<T> rayToPixel(
   }
 
   // theta_max contract (types.hpp): reject rays beyond a sub-pi FOV cap.
-  if (detail_impl::hasThetaMaxCap(model.projection.theta_max) &&
-      !detail_impl::withinThetaMax(model.projection.theta_max,
-                                   ray_direction.z(), ray_norm))
+  if (prepared.has_theta_cap &&
+      !detail_impl::withinThetaMaxCos(prepared.cos_theta_max, ray_direction.z(), ray_norm))
   {
     return invalidPixelResult<T>(StatusCode::OUT_OF_FOV);
   }
@@ -122,7 +122,8 @@ inline PixelResultT<T> rayToPixel(
 
 template <typename T, typename Options>
 inline RayResultT<T> pixelToRay(
-  const CameraModelT<T> &model, const Pixel2T<T> &pixel, const Options &solver_options
+  const CameraModelT<T> &model, const Pixel2T<T> &pixel, const Options &solver_options,
+  const detail_impl::PreparedProjectionT<T> &prepared
 )
 {
   using detail_impl::invalidRayResult;
@@ -187,8 +188,8 @@ inline RayResultT<T> pixelToRay(
   direction /= norm;
 
   // Round-trip consistency with the forward theta_max cap.
-  if (detail_impl::hasThetaMaxCap(model.projection.theta_max) &&
-      !detail_impl::withinThetaMax(model.projection.theta_max, direction.z(), T(1)))
+  if (prepared.has_theta_cap &&
+      !detail_impl::withinThetaMaxCos(prepared.cos_theta_max, direction.z(), T(1)))
   {
     return invalidRayResult<T>(StatusCode::OUT_OF_FOV);
   }

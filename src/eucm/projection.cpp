@@ -25,14 +25,34 @@ namespace camxiom::eucm
 
 PixelResult rayToPixel(const CameraModel &model, const Eigen::Vector3f &ray_direction)
 {
-  return impl::rayToPixel<float>(model, ray_direction);
+  return impl::rayToPixel<float>(
+    model, ray_direction, detail_impl::prepareProjection(model.projection)
+  );
 }
 
 RayResult pixelToRay(
   const CameraModel &model, const Pixel2 &pixel, const SolverOptions &solver_options
 )
 {
-  return impl::pixelToRay<float>(model, pixel, solver_options);
+  return impl::pixelToRay<float>(
+    model, pixel, solver_options, detail_impl::prepareProjection(model.projection)
+  );
+}
+
+PixelResult rayToPixelPrepared(
+  const CameraModel &model, const Eigen::Vector3f &ray_direction,
+  const detail_impl::PreparedProjection &prepared
+)
+{
+  return impl::rayToPixel<float>(model, ray_direction, prepared);
+}
+
+RayResult pixelToRayPrepared(
+  const CameraModel &model, const Pixel2 &pixel, const SolverOptions &solver_options,
+  const detail_impl::PreparedProjection &prepared
+)
+{
+  return impl::pixelToRay<float>(model, pixel, solver_options, prepared);
 }
 
 }  // namespace camxiom::eucm

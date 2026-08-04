@@ -35,4 +35,21 @@ RayResult pixelToRay(
   return impl::pixelToRay<float>(model, pixel, solver_options);
 }
 
+// Fisheye reads nothing from the prepared state: atan2 has already produced
+// theta, so the cap test is an exact theta <= theta_max comparison that needs
+// no cosine, and there is no double-sphere bijectivity bound. The overloads
+// exist so callers holding a fixed model bind one uniform signature across all
+// five models.
+PixelResult
+rayToPixelPrepared(const CameraModel &model, const Eigen::Vector3f &ray_direction, const detail_impl::PreparedProjection &)
+{
+  return impl::rayToPixel<float>(model, ray_direction);
+}
+
+RayResult
+pixelToRayPrepared(const CameraModel &model, const Pixel2 &pixel, const SolverOptions &solver_options, const detail_impl::PreparedProjection &)
+{
+  return impl::pixelToRay<float>(model, pixel, solver_options);
+}
+
 }  // namespace camxiom::fisheye

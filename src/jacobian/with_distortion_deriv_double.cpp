@@ -42,7 +42,7 @@
 #include "camxiom/model.hpp"  // validateCameraModel64
 #include "camxiom/projection64.hpp"
 #include "detail/ds_forward.hpp"
-#include "detail/projection_common.hpp"  // hasThetaMaxCap / withinThetaMax
+#include "detail/projection_common.hpp"  // prepareProjection / withinThetaMaxCos
 #include "jacobian/full_jacobian64_internal.hpp"
 
 #include <cmath>
@@ -526,7 +526,9 @@ static FullProjectionJacobian64 fullJ64(const CameraModel64 &model, const Eigen:
   if (rv + xi * Z <= kEps64) return invalidFJ64(StatusCode::OUT_OF_FOV);
   // theta_max contract, matching the scalar forward.
   if (detail_impl::hasThetaMaxCap(model.projection.theta_max) &&
-      !detail_impl::withinThetaMax(model.projection.theta_max, Z, rv))
+      !detail_impl::withinThetaMaxCos(
+        detail_impl::prepareProjection(model.projection).cos_theta_max, Z, rv
+      ))
   {
     return invalidFJ64(StatusCode::OUT_OF_FOV);
   }
@@ -588,12 +590,15 @@ static FullProjectionJacobian64 fullJ64(const CameraModel64 &model, const Eigen:
   const double alpha = model.projection.alpha;
 
   double d1 = 0.0, r_sq = 0.0, xi_d1_z = 0.0, d2 = 0.0, denom = 0.0;
-  const StatusCode fwd =
-    detail::computeDsForward(xi, alpha, X, Y, Z, kEps64, d1, r_sq, xi_d1_z, d2, denom);
+  const StatusCode fwd = detail::computeDsForward(
+    xi, alpha, X, Y, Z, kEps64, detail::dsNegW2(xi, alpha), d1, r_sq, xi_d1_z, d2, denom
+  );
   if (fwd != StatusCode::OK) return invalidFJ64(fwd);
   // theta_max contract, matching the scalar forward.
   if (detail_impl::hasThetaMaxCap(model.projection.theta_max) &&
-      !detail_impl::withinThetaMax(model.projection.theta_max, Z, d1))
+      !detail_impl::withinThetaMaxCos(
+        detail_impl::prepareProjection(model.projection).cos_theta_max, Z, d1
+      ))
   {
     return invalidFJ64(StatusCode::OUT_OF_FOV);
   }
@@ -687,8 +692,10 @@ static FullProjectionJacobian64 fullJ64(const CameraModel64 &model, const Eigen:
   }
   // theta_max contract; d above is beta-weighted, so use the true norm.
   if (detail_impl::hasThetaMaxCap(model.projection.theta_max) &&
-      !detail_impl::withinThetaMax(model.projection.theta_max, Z,
-                                   std::sqrt(X * X + Y * Y + Z * Z)))
+      !detail_impl::withinThetaMaxCos(
+        detail_impl::prepareProjection(model.projection).cos_theta_max, Z,
+        std::sqrt(X * X + Y * Y + Z * Z)
+      ))
   {
     return invalidFJ64(StatusCode::OUT_OF_FOV);
   }

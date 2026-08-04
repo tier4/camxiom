@@ -24,6 +24,7 @@
 
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/types.hpp"
+#include "detail/ds_forward.hpp"      // dsNegW2 (shared bijectivity bound)
 #include "distortion/plane_impl.hpp"  // isFinite2 (shared finite check)
 
 #include <Eigen/Core>
@@ -44,12 +45,71 @@ inline bool hasThetaMaxCap(const T theta_max)
 
 /// theta <= theta_max via cosine comparison (no atan2 needed):
 /// theta <= theta_max  <=>  z >= norm * cos(theta_max) for theta_max in
-/// (0, pi). Callers guard with hasThetaMaxCap so the ray norm is only
-/// required when a cap is actually active.
+/// (0, pi). Callers guard with PreparedProjectionT::has_theta_cap so the ray
+/// norm is only required when a cap is actually active.
 template <typename T>
-inline bool withinThetaMax(const T theta_max, const T z, const T norm)
+inline bool withinThetaMaxCos(const T cos_theta_max, const T z, const T norm)
 {
-  return z >= norm * std::cos(theta_max);
+  return z >= norm * cos_theta_max;
+}
+
+// ---------------------------------------------------------------------------
+// Model-derived projection constants.
+//
+// Two validity checks in the per-model cores depend only on the CameraModel,
+// never on the ray or pixel being projected:
+//
+//   * the FOV cap needs cos(theta_max) — double-sphere, EUCM and
+//     omnidirectional, forward and inverse;
+//   * the double-sphere bijectivity bound needs w2, a square root and two
+//     divisions away from xi and alpha.
+//
+// Evaluating them inside the per-point kernel makes every projected point pay
+// a transcendental (and, for double-sphere, a square root) to re-derive a
+// value that is constant across the whole point cloud. PreparedProjectionT
+// carries them so a caller projecting many points against one model computes
+// them once.
+//
+// The generic single-point API (rayToPixel / pixelToRay) keeps deriving them
+// per call: it accepts an unvalidated CameraModel by reference and has nowhere
+// to cache anything, so its cost is unchanged. ValidatedCameraModel and the
+// batch / SIMD layers, which already resolve the model once, reuse a prepared
+// instance instead.
+// ---------------------------------------------------------------------------
+template <typename T>
+struct PreparedProjectionT
+{
+  /// theta_max caps the FOV below the wide-angle default of pi.
+  bool has_theta_cap{false};
+  /// cos(theta_max), read only when has_theta_cap. Defaults to cos(pi) = -1 so
+  /// an uncapped model accepts every forward direction even if a caller
+  /// ignores the flag.
+  T cos_theta_max{T(-1)};
+  /// -w2 of the double-sphere bijectivity region (Usenko et al. 2018,
+  /// eq. 43-45). Zero for every other projection type, which never reads it.
+  T ds_neg_w2{T(0)};
+};
+
+using PreparedProjection = PreparedProjectionT<float>;
+using PreparedProjection64 = PreparedProjectionT<double>;
+
+/// Derive the model-constant projection state. Cheap enough to call per point
+/// (the generic API does), but the whole point of the type is that callers
+/// with a fixed model call it once.
+template <typename T>
+inline PreparedProjectionT<T> prepareProjection(const ProjectionModelT<T> &projection)
+{
+  PreparedProjectionT<T> prepared;
+  prepared.has_theta_cap = hasThetaMaxCap(projection.theta_max);
+  if (prepared.has_theta_cap)
+  {
+    prepared.cos_theta_max = std::cos(projection.theta_max);
+  }
+  if (projection.type == ProjectionModelType::DOUBLE_SPHERE)
+  {
+    prepared.ds_neg_w2 = detail::dsNegW2(projection.xi, projection.alpha);
+  }
+  return prepared;
 }
 
 template <typename T>
