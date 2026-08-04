@@ -17,25 +17,10 @@
 
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/types.hpp"
+#include "detail/simd_dispatch.hpp"
 
 #include <cmath>
 #include <limits>
-
-#if defined(__AVX2__)
-#define CAMXIOM_HAS_AVX2 1
-#include <immintrin.h>
-#endif
-
-#if defined(__SSE2__)
-#define CAMXIOM_HAS_SSE2 1
-#include <emmintrin.h>
-#include <xmmintrin.h>
-#elif defined(__aarch64__)
-// The 4-wide kernels below also run natively on AArch64 through a minimal
-// __m128 -> NEON mapping (see simd_neon_compat.hpp for scope and caveats).
-#define CAMXIOM_HAS_SSE2 1
-#include "detail/simd_neon_compat.hpp"
-#endif
 
 namespace camxiom::detail
 {
@@ -380,11 +365,13 @@ int rayToPixelBatchEucmSse(
 
 #ifdef CAMXIOM_HAS_AVX2
 
+CAMXIOM_TARGET_AVX2
 inline __m256 absAvxDs(const __m256 v)
 {
   return _mm256_and_ps(v, _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF)));
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256 finiteMaskAvxDs(const __m256 values)
 {
   const __m256 max_value = _mm256_set1_ps((std::numeric_limits<float>::max)());
@@ -392,6 +379,7 @@ inline __m256 finiteMaskAvxDs(const __m256 values)
 }
 
 /// Process 8 DoubleSphere forward projections using AVX2.
+CAMXIOM_TARGET_AVX2
 inline int rayToPixelDsphAvx8(
   const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
 )
@@ -560,6 +548,7 @@ inline int rayToPixelDsphAvx8(
 }
 
 /// Process 8 EUCM forward projections using AVX2.
+CAMXIOM_TARGET_AVX2
 inline int rayToPixelEucmAvx8(
   const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
 )
@@ -712,11 +701,13 @@ inline int rayToPixelEucmAvx8(
   return _mm256_movemask_ps(valid);
 }
 
+CAMXIOM_TARGET_AVX2
 int rayToPixelBatchDsphAvx2(
   const CameraModel &model, const float *rays_xyz, int count, float *u_out, float *v_out,
   StatusCode *statuses_out
 );
 
+CAMXIOM_TARGET_AVX2
 int rayToPixelBatchEucmAvx2(
   const CameraModel &model, const float *rays_xyz, int count, float *u_out, float *v_out,
   StatusCode *statuses_out

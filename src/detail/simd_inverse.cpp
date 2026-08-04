@@ -879,6 +879,7 @@ int pixelToRayBatchFisheyeSse(
 namespace
 {
 
+CAMXIOM_TARGET_AVX2
 inline void storeRaysAvx8(
   const __m256 dx, const __m256 dy, const __m256 dz, const int valid_mask, float *dirs_xyz
 )
@@ -905,6 +906,7 @@ inline void storeRaysAvx8(
   }
 }
 
+CAMXIOM_TARGET_AVX2
 inline void normalizeAvx8(__m256 &dx, __m256 &dy, __m256 &dz, __m256 &valid)
 {
   const __m256 norm_sq = _mm256_add_ps(
@@ -927,6 +929,7 @@ inline void normalizeAvx8(__m256 &dx, __m256 &dy, __m256 &dz, __m256 &valid)
 // Pinhole AVX8
 // ---------------------------------------------------------------------------
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayPinholeAvx8(
   const CameraModel &model, const float *u_in, const float *v_in, float *dirs_xyz
 )
@@ -962,6 +965,7 @@ int pixelToRayPinholeAvx8(
 // DoubleSphere AVX8
 // ---------------------------------------------------------------------------
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayDsphAvx8(
   const CameraModel &model, const float *u_in, const float *v_in, float *dirs_xyz
 )
@@ -1041,6 +1045,7 @@ int pixelToRayDsphAvx8(
 // EUCM AVX8
 // ---------------------------------------------------------------------------
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayEucmAvx8(
   const CameraModel &model, const float *u_in, const float *v_in, float *dirs_xyz
 )
@@ -1110,6 +1115,7 @@ int pixelToRayEucmAvx8(
 // Omni AVX8
 // ---------------------------------------------------------------------------
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayOmniAvx8(
   const CameraModel &model, const float *u_in, const float *v_in, float *dirs_xyz
 )
@@ -1174,6 +1180,7 @@ int pixelToRayOmniAvx8(
 // Fisheye AVX8
 // ---------------------------------------------------------------------------
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayFisheyeAvx8(
   const CameraModel &model, const float *u_in, const float *v_in, float *dirs_xyz
 )
@@ -1252,6 +1259,17 @@ int pixelToRayFisheyeAvx8(
       const __m256 delta = _mm256_div_ps(f_val, dpoly_safe);
       theta = _mm256_sub_ps(theta, delta);
       theta = _mm256_max_ps(theta, zero);
+
+      // Early exit once every lane's Newton step is negligible (theta is
+      // O(1) rad, so 1e-7 is float-ulp territory), matching the SSE4 kernel.
+      // Without it this loop always ran its full 15 iterations while the SSE4
+      // one converged in a handful, which made the 8-wide kernel 2.7x SLOWER
+      // than the 4-wide one on the same input.
+      const __m256 big_step = _mm256_cmp_ps(absAvxInv(delta), _mm256_set1_ps(1e-7f), _CMP_GT_OQ);
+      if (!anyLaneSetAvxInv(big_step))
+      {
+        break;
+      }
     }
     valid = _mm256_and_ps(valid, finiteMaskAvxInv(theta));
   }
@@ -1302,6 +1320,7 @@ namespace
 
 using Avx8InvFn = int (*)(const CameraModel &, const float *, const float *, float *);
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayBatchAvx2Generic(
   const CameraModel &model, const float *u_in, const float *v_in, const int count, float *dirs_xyz,
   StatusCode *statuses_out, const SolverOptions &solver_options, Avx8InvFn avx_fn, Sse4InvFn sse_fn,
@@ -1498,6 +1517,7 @@ int pixelToRayBatchAvx2Generic(
 
 }  // namespace
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayBatchPinholeAvx2(
   const CameraModel &model, const float *u_in, const float *v_in, const int count, float *dirs_xyz,
   StatusCode *statuses_out, const SolverOptions &solver_options
@@ -1515,6 +1535,7 @@ int pixelToRayBatchPinholeAvx2(
   );
 }
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayBatchDsphAvx2(
   const CameraModel &model, const float *u_in, const float *v_in, const int count, float *dirs_xyz,
   StatusCode *statuses_out, const SolverOptions &solver_options
@@ -1530,6 +1551,7 @@ int pixelToRayBatchDsphAvx2(
   );
 }
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayBatchEucmAvx2(
   const CameraModel &model, const float *u_in, const float *v_in, const int count, float *dirs_xyz,
   StatusCode *statuses_out, const SolverOptions &solver_options
@@ -1545,6 +1567,7 @@ int pixelToRayBatchEucmAvx2(
   );
 }
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayBatchOmniAvx2(
   const CameraModel &model, const float *u_in, const float *v_in, const int count, float *dirs_xyz,
   StatusCode *statuses_out, const SolverOptions &solver_options
@@ -1560,6 +1583,7 @@ int pixelToRayBatchOmniAvx2(
   );
 }
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayBatchFisheyeAvx2(
   const CameraModel &model, const float *u_in, const float *v_in, const int count, float *dirs_xyz,
   StatusCode *statuses_out, const SolverOptions &solver_options

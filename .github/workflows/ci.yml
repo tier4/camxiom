@@ -8,12 +8,18 @@ name: CI
 # are actually compiled and the scalar<->SIMD parity tests (BatchChar.*,
 # LutChar.*, JacobianBatchChar.*) run against real vector code (LOADMAP T2).
 #
-# Two variants:
-#   * sse2-baseline: default x86-64 (SSE2 is part of the x86-64 baseline, so
-#     CAMXIOM_HAS_SSE2 is defined and the SSE2 kernels compile; __AVX2__ is not
-#     defined, so the AVX2 kernels stay off -> exercises the SSE2 path).
-#   * avx2: adds -mavx2 -mfma so __AVX2__ is defined and CAMXIOM_HAS_AVX2 lights
-#     up the AVX2 kernels -> exercises the AVX2 path.
+# The AVX2 kernels are compiled into every x86 build (each function carries
+# target("avx2,fma"); see src/detail/simd_dispatch.hpp) and chosen at run time,
+# so the compiler flags no longer decide which kernel executes. Three variants
+# pin down the three combinations that matter:
+#   * sse2-baseline: default flags, CAMXIOM_DISABLE_AVX2=1 at test time -> runs
+#     the SSE2 kernels. Without the variable a modern runner would take the AVX2
+#     path in every job and nothing would exercise SSE2 any more.
+#   * avx2-runtime: default flags, no override -> runs the AVX2 kernels selected
+#     by cpuHasAvx2(). This is what a consumer building camxiom normally gets,
+#     and it is the combination that did not exist before runtime dispatch.
+#   * avx2-native: adds -mavx2 -mfma so the whole translation unit is built for
+#     AVX2 and the per-function attribute becomes a no-op.
 #
 # The x86-core-simd job is core-only (-DCAMXIOM_WITH_CERES=OFF): the
 # SIMD/batch/lut/jacobian code under test lives entirely in camxiom_core
@@ -53,8 +59,13 @@ jobs:
         include:
           - variant: sse2-baseline
             cxxflags: ""
-          - variant: avx2
+            disable_avx2: "1"
+          - variant: avx2-runtime
+            cxxflags: ""
+            disable_avx2: ""
+          - variant: avx2-native
             cxxflags: "-mavx2 -mfma"
+            disable_avx2: ""
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -87,6 +98,8 @@ jobs:
         run: cmake --build build -j"$(nproc)"
 
       - name: Test
+        env:
+          CAMXIOM_DISABLE_AVX2: ${{ matrix.disable_avx2 }}
         run: |
           ctest --test-dir build --output-on-failure 2>&1 | tee ctest.log
           total=$(grep -oE 'out of [0-9]+' ctest.log | tail -1 | grep -oE '[0-9]+')

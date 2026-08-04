@@ -207,6 +207,7 @@ int rayToPixelBatchEucmSse(
 
 #ifdef CAMXIOM_HAS_AVX2
 
+CAMXIOM_TARGET_AVX2
 int rayToPixelBatchDsphAvx2(
   const CameraModel &model, const float *rays_xyz, const int count, float *u_out, float *v_out,
   StatusCode *statuses_out
@@ -306,6 +307,7 @@ int rayToPixelBatchDsphAvx2(
   return valid_count;
 }
 
+CAMXIOM_TARGET_AVX2
 int rayToPixelBatchEucmAvx2(
   const CameraModel &model, const float *rays_xyz, const int count, float *u_out, float *v_out,
   StatusCode *statuses_out

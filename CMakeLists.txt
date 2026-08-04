@@ -150,6 +150,7 @@ add_library(camxiom_core
   # (src/detail/simd_neon_compat.hpp); only the KB4-family fisheye inverse
   # stays pinned to the scalar path there (measured slower — see
   # ARCHITECTURE.md §5).
+  src/detail/simd_dispatch.cpp
   src/detail/simd_pinhole.cpp
   src/detail/simd_fisheye.cpp
   src/detail/simd_ds_eucm.cpp
@@ -506,6 +507,41 @@ if(BUILD_TESTING)
       camxiom_add_gtest(camxiom_integration_test tests/integration_test.cpp)
       camxiom_add_gtest(camxiom_kb4_fisheye_test tests/kb4_fisheye_test.cpp)
       camxiom_add_gtest(camxiom_mei_omni_test tests/mei_omni_test.cpp)
+    endif()
+  endif()
+
+  # --- AVX2 containment (runtime SIMD dispatch) --------------------------
+  # A gtest-INDEPENDENT CTest guarding the two silent failure modes of runtime
+  # AVX2 dispatch (src/detail/simd_dispatch.hpp): the kernels not being compiled
+  # at all (the library then runs SSE2 everywhere, which is the bug the dispatch
+  # fixes), and AVX2 instructions escaping the target("avx2,fma") functions into
+  # unconditional code (which faults on any CPU without AVX2). Both are
+  # invisible to a functional test on an AVX2 host, so the script disassembles
+  # the built archive. It self-skips where objdump is missing or the target is
+  # not x86.
+  #
+  # Not registered when the build itself targets AVX2 (-mavx2): the whole
+  # library is then AVX2 by construction and "contained" is neither true nor
+  # meaningful. That configuration is a deliberate choice by whoever set the
+  # flag, and it is the CI avx2-native variant.
+  include(CheckCXXSourceCompiles)
+  check_cxx_source_compiles(
+    "#if !defined(__AVX2__)\n#error not an avx2 build\n#endif\nint main() { return 0; }"
+    CAMXIOM_BUILD_TARGETS_AVX2)
+  find_package(Python3 QUIET COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND AND NOT CAMXIOM_BUILD_TARGETS_AVX2)
+    set(_camxiom_avx2_containment_cmd
+      ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/simd_containment/check_avx2_containment.py
+      $<TARGET_FILE:camxiom_core>)
+    if(ament_cmake_FOUND)
+      find_package(ament_cmake_test REQUIRED)
+      ament_add_test(camxiom_avx2_containment_test
+        COMMAND ${_camxiom_avx2_containment_cmd}
+        GENERATE_RESULT_FOR_RETURN_CODE_ZERO
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    else()
+      add_test(NAME camxiom_avx2_containment_test COMMAND ${_camxiom_avx2_containment_cmd})
     endif()
   endif()
 
