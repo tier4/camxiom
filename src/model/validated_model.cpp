@@ -16,6 +16,7 @@
 
 #include "camxiom/model.hpp"
 #include "detail/internal.hpp"
+#include "detail/projection_common.hpp"
 #include "detail/projection_models.hpp"
 
 namespace camxiom
@@ -23,8 +24,10 @@ namespace camxiom
 namespace
 {
 
-using ForwardFn = PixelResult (*)(const CameraModel &, const Eigen::Vector3f &);
-using InverseFn = RayResult (*)(const CameraModel &, const Pixel2 &, const SolverOptions &);
+using ForwardFn =
+  PixelResult (*)(const CameraModel &, const Eigen::Vector3f &, const detail_impl::PreparedProjection &);
+using InverseFn =
+  RayResult (*)(const CameraModel &, const Pixel2 &, const SolverOptions &, const detail_impl::PreparedProjection &);
 
 // Map ProjectionModelType -> the internal per-model forward/inverse entry
 // points. This is the same resolution the generic dispatch switch
@@ -35,15 +38,15 @@ ForwardFn resolveForwardFn(const ProjectionModelType type)
   switch (type)
   {
     case ProjectionModelType::PINHOLE:
-      return &pinhole::rayToPixel;
+      return &pinhole::rayToPixelPrepared;
     case ProjectionModelType::FISHEYE_THETA:
-      return &fisheye::rayToPixel;
+      return &fisheye::rayToPixelPrepared;
     case ProjectionModelType::OMNIDIRECTIONAL:
-      return &omnidirectional::rayToPixel;
+      return &omnidirectional::rayToPixelPrepared;
     case ProjectionModelType::DOUBLE_SPHERE:
-      return &double_sphere::rayToPixel;
+      return &double_sphere::rayToPixelPrepared;
     case ProjectionModelType::EUCM:
-      return &eucm::rayToPixel;
+      return &eucm::rayToPixelPrepared;
     case ProjectionModelType::UNKNOWN:
       break;
   }
@@ -55,15 +58,15 @@ InverseFn resolveInverseFn(const ProjectionModelType type)
   switch (type)
   {
     case ProjectionModelType::PINHOLE:
-      return &pinhole::pixelToRay;
+      return &pinhole::pixelToRayPrepared;
     case ProjectionModelType::FISHEYE_THETA:
-      return &fisheye::pixelToRay;
+      return &fisheye::pixelToRayPrepared;
     case ProjectionModelType::OMNIDIRECTIONAL:
-      return &omnidirectional::pixelToRay;
+      return &omnidirectional::pixelToRayPrepared;
     case ProjectionModelType::DOUBLE_SPHERE:
-      return &double_sphere::pixelToRay;
+      return &double_sphere::pixelToRayPrepared;
     case ProjectionModelType::EUCM:
-      return &eucm::pixelToRay;
+      return &eucm::pixelToRayPrepared;
     case ProjectionModelType::UNKNOWN:
       break;
   }
@@ -88,24 +91,28 @@ std::optional<ValidatedCameraModel> ValidatedCameraModel::tryMake(const CameraMo
     return std::nullopt;
   }
 
-  return ValidatedCameraModel(model, forward, inverse);
+  // The model is validated and immutable from here on, so its derived
+  // constants are too: derive them once instead of on every projected point.
+  return ValidatedCameraModel(
+    model, forward, inverse, detail_impl::prepareProjection(model.projection)
+  );
 }
 
 PixelResult ValidatedCameraModel::rayToPixel(const Eigen::Vector3f &ray_direction) const
 {
-  return forward_(model_, ray_direction);
+  return forward_(model_, ray_direction, prepared_);
 }
 
 PixelResult ValidatedCameraModel::rayToPixel(
   const float x_direction, const float y_direction, const float z_direction
 ) const
 {
-  return forward_(model_, Eigen::Vector3f(x_direction, y_direction, z_direction));
+  return forward_(model_, Eigen::Vector3f(x_direction, y_direction, z_direction), prepared_);
 }
 
 PixelResult ValidatedCameraModel::rayToPixel(const Ray3 &ray) const
 {
-  return forward_(model_, ray.direction);
+  return forward_(model_, ray.direction, prepared_);
 }
 
 RayResult ValidatedCameraModel::pixelToRay(const Pixel2 &pixel, const SolverOptions &solver_options)
@@ -117,7 +124,7 @@ RayResult ValidatedCameraModel::pixelToRay(const Pixel2 &pixel, const SolverOpti
   {
     return detail::invalidRayResult(StatusCode::INVALID_INPUT);
   }
-  return inverse_(model_, pixel, solver_options);
+  return inverse_(model_, pixel, solver_options, prepared_);
 }
 
 RayResult ValidatedCameraModel::pixelToRay(

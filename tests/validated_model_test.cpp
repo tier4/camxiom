@@ -159,6 +159,15 @@ CameraModel makeEucm()
   return m;
 }
 
+// Narrow the FOV below the pi default so the cosine cap comparison is actually
+// reached. The wide-angle models above all sit at theta_max = pi, where the cap
+// short-circuits and the comparison is never evaluated.
+CameraModel withThetaCap(CameraModel model, const float theta_max)
+{
+  model.projection.theta_max = theta_max;
+  return model;
+}
+
 struct NamedModel
 {
   std::string name;
@@ -167,6 +176,7 @@ struct NamedModel
 
 std::vector<NamedModel> allValidModels()
 {
+  constexpr float kCap = 1.2f;  // ~69 deg: inside the sample rays' spread
   return {
     {"pinhole", makePinhole(false)},
     {"pinhole+radtan5", makePinhole(true)},
@@ -175,6 +185,12 @@ std::vector<NamedModel> allValidModels()
     {"omnidirectional", makeOmnidirectional()},
     {"double_sphere", makeDoubleSphere()},
     {"eucm", makeEucm()},
+    // Capped duplicates: the FOV cap is the one branch whose inputs come from
+    // the model rather than the ray, so it is the branch that regresses if the
+    // derived cosine and the model ever disagree.
+    {"omnidirectional+cap", withThetaCap(makeOmnidirectional(), kCap)},
+    {"double_sphere+cap", withThetaCap(makeDoubleSphere(), kCap)},
+    {"eucm+cap", withThetaCap(makeEucm(), kCap)},
   };
 }
 
@@ -301,6 +317,37 @@ TEST(ValidatedCameraModel, InverseMatchesGenericExactly)
         EXPECT_EQ(actual.ray.direction.z(), expected.ray.direction.z()) << nm.name;
       }
     }
+  }
+}
+
+// The equivalence tests above only prove something about the FOV cap if the cap
+// actually rejects some of the sample rays. Assert that directly, so a future
+// change to sampleRays() or to the cap angle cannot quietly turn
+// ForwardMatchesGenericExactly into a test of the uncapped path only.
+TEST(ValidatedCameraModel, ThetaCapIsExercisedAndRejectsThroughBothPaths)
+{
+  const std::vector<NamedModel> capped = {
+    {"omnidirectional+cap", withThetaCap(makeOmnidirectional(), 1.2f)},
+    {"double_sphere+cap", withThetaCap(makeDoubleSphere(), 1.2f)},
+    {"eucm+cap", withThetaCap(makeEucm(), 1.2f)},
+  };
+
+  for (const auto &nm : capped)
+  {
+    const std::optional<ValidatedCameraModel> vm = ValidatedCameraModel::tryMake(nm.model);
+    ASSERT_TRUE(vm.has_value()) << nm.name;
+
+    // A ray at ~78 deg from the optical axis: outside a 1.2 rad (~69 deg) cap,
+    // but well inside what these models accept when uncapped.
+    const Eigen::Vector3f wide = Eigen::Vector3f(1.0f, 0.0f, 0.2f).normalized();
+    EXPECT_EQ(vm->rayToPixel(wide).status, StatusCode::OUT_OF_FOV) << nm.name;
+    EXPECT_EQ(rayToPixel(nm.model, wide).status, StatusCode::OUT_OF_FOV) << nm.name;
+
+    // The same ray projects for the uncapped model, proving the rejection above
+    // came from the cap and not from some unrelated domain error.
+    const CameraModel uncapped =
+      withThetaCap(nm.model, static_cast<float>(camxiom::constants::kPi));
+    EXPECT_EQ(rayToPixel(uncapped, wide).status, StatusCode::OK) << nm.name;
   }
 }
 

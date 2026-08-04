@@ -38,6 +38,7 @@
 // double calibration path can gain an analogous ValidatedCameraModel64 later
 // using the same shape if a double single-point hot loop appears.
 
+#include "camxiom/internal/prepared_projection.hpp"
 #include "camxiom/types.hpp"
 
 #include <Eigen/Core>
@@ -79,17 +80,29 @@ private:
   // Resolved-once per-model entry points. The pointee functions are an internal
   // implementation detail (src/detail/projection_models.hpp); only their public
   // signature is named here, the concrete values are bound in tryMake().
-  using ForwardFn = PixelResult (*)(const CameraModel &, const Eigen::Vector3f &);
-  using InverseFn = RayResult (*)(const CameraModel &, const Pixel2 &, const SolverOptions &);
+  //
+  // These are the `*Prepared` overloads: they read the model-derived constants
+  // (the FOV-cap cosine, the double-sphere bijectivity bound) from prepared_
+  // instead of re-deriving them, which is the whole reason this type can
+  // project cheaper than the generic API.
+  using ForwardFn =
+    PixelResult (*)(const CameraModel &, const Eigen::Vector3f &, const detail_impl::PreparedProjection &);
+  using InverseFn =
+    RayResult (*)(const CameraModel &, const Pixel2 &, const SolverOptions &, const detail_impl::PreparedProjection &);
 
-  ValidatedCameraModel(const CameraModel &model, ForwardFn forward, InverseFn inverse)
-  : model_(model), forward_(forward), inverse_(inverse)
+  ValidatedCameraModel(
+    const CameraModel &model, ForwardFn forward, InverseFn inverse,
+    const detail_impl::PreparedProjection &prepared
+  )
+  : model_(model), forward_(forward), inverse_(inverse), prepared_(prepared)
   {
   }
 
   CameraModel model_{};
   ForwardFn forward_{nullptr};
   InverseFn inverse_{nullptr};
+  // Derived once in tryMake() from the validated model, immutable thereafter.
+  detail_impl::PreparedProjection prepared_{};
 };
 
 }  // namespace camxiom
