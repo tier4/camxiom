@@ -16,6 +16,7 @@
 #define CAMXIOM__DETAIL__SIMD_DS_EUCM_HPP
 
 #include "camxiom/internal/constants.hpp"
+#include "camxiom/internal/prepared_projection.hpp"
 #include "camxiom/types.hpp"
 
 #include <cmath>
@@ -57,7 +58,8 @@ inline __m128 finiteMaskSseDs(const __m128 values)
 /// Handles: plane distortion (RadTan5/Rational8/ThinPrism), intrinsics.
 /// Returns bitmask of valid points (0-15).
 inline int rayToPixelDsphSse4(
-  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
+  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
+  const detail_impl::PreparedProjection &prepared
 )
 {
   const __m128 xs = _mm_set_ps(rays_xyz[9], rays_xyz[6], rays_xyz[3], rays_xyz[0]);
@@ -109,18 +111,14 @@ inline int rayToPixelDsphSse4(
   // DS bijectivity (Usenko 2018 eq. 43-45): Z > -w2 * d1, matching the scalar
   // detail::computeDsForward check.
   {
-    const float xi_f = model.projection.xi;
-    const float alpha_f = model.projection.alpha;
-    const float w1_f = (alpha_f <= 0.5f) ? alpha_f / (1.0f - alpha_f) : (1.0f - alpha_f) / alpha_f;
-    const float w2_f = (w1_f + xi_f) / std::sqrt(2.0f * w1_f * xi_f + xi_f * xi_f + 1.0f);
-    const __m128 neg_w2 = _mm_set1_ps(-w2_f);
+    const __m128 neg_w2 = _mm_set1_ps(prepared.ds_neg_w2);
     valid = _mm_and_ps(valid, _mm_cmpgt_ps(zs, _mm_mul_ps(neg_w2, d1)));
   }
 
   // theta_max contract (see the scalar impl); skipped at the default pi.
-  if (model.projection.theta_max < constants::kPiF)
+  if (prepared.has_theta_cap)
   {
-    const __m128 cos_tm = _mm_set1_ps(std::cos(model.projection.theta_max));
+    const __m128 cos_tm = _mm_set1_ps(prepared.cos_theta_max);
     valid = _mm_and_ps(valid, _mm_cmpge_ps(zs, _mm_mul_ps(d1, cos_tm)));
   }
 
@@ -220,7 +218,8 @@ inline int rayToPixelDsphSse4(
 /// Process 4 EUCM forward projections simultaneously using SSE.
 /// Returns bitmask of valid points (0-15).
 inline int rayToPixelEucmSse4(
-  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
+  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
+  const detail_impl::PreparedProjection &prepared
 )
 {
   const __m128 xs = _mm_set_ps(rays_xyz[9], rays_xyz[6], rays_xyz[3], rays_xyz[0]);
@@ -264,10 +263,10 @@ inline int rayToPixelEucmSse4(
 
   // theta_max contract; d is beta-weighted, so use the true norm. Skipped at
   // the default pi.
-  if (model.projection.theta_max < constants::kPiF)
+  if (prepared.has_theta_cap)
   {
     const __m128 norm = _mm_sqrt_ps(_mm_add_ps(_mm_add_ps(xx, yy), zz));
-    const __m128 cos_tm = _mm_set1_ps(std::cos(model.projection.theta_max));
+    const __m128 cos_tm = _mm_set1_ps(prepared.cos_theta_max);
     valid = _mm_and_ps(valid, _mm_cmpge_ps(zs, _mm_mul_ps(norm, cos_tm)));
   }
 
@@ -393,7 +392,8 @@ inline __m256 finiteMaskAvxDs(const __m256 values)
 
 /// Process 8 DoubleSphere forward projections using AVX2.
 inline int rayToPixelDsphAvx8(
-  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
+  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
+  const detail_impl::PreparedProjection &prepared
 )
 {
   const __m256 xs = _mm256_set_ps(
@@ -452,18 +452,14 @@ inline int rayToPixelDsphAvx8(
   // DS bijectivity (Usenko 2018 eq. 43-45): Z > -w2 * d1, matching the scalar
   // detail::computeDsForward check.
   {
-    const float xi_f = model.projection.xi;
-    const float alpha_f = model.projection.alpha;
-    const float w1_f = (alpha_f <= 0.5f) ? alpha_f / (1.0f - alpha_f) : (1.0f - alpha_f) / alpha_f;
-    const float w2_f = (w1_f + xi_f) / std::sqrt(2.0f * w1_f * xi_f + xi_f * xi_f + 1.0f);
-    const __m256 neg_w2 = _mm256_set1_ps(-w2_f);
+    const __m256 neg_w2 = _mm256_set1_ps(prepared.ds_neg_w2);
     valid = _mm256_and_ps(valid, _mm256_cmp_ps(zs, _mm256_mul_ps(neg_w2, d1), _CMP_GT_OQ));
   }
 
   // theta_max contract (see the scalar impl); skipped at the default pi.
-  if (model.projection.theta_max < constants::kPiF)
+  if (prepared.has_theta_cap)
   {
-    const __m256 cos_tm = _mm256_set1_ps(std::cos(model.projection.theta_max));
+    const __m256 cos_tm = _mm256_set1_ps(prepared.cos_theta_max);
     valid = _mm256_and_ps(valid, _mm256_cmp_ps(zs, _mm256_mul_ps(d1, cos_tm), _CMP_GE_OQ));
   }
 
@@ -561,7 +557,8 @@ inline int rayToPixelDsphAvx8(
 
 /// Process 8 EUCM forward projections using AVX2.
 inline int rayToPixelEucmAvx8(
-  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
+  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
+  const detail_impl::PreparedProjection &prepared
 )
 {
   const __m256 xs = _mm256_set_ps(
@@ -613,10 +610,10 @@ inline int rayToPixelEucmAvx8(
 
   // theta_max contract; d is beta-weighted, so use the true norm. Skipped at
   // the default pi.
-  if (model.projection.theta_max < constants::kPiF)
+  if (prepared.has_theta_cap)
   {
     const __m256 norm = _mm256_sqrt_ps(_mm256_add_ps(_mm256_add_ps(xx, yy), zz));
-    const __m256 cos_tm = _mm256_set1_ps(std::cos(model.projection.theta_max));
+    const __m256 cos_tm = _mm256_set1_ps(prepared.cos_theta_max);
     valid = _mm256_and_ps(valid, _mm256_cmp_ps(zs, _mm256_mul_ps(norm, cos_tm), _CMP_GE_OQ));
   }
 

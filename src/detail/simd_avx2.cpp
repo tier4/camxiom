@@ -28,6 +28,9 @@ int rayToPixelBatchPinholeAvx2(
   StatusCode *statuses_out
 )
 {
+  // Model-constant state (FOV-cap cosine, double-sphere bijectivity bound)
+  // derived once for the whole batch instead of once per SIMD block.
+  const detail_impl::PreparedProjection prepared = detail_impl::prepareProjection(model.projection);
   if (model.distortion.has_tilt)
   {
     int valid_count = 0;
@@ -59,7 +62,7 @@ int rayToPixelBatchPinholeAvx2(
   {
     float u8[8];
     float v8[8];
-    const int mask = rayToPixelPinholeAvx8(model, rays_xyz + i * 3, u8, v8);
+    const int mask = rayToPixelPinholeAvx8(model, rays_xyz + i * 3, u8, v8, prepared);
 
     for (int j = 0; j < 8; ++j)
     {
@@ -98,7 +101,7 @@ int rayToPixelBatchPinholeAvx2(
   {
     float u4[4];
     float v4[4];
-    const int mask = rayToPixelPinholeSse4(model, rays_xyz + i * 3, u4, v4);
+    const int mask = rayToPixelPinholeSse4(model, rays_xyz + i * 3, u4, v4, prepared);
     for (int j = 0; j < 4; ++j)
     {
       const int index = i + j;

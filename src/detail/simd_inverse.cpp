@@ -597,7 +597,8 @@ namespace
 
 using ScalarInvFn = RayResult (*)(const CameraModel &, const Pixel2 &, const SolverOptions &);
 using Sse4InvFn = int (*)(const CameraModel &, const float *, const float *, float *);
-using Sse4FwdFn = int (*)(const CameraModel &, const float *, float *, float *);
+using Sse4FwdFn =
+  int (*)(const CameraModel &, const float *, float *, float *, const detail_impl::PreparedProjection &);
 
 constexpr float kStatusVerifyThresholdSq =
   1.0f;  // 1 px round-trip tolerance for SIMD-OK verification
@@ -608,6 +609,10 @@ int pixelToRayBatchSseGeneric(
   ScalarInvFn scalar_fn
 )
 {
+  // Model-constant state for the forward round-trip check below: derived once
+  // for the whole batch instead of once per SIMD block.
+  const detail_impl::PreparedProjection prepared = detail_impl::prepareProjection(model.projection);
+
   // The SIMD Newton runs a fixed 10-iteration / 1e-6 schedule and SIMD-OK
   // lanes are only guarded by the 1 px round-trip check, so caller-supplied
   // solver options (tighter tolerances, more iterations) would be silently
@@ -648,7 +653,7 @@ int pixelToRayBatchSseGeneric(
       int fwd_vm = 0;
       if (fwd_fn != nullptr && (vm & 0xF) != 0)
       {
-        fwd_vm = fwd_fn(model, out, fwd_u, fwd_v);
+        fwd_vm = fwd_fn(model, out, fwd_u, fwd_v, prepared);
       }
       for (int j = 0; j < 4; ++j)
       {
