@@ -41,19 +41,18 @@ RayResult pixelToRay(
 }
 
 PixelResult rayToPixelPrepared(
-  const CameraModel &model, const Eigen::Vector3f &ray_direction,
-  const detail_impl::PreparedProjection &prepared
+  const detail_impl::PreparedModel &prepared, const Eigen::Vector3f &ray_direction
 )
 {
-  return impl::rayToPixel<float>(model, ray_direction, prepared);
+  return impl::rayToPixel<float>(prepared.model, ray_direction, prepared.projection);
 }
 
 RayResult pixelToRayPrepared(
-  const CameraModel &model, const Pixel2 &pixel, const SolverOptions &solver_options,
-  const detail_impl::PreparedProjection &prepared
+  const detail_impl::PreparedModel &prepared, const Pixel2 &pixel,
+  const SolverOptions &solver_options
 )
 {
-  return impl::pixelToRay<float>(model, pixel, solver_options, prepared);
+  return impl::pixelToRay<float>(prepared.model, pixel, solver_options, prepared.projection);
 }
 
 }  // namespace camxiom::omnidirectional

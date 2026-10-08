@@ -39,6 +39,8 @@
 // src/detail/projection_common.hpp: only translation units that actually
 // project need it, and it pulls in the double-sphere math.
 
+#include "camxiom/types.hpp"
+
 namespace camxiom::detail_impl
 {
 
@@ -58,6 +60,19 @@ struct PreparedProjectionT
 
 using PreparedProjection = PreparedProjectionT<float>;
 using PreparedProjection64 = PreparedProjectionT<double>;
+
+// A model together with its prepared state, so a caller that holds both hands
+// them to a projection core through one reference. Passing the prepared state
+// as a separate argument costs an extra address computation on every call,
+// which measured +3% per point on pinhole, the cheapest model.
+template <typename T>
+struct PreparedModelT
+{
+  CameraModelT<T> model{};
+  PreparedProjectionT<T> projection{};
+};
+
+using PreparedModel = PreparedModelT<float>;
 
 }  // namespace camxiom::detail_impl
 

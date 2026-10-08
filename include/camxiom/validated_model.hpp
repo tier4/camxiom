@@ -58,9 +58,9 @@ public:
   [[nodiscard]] static std::optional<ValidatedCameraModel> tryMake(const CameraModel &model);
 
   // The validated, immutable model. Never changes after construction.
-  const CameraModel &get() const noexcept { return model_; }
+  const CameraModel &get() const noexcept { return prepared_.model; }
 
-  ProjectionModelType projectionType() const noexcept { return model_.projection.type; }
+  ProjectionModelType projectionType() const noexcept { return prepared_.model.projection.type; }
 
   // Hot-path projection: no per-call re-validation, no dispatch switch. For a
   // model that validated, these return exactly what the generic
@@ -85,24 +85,23 @@ private:
   // (the FOV-cap cosine, the double-sphere bijectivity bound) from prepared_
   // instead of re-deriving them, which is the whole reason this type can
   // project cheaper than the generic API.
-  using ForwardFn =
-    PixelResult (*)(const CameraModel &, const Eigen::Vector3f &, const detail_impl::PreparedProjection &);
+  using ForwardFn = PixelResult (*)(const detail_impl::PreparedModel &, const Eigen::Vector3f &);
   using InverseFn =
-    RayResult (*)(const CameraModel &, const Pixel2 &, const SolverOptions &, const detail_impl::PreparedProjection &);
+    RayResult (*)(const detail_impl::PreparedModel &, const Pixel2 &, const SolverOptions &);
 
   ValidatedCameraModel(
-    const CameraModel &model, ForwardFn forward, InverseFn inverse,
-    const detail_impl::PreparedProjection &prepared
+    const detail_impl::PreparedModel &prepared, ForwardFn forward, InverseFn inverse
   )
-  : model_(model), forward_(forward), inverse_(inverse), prepared_(prepared)
+  : prepared_(prepared), forward_(forward), inverse_(inverse)
   {
   }
 
-  CameraModel model_{};
+  // The validated model and the constants derived from it in tryMake(), both
+  // immutable thereafter. Kept in one object so the hot path passes a single
+  // reference to the projection core.
+  detail_impl::PreparedModel prepared_{};
   ForwardFn forward_{nullptr};
   InverseFn inverse_{nullptr};
-  // Derived once in tryMake() from the validated model, immutable thereafter.
-  detail_impl::PreparedProjection prepared_{};
 };
 
 }  // namespace camxiom

@@ -24,10 +24,9 @@ namespace camxiom
 namespace
 {
 
-using ForwardFn =
-  PixelResult (*)(const CameraModel &, const Eigen::Vector3f &, const detail_impl::PreparedProjection &);
+using ForwardFn = PixelResult (*)(const detail_impl::PreparedModel &, const Eigen::Vector3f &);
 using InverseFn =
-  RayResult (*)(const CameraModel &, const Pixel2 &, const SolverOptions &, const detail_impl::PreparedProjection &);
+  RayResult (*)(const detail_impl::PreparedModel &, const Pixel2 &, const SolverOptions &);
 
 // Map ProjectionModelType -> the internal per-model forward/inverse entry
 // points. This is the same resolution the generic dispatch switch
@@ -94,25 +93,26 @@ std::optional<ValidatedCameraModel> ValidatedCameraModel::tryMake(const CameraMo
   // The model is validated and immutable from here on, so its derived
   // constants are too: derive them once instead of on every projected point.
   return ValidatedCameraModel(
-    model, forward, inverse, detail_impl::prepareProjection(model.projection)
+    detail_impl::PreparedModel{model, detail_impl::prepareProjection(model.projection)}, forward,
+    inverse
   );
 }
 
 PixelResult ValidatedCameraModel::rayToPixel(const Eigen::Vector3f &ray_direction) const
 {
-  return forward_(model_, ray_direction, prepared_);
+  return forward_(prepared_, ray_direction);
 }
 
 PixelResult ValidatedCameraModel::rayToPixel(
   const float x_direction, const float y_direction, const float z_direction
 ) const
 {
-  return forward_(model_, Eigen::Vector3f(x_direction, y_direction, z_direction), prepared_);
+  return forward_(prepared_, Eigen::Vector3f(x_direction, y_direction, z_direction));
 }
 
 PixelResult ValidatedCameraModel::rayToPixel(const Ray3 &ray) const
 {
-  return forward_(model_, ray.direction, prepared_);
+  return forward_(prepared_, ray.direction);
 }
 
 RayResult ValidatedCameraModel::pixelToRay(const Pixel2 &pixel, const SolverOptions &solver_options)
@@ -124,7 +124,7 @@ RayResult ValidatedCameraModel::pixelToRay(const Pixel2 &pixel, const SolverOpti
   {
     return detail::invalidRayResult(StatusCode::INVALID_INPUT);
   }
-  return inverse_(model_, pixel, solver_options, prepared_);
+  return inverse_(prepared_, pixel, solver_options);
 }
 
 RayResult ValidatedCameraModel::pixelToRay(

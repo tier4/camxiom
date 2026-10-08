@@ -46,13 +46,13 @@ namespace camxiom
 // namespace. Defined per model in src/<model>/projection.cpp (float) and
 // src/<model>/projection64.cpp (double).
 //
-// The `*Prepared` float overloads take the model-constant state
-// (detail_impl::PreparedProjection) from the caller instead of re-deriving it.
-// The plain overloads derive it themselves, so they stay drop-in for callers
-// that hold nothing but a CameraModel. Every model declares both, including
-// the ones that read nothing from `prepared` (pinhole, fisheye), so callers
-// with a fixed model — ValidatedCameraModel, the batch and SIMD layers — bind
-// one uniform signature across all five.
+// The `*Prepared` float overloads take the model together with its
+// model-constant state (detail_impl::PreparedModel) from the caller instead of
+// re-deriving the state. The plain overloads derive it themselves, so they stay
+// drop-in for callers that hold nothing but a CameraModel. Every model declares
+// both, including the ones that read nothing from the prepared state (pinhole,
+// fisheye), so ValidatedCameraModel binds one uniform signature across all
+// five.
 #define CAMXIOM_DECLARE_MODEL_PROJECTION(model_ns)                                              \
   namespace model_ns                                                                            \
   {                                                                                             \
@@ -62,12 +62,11 @@ namespace camxiom
     const SolverOptions &solver_options = SolverOptions{}                                       \
   );                                                                                            \
   PixelResult rayToPixelPrepared(                                                               \
-    const CameraModel &model, const Eigen::Vector3f &ray_direction,                             \
-    const detail_impl::PreparedProjection &prepared                                             \
+    const detail_impl::PreparedModel &prepared, const Eigen::Vector3f &ray_direction            \
   );                                                                                            \
   RayResult pixelToRayPrepared(                                                                 \
-    const CameraModel &model, const Pixel2 &pixel, const SolverOptions &solver_options,         \
-    const detail_impl::PreparedProjection &prepared                                             \
+    const detail_impl::PreparedModel &prepared, const Pixel2 &pixel,                            \
+    const SolverOptions &solver_options                                                         \
   );                                                                                            \
   PixelResult64 rayToPixel64(const CameraModel64 &model, const Eigen::Vector3d &ray_direction); \
   RayResult64 pixelToRay64(                                                                     \
