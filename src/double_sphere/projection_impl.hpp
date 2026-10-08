@@ -34,9 +34,10 @@
 namespace camxiom::double_sphere::impl
 {
 
-template <typename T>
+template <typename T, typename Constants>
 inline PixelResultT<T> rayToPixel(
-  const CameraModelT<T> &model, const Eigen::Matrix<T, 3, 1> &ray_direction
+  const CameraModelT<T> &model, const Eigen::Matrix<T, 3, 1> &ray_direction,
+  const Constants &constants
 )
 {
   using detail_impl::invalidPixelResult;
@@ -62,16 +63,16 @@ inline PixelResultT<T> rayToPixel(
   T xi_d1_z = T(0);
   T d2 = T(0);
   T denom = T(0);
-  const StatusCode fwd =
-    detail::computeDsForward<T>(xi, alpha, X, Y, Z, kEpsilon, d1, r_sq, xi_d1_z, d2, denom);
+  const StatusCode fwd = detail::computeDsForward<T>(
+    xi, alpha, X, Y, Z, kEpsilon, constants, d1, r_sq, xi_d1_z, d2, denom
+  );
   if (fwd != StatusCode::OK)
   {
     return invalidPixelResult<T>(fwd);
   }
 
   // theta_max contract (types.hpp): reject rays beyond a sub-pi FOV cap.
-  if (detail_impl::hasThetaMaxCap(model.projection.theta_max) &&
-      !detail_impl::withinThetaMax(model.projection.theta_max, Z, d1))
+  if (constants.hasThetaCap() && !detail_impl::withinThetaMaxCos(constants.cosThetaMax(), Z, d1))
   {
     return invalidPixelResult<T>(StatusCode::OUT_OF_FOV);
   }
@@ -102,9 +103,10 @@ inline PixelResultT<T> rayToPixel(
   return result;
 }
 
-template <typename T, typename Options>
+template <typename T, typename Options, typename Constants>
 inline RayResultT<T> pixelToRay(
-  const CameraModelT<T> &model, const Pixel2T<T> &pixel, const Options &solver_options
+  const CameraModelT<T> &model, const Pixel2T<T> &pixel, const Options &solver_options,
+  const Constants &constants
 )
 {
   using detail_impl::invalidRayResult;
@@ -174,8 +176,8 @@ inline RayResultT<T> pixelToRay(
   direction /= norm;
 
   // Round-trip consistency with the forward theta_max cap.
-  if (detail_impl::hasThetaMaxCap(model.projection.theta_max) &&
-      !detail_impl::withinThetaMax(model.projection.theta_max, direction.z(), T(1)))
+  if (constants.hasThetaCap() &&
+      !detail_impl::withinThetaMaxCos(constants.cosThetaMax(), direction.z(), T(1)))
   {
     return invalidRayResult<T>(StatusCode::OUT_OF_FOV);
   }

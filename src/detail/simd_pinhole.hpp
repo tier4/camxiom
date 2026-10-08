@@ -15,6 +15,7 @@
 #ifndef CAMXIOM__DETAIL__SIMD_PINHOLE_HPP
 #define CAMXIOM__DETAIL__SIMD_PINHOLE_HPP
 
+#include "camxiom/internal/prepared_projection.hpp"
 #include "camxiom/types.hpp"
 
 #include <limits>
@@ -63,7 +64,10 @@ inline __m128 finiteMaskSse(const __m128 values)
 ///
 /// Returns bitmask of valid points (0-15).
 inline int rayToPixelPinholeSse4(
-  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
+  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
+  // Unused: this model reads no model-constant state. Present so the forward
+  // kernels share one signature for the function-pointer tables in simd_inverse.
+  const detail_impl::PreparedProjection &
 )
 {
   // Gather 4 rays from AoS layout.

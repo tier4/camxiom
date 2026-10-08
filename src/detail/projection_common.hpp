@@ -23,7 +23,9 @@
 // intrinsics plumbing has a single source of truth across precisions.
 
 #include "camxiom/internal/constants.hpp"
+#include "camxiom/internal/prepared_projection.hpp"  // PreparedProjectionT
 #include "camxiom/types.hpp"
+#include "detail/ds_forward.hpp"      // dsNegW2 (shared bijectivity bound)
 #include "distortion/plane_impl.hpp"  // isFinite2 (shared finite check)
 
 #include <Eigen/Core>
@@ -44,13 +46,55 @@ inline bool hasThetaMaxCap(const T theta_max)
 
 /// theta <= theta_max via cosine comparison (no atan2 needed):
 /// theta <= theta_max  <=>  z >= norm * cos(theta_max) for theta_max in
-/// (0, pi). Callers guard with hasThetaMaxCap so the ray norm is only
-/// required when a cap is actually active.
+/// (0, pi). Callers guard with PreparedProjectionT::has_theta_cap so the ray
+/// norm is only required when a cap is actually active.
 template <typename T>
-inline bool withinThetaMax(const T theta_max, const T z, const T norm)
+inline bool withinThetaMaxCos(const T cos_theta_max, const T z, const T norm)
 {
-  return z >= norm * std::cos(theta_max);
+  return z >= norm * cos_theta_max;
 }
+
+/// Derive the model-constant projection state (the type itself lives in the
+/// installed internal/prepared_projection.hpp, because a public header stores
+/// it by value).
+///
+/// ValidatedCameraModel and the batch / SIMD layers, which already resolve the
+/// model once, call this once and reuse the result. The generic single-point
+/// API does not: see DeriveAtUseT below.
+template <typename T>
+inline PreparedProjectionT<T> prepareProjection(const ProjectionModelT<T> &projection)
+{
+  PreparedProjectionT<T> prepared;
+  prepared.has_theta_cap = hasThetaMaxCap(projection.theta_max);
+  if (prepared.has_theta_cap)
+  {
+    prepared.cos_theta_max = std::cos(projection.theta_max);
+  }
+  if (projection.type == ProjectionModelType::DOUBLE_SPHERE)
+  {
+    prepared.ds_neg_w2 = detail::dsNegW2(projection.xi, projection.alpha);
+  }
+  return prepared;
+}
+
+/// The same accessors as PreparedProjectionT, but each value is derived when a
+/// projection core reads it. This is what the generic single-point API
+/// (rayToPixel / pixelToRay, the Jacobians) passes: it accepts an unvalidated
+/// CameraModel by reference and has nowhere to cache anything.
+///
+/// Deriving at the point of use rather than up front is deliberate. Calling
+/// prepareProjection() ahead of the per-point math does the same work, but
+/// measured 4-11% slower per point on Cortex-A78AE (Jetson Orin) for the
+/// omnidirectional, double-sphere and EUCM forward paths.
+template <typename T>
+struct DeriveAtUseT
+{
+  const ProjectionModelT<T> &projection;
+
+  bool hasThetaCap() const { return hasThetaMaxCap(projection.theta_max); }
+  T cosThetaMax() const { return std::cos(projection.theta_max); }
+  T dsNegW2() const { return detail::dsNegW2(projection.xi, projection.alpha); }
+};
 
 template <typename T>
 inline PixelResultT<T> invalidPixelResult(const StatusCode status)

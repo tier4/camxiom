@@ -15,6 +15,7 @@
 #ifndef CAMXIOM__DETAIL__SIMD_AVX2_HPP
 #define CAMXIOM__DETAIL__SIMD_AVX2_HPP
 
+#include "camxiom/internal/prepared_projection.hpp"
 #include "camxiom/types.hpp"
 
 #include <limits>
@@ -45,7 +46,10 @@ inline __m256 finiteMaskAvx(const __m256 values)
 /// Same logic as the SSE4 version but with 256-bit registers.
 /// Returns bitmask of valid points (bits 0-7).
 inline int rayToPixelPinholeAvx8(
-  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
+  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
+  // Unused: this model reads no model-constant state. Present so the forward
+  // kernels share one signature for the function-pointer tables in simd_inverse.
+  const detail_impl::PreparedProjection &
 )
 {
   // Gather X, Y, Z from interleaved AoS layout (stride = 3 floats)

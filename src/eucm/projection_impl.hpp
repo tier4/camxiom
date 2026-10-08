@@ -34,9 +34,10 @@
 namespace camxiom::eucm::impl
 {
 
-template <typename T>
+template <typename T, typename Constants>
 inline PixelResultT<T> rayToPixel(
-  const CameraModelT<T> &model, const Eigen::Matrix<T, 3, 1> &ray_direction
+  const CameraModelT<T> &model, const Eigen::Matrix<T, 3, 1> &ray_direction,
+  const Constants &constants
 )
 {
   using detail_impl::invalidPixelResult;
@@ -83,10 +84,10 @@ inline PixelResultT<T> rayToPixel(
 
   // theta_max contract (types.hpp): d above is beta-weighted, so the true
   // ray norm is computed only when a FOV cap below pi is active.
-  if (detail_impl::hasThetaMaxCap(model.projection.theta_max))
+  if (constants.hasThetaCap())
   {
     const T ray_norm = std::sqrt(X * X + Y * Y + Z * Z);
-    if (!detail_impl::withinThetaMax(model.projection.theta_max, Z, ray_norm))
+    if (!detail_impl::withinThetaMaxCos(constants.cosThetaMax(), Z, ray_norm))
     {
       return invalidPixelResult<T>(StatusCode::OUT_OF_FOV);
     }
@@ -118,9 +119,10 @@ inline PixelResultT<T> rayToPixel(
   return result;
 }
 
-template <typename T, typename Options>
+template <typename T, typename Options, typename Constants>
 inline RayResultT<T> pixelToRay(
-  const CameraModelT<T> &model, const Pixel2T<T> &pixel, const Options &solver_options
+  const CameraModelT<T> &model, const Pixel2T<T> &pixel, const Options &solver_options,
+  const Constants &constants
 )
 {
   using detail_impl::invalidRayResult;
@@ -182,8 +184,8 @@ inline RayResultT<T> pixelToRay(
   direction /= norm;
 
   // Round-trip consistency with the forward theta_max cap.
-  if (detail_impl::hasThetaMaxCap(model.projection.theta_max) &&
-      !detail_impl::withinThetaMax(model.projection.theta_max, direction.z(), T(1)))
+  if (constants.hasThetaCap() &&
+      !detail_impl::withinThetaMaxCos(constants.cosThetaMax(), direction.z(), T(1)))
   {
     return invalidRayResult<T>(StatusCode::OUT_OF_FOV);
   }

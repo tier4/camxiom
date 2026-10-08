@@ -35,7 +35,7 @@ int projectPoints(
   const cv::Vec3d &tvec, std::vector<cv::Point2f> &image_points_out
 )
 {
-  const StatusCode validation = camgeom::detail::validateCameraModelQuery(model);
+  const StatusCode validation = camxiom::detail::validateCameraModelQuery(model);
   if (validation != StatusCode::OK)
   {
     return -1;
@@ -67,7 +67,7 @@ int projectPoints(
   std::vector<float> u_out(static_cast<std::size_t>(n));
   std::vector<float> v_out(static_cast<std::size_t>(n));
   std::vector<StatusCode> statuses(static_cast<std::size_t>(n));
-  const int valid_count = camgeom::rayToPixelBatch(
+  const int valid_count = camxiom::rayToPixelBatch(
     model, rays_xyz.data(), n, u_out.data(), v_out.data(), statuses.data()
   );
 
@@ -93,7 +93,7 @@ int undistortPoints(
   const SolverOptions &opts
 )
 {
-  const StatusCode validation = camgeom::detail::validateCameraModelQuery(model);
+  const StatusCode validation = camxiom::detail::validateCameraModelQuery(model);
   if (validation != StatusCode::OK)
   {
     return -1;
@@ -116,7 +116,7 @@ int undistortPoints(
 
   std::vector<float> dirs_xyz(static_cast<std::size_t>(n) * 3);
   std::vector<StatusCode> statuses(static_cast<std::size_t>(n));
-  const int valid_count = camgeom::pixelToRayBatch(
+  const int valid_count = camxiom::pixelToRayBatch(
     model, u_in.data(), v_in.data(), n, dirs_xyz.data(), statuses.data(), opts
   );
   (void)valid_count;
@@ -207,7 +207,7 @@ int distortPoints(
   std::vector<cv::Point2f> &dst_points_out
 )
 {
-  const StatusCode validation = camgeom::detail::validateCameraModelQuery(model);
+  const StatusCode validation = camxiom::detail::validateCameraModelQuery(model);
   if (validation != StatusCode::OK)
   {
     return -1;
@@ -232,7 +232,7 @@ int distortPoints(
   std::vector<float> u_out(static_cast<std::size_t>(n));
   std::vector<float> v_out(static_cast<std::size_t>(n));
   std::vector<StatusCode> statuses(static_cast<std::size_t>(n));
-  const int valid_count = camgeom::rayToPixelBatch(
+  const int valid_count = camxiom::rayToPixelBatch(
     model, rays_xyz.data(), n, u_out.data(), v_out.data(), statuses.data()
   );
 
@@ -307,11 +307,11 @@ bool initCameraMatrix2D(
   camera_model_out.intrinsics.fy = static_cast<float>(fy);
   camera_model_out.intrinsics.cx = static_cast<float>(cx);
   camera_model_out.intrinsics.cy = static_cast<float>(cy);
-  camera_model_out.projection.type = camgeom::ProjectionModelType::PINHOLE;
-  camera_model_out.distortion.type = camgeom::DistortionModelType::NONE;
+  camera_model_out.projection.type = camxiom::ProjectionModelType::PINHOLE;
+  camera_model_out.distortion.type = camxiom::DistortionModelType::NONE;
   camera_model_out.distortion.count = 0;
 
-  return camgeom::validateCameraModel(camera_model_out) == camgeom::StatusCode::OK;
+  return camxiom::validateCameraModel(camera_model_out) == camxiom::StatusCode::OK;
 }
 
 }  // namespace camxiom::opencv
