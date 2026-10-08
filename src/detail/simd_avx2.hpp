@@ -17,25 +17,23 @@
 
 #include "camxiom/internal/prepared_projection.hpp"
 #include "camxiom/types.hpp"
+#include "detail/simd_dispatch.hpp"
 
 #include <limits>
-
-#if defined(__AVX2__)
-#define CAMXIOM_HAS_AVX2 1
-#include <immintrin.h>
-#endif
 
 namespace camxiom::detail
 {
 
 #ifdef CAMXIOM_HAS_AVX2
 
+CAMXIOM_TARGET_AVX2
 inline __m256 absAvx(const __m256 values)
 {
   const __m256 sign_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF));
   return _mm256_and_ps(values, sign_mask);
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256 finiteMaskAvx(const __m256 values)
 {
   const __m256 max_value = _mm256_set1_ps((std::numeric_limits<float>::max)());
@@ -45,6 +43,7 @@ inline __m256 finiteMaskAvx(const __m256 values)
 /// Process 8 pinhole forward projections simultaneously using AVX2.
 /// Same logic as the SSE4 version but with 256-bit registers.
 /// Returns bitmask of valid points (bits 0-7).
+CAMXIOM_TARGET_AVX2
 inline int rayToPixelPinholeAvx8(
   const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
   // Unused: this model reads no model-constant state. Present so the forward
@@ -162,6 +161,7 @@ inline int rayToPixelPinholeAvx8(
   return _mm256_movemask_ps(valid_mask);
 }
 
+CAMXIOM_TARGET_AVX2
 int rayToPixelBatchPinholeAvx2(
   const CameraModel &model, const float *rays_xyz, int count, float *u_out, float *v_out,
   StatusCode *statuses_out

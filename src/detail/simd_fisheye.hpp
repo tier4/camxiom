@@ -18,25 +18,10 @@
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/internal/prepared_projection.hpp"
 #include "camxiom/types.hpp"
+#include "detail/simd_dispatch.hpp"
 
 #include <cmath>
 #include <limits>
-
-#if defined(__AVX2__)
-#define CAMXIOM_HAS_AVX2 1
-#include <immintrin.h>
-#endif
-
-#if defined(__SSE2__)
-#define CAMXIOM_HAS_SSE2 1
-#include <emmintrin.h>
-#include <xmmintrin.h>
-#elif defined(__aarch64__)
-// The 4-wide kernels below also run natively on AArch64 through a minimal
-// __m128 -> NEON mapping (see simd_neon_compat.hpp for scope and caveats).
-#define CAMXIOM_HAS_SSE2 1
-#include "detail/simd_neon_compat.hpp"
-#endif
 
 namespace camxiom::detail
 {
@@ -223,23 +208,27 @@ inline int rayToPixelFisheyeSse4(
 
 #ifdef CAMXIOM_HAS_AVX2
 
+CAMXIOM_TARGET_AVX2
 inline __m256 selectAvx(const __m256 base, const __m256 value, const __m256 mask)
 {
   return _mm256_or_ps(_mm256_and_ps(mask, value), _mm256_andnot_ps(mask, base));
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256 absAvxFwd(const __m256 values)
 {
   const __m256 sign_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF));
   return _mm256_and_ps(values, sign_mask);
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256 finiteMaskAvxFwd(const __m256 values)
 {
   const __m256 max_value = _mm256_set1_ps((std::numeric_limits<float>::max)());
   return _mm256_cmp_ps(absAvxFwd(values), max_value, _CMP_LE_OQ);
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256 atanAvx8HighPrecision(__m256 x)
 {
   const __m256 one = _mm256_set1_ps(1.0f);
@@ -277,6 +266,7 @@ inline __m256 atanAvx8HighPrecision(__m256 x)
   return _mm256_xor_ps(result, sign);
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256 atan2Avx8HighPrecision(const __m256 y, const __m256 x)
 {
   const __m256 sign_mask = _mm256_set1_ps(-0.0f);
@@ -302,6 +292,7 @@ inline __m256 atan2Avx8HighPrecision(const __m256 y, const __m256 x)
   return angle;
 }
 
+CAMXIOM_TARGET_AVX2
 inline int rayToPixelFisheyeAvx8(
   const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
   // Unused: this model reads no model-constant state. Present so the forward
@@ -530,6 +521,7 @@ int rayToPixelBatchFisheyeSse(
 );
 
 #ifdef CAMXIOM_HAS_AVX2
+CAMXIOM_TARGET_AVX2
 int rayToPixelBatchFisheyeAvx2(
   const CameraModel &model, const float *rays_xyz, int count, float *u_out, float *v_out,
   StatusCode *statuses_out
@@ -544,6 +536,7 @@ int rayToPixelBatchOmniSse(
 #ifdef CAMXIOM_HAS_AVX2
 
 /// Process 8 omnidirectional forward projections using AVX2.
+CAMXIOM_TARGET_AVX2
 inline int rayToPixelOmniAvx8(
   const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
   const detail_impl::PreparedProjection &prepared
@@ -681,6 +674,7 @@ inline int rayToPixelOmniAvx8(
   return _mm256_movemask_ps(valid);
 }
 
+CAMXIOM_TARGET_AVX2
 int rayToPixelBatchOmniAvx2(
   const CameraModel &model, const float *rays_xyz, int count, float *u_out, float *v_out,
   StatusCode *statuses_out

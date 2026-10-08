@@ -16,22 +16,7 @@
 #define CAMXIOM__DETAIL__SIMD_INVERSE_HPP
 
 #include "camxiom/types.hpp"
-
-#if defined(__AVX2__)
-#define CAMXIOM_HAS_AVX2 1
-#include <immintrin.h>
-#endif
-
-#if defined(__SSE2__)
-#define CAMXIOM_HAS_SSE2 1
-#include <emmintrin.h>
-#include <xmmintrin.h>
-#elif defined(__aarch64__)
-// The 4-wide kernels below also run natively on AArch64 through a minimal
-// __m128 -> NEON mapping (see simd_neon_compat.hpp for scope and caveats).
-#define CAMXIOM_HAS_SSE2 1
-#include "detail/simd_neon_compat.hpp"
-#endif
+#include "detail/simd_dispatch.hpp"
 
 #include <limits>
 
@@ -344,18 +329,24 @@ int pixelToRayBatchFisheyeSse(
 // AVX2 utilities for inverse
 // ---------------------------------------------------------------------------
 
+CAMXIOM_TARGET_AVX2
+inline bool anyLaneSetAvxInv(const __m256 mask) { return _mm256_movemask_ps(mask) != 0; }
+
+CAMXIOM_TARGET_AVX2
 inline __m256 absAvxInv(const __m256 v)
 {
   const __m256 sign = _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF));
   return _mm256_and_ps(v, sign);
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256 finiteMaskAvxInv(const __m256 v)
 {
   const __m256 mx = _mm256_set1_ps((std::numeric_limits<float>::max)());
   return _mm256_cmp_ps(absAvxInv(v), mx, _CMP_LE_OQ);
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256 selectAvxInv(const __m256 base, const __m256 value, const __m256 mask)
 {
   return _mm256_or_ps(_mm256_and_ps(mask, value), _mm256_andnot_ps(mask, base));
@@ -365,6 +356,7 @@ inline __m256 selectAvxInv(const __m256 base, const __m256 value, const __m256 m
 // AVX2 removeIntrinsics: 8 pixels → 8 (x_d, y_d)
 // ---------------------------------------------------------------------------
 
+CAMXIOM_TARGET_AVX2
 inline void removeIntrinsicsAvx8(
   const IntrinsicsModel &intr, const float *u_in, const float *v_in, __m256 &x_d, __m256 &y_d,
   __m256 &valid
@@ -398,6 +390,7 @@ inline void removeIntrinsicsAvx8(
 // AVX2 plane distort forward (no tilt): for Newton solver inner loop
 // ---------------------------------------------------------------------------
 
+CAMXIOM_TARGET_AVX2
 inline void distortPlaneAvx8(
   const DistortionModel &dist, const __m256 x, const __m256 y, __m256 &xd, __m256 &yd, __m256 &j00,
   __m256 &j01, __m256 &j10, __m256 &j11
@@ -527,6 +520,7 @@ inline void distortPlaneAvx8(
 // AVX2 Newton plane undistort: 8 pixels, fixed-iteration
 // ---------------------------------------------------------------------------
 
+CAMXIOM_TARGET_AVX2
 inline void undistortPlaneNewtonAvx8(
   const DistortionModel &dist, const __m256 obs_x, const __m256 obs_y, __m256 &ux, __m256 &uy,
   __m256 &valid, const int max_iter = 10
@@ -580,22 +574,27 @@ inline void undistortPlaneNewtonAvx8(
 // AVX2 pixelToRay kernels (8 pixels at a time)
 // ---------------------------------------------------------------------------
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayPinholeAvx8(
   const CameraModel &model, const float *u_in, const float *v_in, float *dirs_xyz
 );
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayDsphAvx8(
   const CameraModel &model, const float *u_in, const float *v_in, float *dirs_xyz
 );
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayEucmAvx8(
   const CameraModel &model, const float *u_in, const float *v_in, float *dirs_xyz
 );
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayOmniAvx8(
   const CameraModel &model, const float *u_in, const float *v_in, float *dirs_xyz
 );
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayFisheyeAvx8(
   const CameraModel &model, const float *u_in, const float *v_in, float *dirs_xyz
 );
@@ -604,26 +603,31 @@ int pixelToRayFisheyeAvx8(
 // AVX2 batch drivers (AVX8 → SSE4 → scalar)
 // ---------------------------------------------------------------------------
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayBatchPinholeAvx2(
   const CameraModel &model, const float *u_in, const float *v_in, int count, float *dirs_xyz,
   StatusCode *statuses_out, const SolverOptions &solver_options
 );
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayBatchDsphAvx2(
   const CameraModel &model, const float *u_in, const float *v_in, int count, float *dirs_xyz,
   StatusCode *statuses_out, const SolverOptions &solver_options
 );
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayBatchEucmAvx2(
   const CameraModel &model, const float *u_in, const float *v_in, int count, float *dirs_xyz,
   StatusCode *statuses_out, const SolverOptions &solver_options
 );
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayBatchOmniAvx2(
   const CameraModel &model, const float *u_in, const float *v_in, int count, float *dirs_xyz,
   StatusCode *statuses_out, const SolverOptions &solver_options
 );
 
+CAMXIOM_TARGET_AVX2
 int pixelToRayBatchFisheyeAvx2(
   const CameraModel &model, const float *u_in, const float *v_in, int count, float *dirs_xyz,
   StatusCode *statuses_out, const SolverOptions &solver_options
