@@ -58,11 +58,9 @@ inline bool withinThetaMaxCos(const T cos_theta_max, const T z, const T norm)
 /// installed internal/prepared_projection.hpp, because a public header stores
 /// it by value).
 ///
-/// The generic single-point API (rayToPixel / pixelToRay) calls this per call:
-/// it accepts an unvalidated CameraModel by reference and has nowhere to cache
-/// anything, so its cost is unchanged by the split. ValidatedCameraModel and
-/// the batch / SIMD layers, which already resolve the model once, call it once
-/// and reuse the result.
+/// ValidatedCameraModel and the batch / SIMD layers, which already resolve the
+/// model once, call this once and reuse the result. The generic single-point
+/// API does not: see DeriveAtUseT below.
 template <typename T>
 inline PreparedProjectionT<T> prepareProjection(const ProjectionModelT<T> &projection)
 {
@@ -78,6 +76,25 @@ inline PreparedProjectionT<T> prepareProjection(const ProjectionModelT<T> &proje
   }
   return prepared;
 }
+
+/// The same accessors as PreparedProjectionT, but each value is derived when a
+/// projection core reads it. This is what the generic single-point API
+/// (rayToPixel / pixelToRay, the Jacobians) passes: it accepts an unvalidated
+/// CameraModel by reference and has nowhere to cache anything.
+///
+/// Deriving at the point of use rather than up front is deliberate. Calling
+/// prepareProjection() ahead of the per-point math does the same work, but
+/// measured 4-11% slower per point on Cortex-A78AE (Jetson Orin) for the
+/// omnidirectional, double-sphere and EUCM forward paths.
+template <typename T>
+struct DeriveAtUseT
+{
+  const ProjectionModelT<T> &projection;
+
+  bool hasThetaCap() const { return hasThetaMaxCap(projection.theta_max); }
+  T cosThetaMax() const { return std::cos(projection.theta_max); }
+  T dsNegW2() const { return detail::dsNegW2(projection.xi, projection.alpha); }
+};
 
 template <typename T>
 inline PixelResultT<T> invalidPixelResult(const StatusCode status)

@@ -56,6 +56,13 @@ struct PreparedProjectionT
   /// -w2 of the double-sphere bijectivity region (Usenko et al. 2018,
   /// eq. 43-45). Zero for every other projection type, which never reads it.
   T ds_neg_w2{T(0)};
+
+  // The projection cores read the state through these, the same accessors
+  // detail_impl::DeriveAtUseT offers, so one core serves both the callers that
+  // derive the state once and the generic API that derives it where it is used.
+  bool hasThetaCap() const { return has_theta_cap; }
+  T cosThetaMax() const { return cos_theta_max; }
+  T dsNegW2() const { return ds_neg_w2; }
 };
 
 using PreparedProjection = PreparedProjectionT<float>;

@@ -34,10 +34,10 @@
 namespace camxiom::double_sphere::impl
 {
 
-template <typename T>
+template <typename T, typename Constants>
 inline PixelResultT<T> rayToPixel(
   const CameraModelT<T> &model, const Eigen::Matrix<T, 3, 1> &ray_direction,
-  const detail_impl::PreparedProjectionT<T> &prepared
+  const Constants &constants
 )
 {
   using detail_impl::invalidPixelResult;
@@ -64,7 +64,7 @@ inline PixelResultT<T> rayToPixel(
   T d2 = T(0);
   T denom = T(0);
   const StatusCode fwd = detail::computeDsForward<T>(
-    xi, alpha, X, Y, Z, kEpsilon, prepared.ds_neg_w2, d1, r_sq, xi_d1_z, d2, denom
+    xi, alpha, X, Y, Z, kEpsilon, constants, d1, r_sq, xi_d1_z, d2, denom
   );
   if (fwd != StatusCode::OK)
   {
@@ -72,7 +72,7 @@ inline PixelResultT<T> rayToPixel(
   }
 
   // theta_max contract (types.hpp): reject rays beyond a sub-pi FOV cap.
-  if (prepared.has_theta_cap && !detail_impl::withinThetaMaxCos(prepared.cos_theta_max, Z, d1))
+  if (constants.hasThetaCap() && !detail_impl::withinThetaMaxCos(constants.cosThetaMax(), Z, d1))
   {
     return invalidPixelResult<T>(StatusCode::OUT_OF_FOV);
   }
@@ -103,10 +103,10 @@ inline PixelResultT<T> rayToPixel(
   return result;
 }
 
-template <typename T, typename Options>
+template <typename T, typename Options, typename Constants>
 inline RayResultT<T> pixelToRay(
   const CameraModelT<T> &model, const Pixel2T<T> &pixel, const Options &solver_options,
-  const detail_impl::PreparedProjectionT<T> &prepared
+  const Constants &constants
 )
 {
   using detail_impl::invalidRayResult;
@@ -176,8 +176,8 @@ inline RayResultT<T> pixelToRay(
   direction /= norm;
 
   // Round-trip consistency with the forward theta_max cap.
-  if (prepared.has_theta_cap &&
-      !detail_impl::withinThetaMaxCos(prepared.cos_theta_max, direction.z(), T(1)))
+  if (constants.hasThetaCap() &&
+      !detail_impl::withinThetaMaxCos(constants.cosThetaMax(), direction.z(), T(1)))
   {
     return invalidRayResult<T>(StatusCode::OUT_OF_FOV);
   }
