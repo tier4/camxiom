@@ -517,8 +517,8 @@ if(BUILD_TESTING)
   # fixes), and AVX2 instructions escaping the target("avx2,fma") functions into
   # unconditional code (which faults on any CPU without AVX2). Both are
   # invisible to a functional test on an AVX2 host, so the script disassembles
-  # the built archive. It self-skips where objdump is missing or the target is
-  # not x86.
+  # the built archive. It self-skips where GNU objdump is missing or the target
+  # is not x86.
   #
   # Not registered when the build itself targets AVX2 (-mavx2): the whole
   # library is then AVX2 by construction and "contained" is neither true nor
@@ -529,6 +529,21 @@ if(BUILD_TESTING)
     "#if !defined(__AVX2__)\n#error not an avx2 build\n#endif\nint main() { return 0; }"
     CAMXIOM_BUILD_TARGETS_AVX2)
   find_package(Python3 QUIET COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    set(_camxiom_avx2_containment_script_test_cmd
+      ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/simd_containment/check_avx2_containment_test.py)
+    if(ament_cmake_FOUND)
+      find_package(ament_cmake_test REQUIRED)
+      ament_add_test(camxiom_avx2_containment_script_test
+        COMMAND ${_camxiom_avx2_containment_script_test_cmd}
+        GENERATE_RESULT_FOR_RETURN_CODE_ZERO
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    else()
+      add_test(NAME camxiom_avx2_containment_script_test
+        COMMAND ${_camxiom_avx2_containment_script_test_cmd})
+    endif()
+  endif()
   if(Python3_Interpreter_FOUND AND NOT CAMXIOM_BUILD_TARGETS_AVX2)
     set(_camxiom_avx2_containment_cmd
       ${Python3_EXECUTABLE}
