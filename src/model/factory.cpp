@@ -14,9 +14,59 @@
 
 #include "camxiom/model.hpp"
 #include "model/internal.hpp"
+#include "model/validate_impl.hpp"
 
 namespace camxiom
 {
+namespace
+{
+
+FisheyeDomain64 deriveFisheyeDomain64(const DistortionModel64 &distortion)
+{
+  FisheyeDomain64 result;
+  result.status = StatusCode::OK;
+  result.limit = FisheyeDomainLimit::ANGULAR_LIMIT;
+  result.theta_limit = constants::kPi;
+  result.safe_theta_max = constants::kPi - 1e-4;
+  if (detail::isPolynomialFisheyeDistortion(distortion.type))
+  {
+    const auto scanned = detail_impl::scanPolynomialFisheyeDomain(distortion);
+    result.safe_theta_max = scanned.safe_theta_max;
+    if (scanned.limit_status != StatusCode::OK)
+    {
+      result.theta_limit = scanned.theta_limit;
+      result.limit = scanned.limit_status == StatusCode::DOMAIN_ERROR
+                       ? FisheyeDomainLimit::MONOTONICITY_LIMIT
+                       : FisheyeDomainLimit::NUMERIC_LIMIT;
+    }
+  }
+  else if (distortion.type == DistortionModelType::ORTHOGRAPHIC)
+  {
+    result.theta_limit = constants::kHalfPi;
+    result.safe_theta_max = constants::kHalfPi - 1e-4;
+  }
+  return result;
+}
+
+}  // namespace
+
+FisheyeDomain64 getFisheyeDomain64(const CameraModel64 &model)
+{
+  FisheyeDomain64 result;
+  if (model.projection.type != ProjectionModelType::FISHEYE_THETA)
+  {
+    result.status = StatusCode::INVALID_MODEL;
+    return result;
+  }
+
+  const auto derived = deriveFisheyeDomain64(model.distortion);
+  auto candidate = model;
+  candidate.projection.theta_max = derived.safe_theta_max;
+  // The scan already checked monotonicity. Validate the remaining model
+  // invariants with the derived cap, never with the caller's declared FOV.
+  result.status = detail_impl::validateCameraModelQueryImpl(candidate);
+  return result.ok() ? derived : result;
+}
 
 void updateThetaMax(CameraModel &model)
 {
@@ -44,12 +94,7 @@ void updateThetaMax64(CameraModel64 &model)
     model.projection.theta_max = constants::kPi;
   else if (model.projection.type == P::FISHEYE_THETA)
   {
-    if (detail::isPolynomialFisheyeDistortion(model.distortion.type))
-      model.projection.theta_max = detail::estimateSafeThetaMaxForPolynomialFisheyeT(model.distortion);
-    else if (model.distortion.type == DistortionModelType::ORTHOGRAPHIC)
-      model.projection.theta_max = constants::kHalfPi - 1e-4;
-    else
-      model.projection.theta_max = constants::kPi - 1e-4;
+    model.projection.theta_max = deriveFisheyeDomain64(model.distortion).safe_theta_max;
   }
   else
     model.projection.theta_max = constants::kHalfPi - 1e-4;

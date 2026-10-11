@@ -327,13 +327,25 @@ namespace camxiom
 camxiom | [[nodiscard]] CameraModel makeDistortionFree(const CameraModel &model)
 camxiom | [[nodiscard]] CameraModel64 makeDistortionFree64(const CameraModel64 &model)
 camxiom | [[nodiscard]] DistortionModelType parseDistortionModelType(const std::string &model_name)
+camxiom | [[nodiscard]] FisheyeDomain64 getFisheyeDomain64(const CameraModel64 &model)
 camxiom | [[nodiscard]] ProjectionModelType chooseProjectionModelType( DistortionModelType distortion_model_type )
 camxiom | [[nodiscard]] StatusCode validateCameraModel(const CameraModel &model)
 camxiom | [[nodiscard]] StatusCode validateCameraModel64(const CameraModel64 &model)
 camxiom | [[nodiscard]] bool isFisheyeDistortionModel(const std::string &model_name)
 camxiom | [[nodiscard]] bool isRationalDistortionModel(const std::string &model_name)
+camxiom | enum class FisheyeDomainLimit : std::uint8_t
+camxiom | struct FisheyeDomain64
 camxiom | void updateThetaMax(CameraModel &model)
 camxiom | void updateThetaMax64(CameraModel64 &model)
+camxiom::FisheyeDomain64 | FisheyeDomainLimit limit
+camxiom::FisheyeDomain64 | StatusCode status
+camxiom::FisheyeDomain64 | constexpr bool ok() const
+camxiom::FisheyeDomain64 | double safe_theta_max
+camxiom::FisheyeDomain64 | double theta_limit
+camxiom::FisheyeDomainLimit | #000 UNKNOWN = 0U
+camxiom::FisheyeDomainLimit | #001 ANGULAR_LIMIT
+camxiom::FisheyeDomainLimit | #002 MONOTONICITY_LIMIT
+camxiom::FisheyeDomainLimit | #003 NUMERIC_LIMIT
 namespace camxiom
 
 === include/camxiom/model_compare.hpp ===

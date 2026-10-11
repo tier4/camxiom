@@ -58,14 +58,50 @@ namespace camxiom
 /// Create a copy of the model with distortion removed (coeffs zeroed, type=NONE).
 [[nodiscard]] CameraModel makeDistortionFree(const CameraModel &model);
 
+/// What bounds the usable angular range, independently of a declared FOV.
+enum class FisheyeDomainLimit : std::uint8_t {
+  UNKNOWN = 0U,
+  ANGULAR_LIMIT,       ///< Geometric endpoint (pi, or pi/2 for orthographic).
+  MONOTONICITY_LIMIT,  ///< Sampled radius is negative or its slope is non-positive.
+  NUMERIC_LIMIT        ///< Sampled radius or slope cannot be evaluated finitely.
+};
+
+struct FisheyeDomain64
+{
+  StatusCode status{StatusCode::INVALID_INPUT};
+  double safe_theta_max{0.0};  ///< Usable cap in radians; zero on failure.
+  double theta_limit{0.0};     ///< Geometric endpoint or first failing scan sample (radians).
+  FisheyeDomainLimit limit{FisheyeDomainLimit::UNKNOWN};
+
+  constexpr bool ok() const { return status == StatusCode::OK; }
+};
+
+/// Inspect a FISHEYE_THETA model without changing it. The declared theta_max
+/// is ignored, even if non-finite or outside the current monotone range.
+/// All other model invariants must hold; errors leave both angles zero and
+/// limit UNKNOWN. Non-fisheye models return INVALID_MODEL.
+///
+/// Polynomial families share updateThetaMax64's scan: 512 intervals from
+/// 1e-3 to approximately pi - 1e-4 radians, including the start sample.
+/// safe_theta_max is the last finite, non-negative, positive-slope sample;
+/// theta_limit is the first failing sample, NOT an exact polynomial root.
+/// Without a failing sample the limit is ANGULAR_LIMIT at pi. Ideal models
+/// use their geometric endpoint with a 1e-4 rad inset for safe_theta_max.
+/// This is a sampled estimate: folds narrower than a scan step or below
+/// the start sample can be missed. No usable positive sample is an error.
+/// Recompute after changing coefficients; observation gates and evaluation
+/// margins are caller policy, not inputs to this query.
+[[nodiscard]] FisheyeDomain64 getFisheyeDomain64(const CameraModel64 &model);
+
 /// Recalculate projection.theta_max from current distortion coefficients.
 /// This must be called after distortion coefficients are modified (e.g. by an
 /// optimizer) so that the inverse projection (pixelToRay) uses an accurate
-/// monotonic range for the theta solver.  For non-fisheye models this is a
-/// no-op.
+/// monotonic range for the theta solver. Overwrites any caller-selected cap.
+/// Non-fisheye models reset to their default angular cap.
 void updateThetaMax(CameraModel &model);
 
 /// Recompute the derived field of view without narrowing coefficients to float.
+/// For valid fisheye models, assigns getFisheyeDomain64(model).safe_theta_max.
 void updateThetaMax64(CameraModel64 &model);
 
 [[nodiscard]] CameraModel64 makeDistortionFree64(const CameraModel64 &model);
