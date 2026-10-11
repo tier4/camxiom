@@ -319,11 +319,11 @@ private:
 
 ceres::CostFunction *createAnalyticalBatchCost(
   const std::vector<Eigen::Vector3d> &object_points,
-  const std::vector<Eigen::Vector2d> &image_points, const camxiom::CameraModel &camera_model,
+  const std::vector<Eigen::Vector2d> &image_points, const camxiom::CameraModel64 &camera_model,
   int effective_dist_count
 )
 {
-  const CameraModel64 model64 = toCameraModel64(camera_model);
+  const CameraModel64 &model64 = camera_model;
   const int actual_dc =
     std::min(static_cast<int>(camera_model.distortion.count), effective_dist_count);
   return new PnpCostAnalyticalBatch(

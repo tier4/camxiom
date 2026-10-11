@@ -243,3 +243,10 @@ std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals(views, model,
   family.
 - [Design / numerical strategy](../design/numerical-strategy.md) — why
   identifiability locks exist, solver internals.
+
+### PnP の倍精度入出力
+
+`PnpInitialGuess64` と `PnpResult64` を使う `PnpSolver::solve` は、
+入力モデル、最適化後の書き戻し、返却モデルを `CameraModel64` のまま保持します。
+単一ビュー・複数ビュー、解析ヤコビアン・自動微分・姿勢のみの高速経路に対応します。
+既存の `PnpInitialGuess` / `PnpResult` は float のまま利用できます。

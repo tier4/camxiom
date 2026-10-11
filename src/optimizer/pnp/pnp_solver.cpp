@@ -21,6 +21,7 @@
 #include "camxiom/types64.hpp"
 #include "model/distortion_aux.hpp"
 #include "model/internal.hpp"
+#include "model/precision.hpp"
 #include "optimizer/pnp/pnp_cost_analytical_batch.hpp"
 #include "optimizer/pnp/pnp_gauss_newton.hpp"
 #include "optimizer/pnp/pnp_parameter_bounds.hpp"
@@ -101,7 +102,7 @@ void arrayToEigen(const std::vector<std::array<double, 3>> &src, std::vector<Eig
   }
 }
 
-int effectiveDistCount(const camxiom::CameraModel &model)
+int effectiveDistCount(const camxiom::CameraModel64 &model)
 {
   int count = static_cast<int>(model.distortion.count);
   if (count <= 0)
@@ -146,7 +147,7 @@ struct PnpCost
 {
   PnpCost(
     const Eigen::Vector3d &point3d, const Eigen::Vector2d &point2d,
-    const camxiom::CameraModel &camera_model
+    const camxiom::CameraModel64 &camera_model
   )
   : point3d(point3d), point2d(point2d), camera_model(camera_model)
   {
@@ -172,7 +173,7 @@ struct PnpCost
       focal_lengths[0], focal_lengths[1], principal_points[0], principal_points[1]};
     // Use the same current-parameter domain as the analytical cost, including
     // the local cap shrink when free fisheye coefficients move the fold.
-    auto evaluation_model = camxiom::toCameraModel64(camera_model);
+    auto evaluation_model = camxiom::detail::asModel64(camera_model);
     evaluation_model.intrinsics.fx = tpl::detail::scalarValue(focal_lengths[0]);
     evaluation_model.intrinsics.fy = tpl::detail::scalarValue(focal_lengths[1]);
     evaluation_model.intrinsics.cx = tpl::detail::scalarValue(principal_points[0]);
@@ -187,14 +188,15 @@ struct PnpCost
     if (!model_valid && camxiom::detail::shrinkThetaMaxToPolynomialMonotoneRange(evaluation_model))
       model_valid = camxiom::validateCameraModel64(evaluation_model) == StatusCode::OK;
     T u, v;
-    const bool ok = model_valid && tpl::projectGenericParametric(
-      camera_model.projection.type, camera_model.distortion.type, intrinsics, dist_coeffs,
-      static_cast<int>(camera_model.distortion.count),
-      proj_params[0],  // xi
-      proj_params[1],  // alpha
-      proj_params[2],  // beta
-      x_cam, y_cam, z_cam, u, v, evaluation_model.projection.theta_max
-    );
+    const bool ok =
+      model_valid && tpl::projectGenericParametric(
+                       camera_model.projection.type, camera_model.distortion.type, intrinsics,
+                       dist_coeffs, static_cast<int>(camera_model.distortion.count),
+                       proj_params[0],  // xi
+                       proj_params[1],  // alpha
+                       proj_params[2],  // beta
+                       x_cam, y_cam, z_cam, u, v, evaluation_model.projection.theta_max
+                     );
     if (!ok)
     {
       // Large constant penalty. For AutoDiff, a z_cam-based gradient is
@@ -219,12 +221,12 @@ struct PnpCost
 
   const Eigen::Vector3d point3d;
   const Eigen::Vector2d point2d;
-  const camxiom::CameraModel camera_model;
+  const camxiom::CameraModel64 camera_model;
 };
 
 ceres::CostFunction *createCost(
   const Eigen::Vector3d &point3d, const Eigen::Vector2d &point2d,
-  const camxiom::CameraModel &camera_model, int dist_count
+  const camxiom::CameraModel64 &camera_model, int dist_count
 )
 {
   switch (dist_count)
@@ -301,41 +303,42 @@ class PnpSolver::Impl
 public:
   Impl();
 
+  template <typename Guess, typename Result>
   bool solve(
     const ObjectPointSets &object_points, const ImagePointSets &image_points,
-    const PnpInitialGuess &initial_guess, PnpResult &result_out, const PnpSolverOptions &options,
-    PnpFlag flags
+    const Guess &initial_guess, Result &result_out, const PnpSolverOptions &options, PnpFlag flags
   );
 
+  template <typename Guess, typename Result>
   bool solve(
-    const ObjectPoints &object_points, const ImagePoints &image_points,
-    const PnpInitialGuess &initial_guess, PnpResult &result_out, const PnpSolverOptions &options,
-    PnpFlag flags
+    const ObjectPoints &object_points, const ImagePoints &image_points, const Guess &initial_guess,
+    Result &result_out, const PnpSolverOptions &options, PnpFlag flags
   );
 
   const PnpSummary &lastSummary() const { return last_summary_; }
 
 private:
   void setupProblem(
-    const camxiom::CameraModel &camera_model, const std::vector<Eigen::Vector3d> &rvecs,
+    const camxiom::CameraModel64 &camera_model, const std::vector<Eigen::Vector3d> &rvecs,
     const std::vector<Eigen::Vector3d> &tvecs, const PnpBound &upper_bound,
     const PnpBound &lower_bound, PnpFlag flags
   );
 
+  template <typename T>
   void writeBack(
-    camxiom::CameraModel &camera_model, std::vector<Eigen::Vector3d> &rvecs,
+    camxiom::CameraModelT<T> &camera_model, std::vector<Eigen::Vector3d> &rvecs,
     std::vector<Eigen::Vector3d> &tvecs
   ) const;
 
   double optimize(
     const ObjectPointSets &object_points, const ImagePointSets &image_points,
-    const camxiom::CameraModel &camera_model, PnpCostType cost_type
+    const camxiom::CameraModel64 &camera_model, PnpCostType cost_type
   );
 
   double optimizeGaussNewton(
     const ObjectPointSets &object_points, const ImagePointSets &image_points,
-    const camxiom::CameraModel &camera_model, std::size_t &valid_count_out, bool &all_converged_out,
-    int &total_iterations_out
+    const camxiom::CameraModel64 &camera_model, std::size_t &valid_count_out,
+    bool &all_converged_out, int &total_iterations_out
   );
 
   void resetProblem();
@@ -375,13 +378,13 @@ void PnpSolver::Impl::resetProblem()
   problem_ = std::make_unique<ceres::Problem>(problem_options_);
 }
 
+template <typename Guess, typename Result>
 bool PnpSolver::Impl::solve(
   const ObjectPointSets &object_points, const ImagePointSets &image_points,
-  const PnpInitialGuess &initial_guess, PnpResult &result_out, const PnpSolverOptions &options,
-  PnpFlag flags
+  const Guess &initial_guess, Result &result_out, const PnpSolverOptions &options, PnpFlag flags
 )
 {
-  result_out = PnpResult{};
+  result_out = Result{};
   // Reset the summary snapshot up front: the validation gauntlet below
   // returns early without running an optimization, and a reused solver must
   // not report the PREVIOUS solve's converged/solution_usable through
@@ -434,14 +437,14 @@ bool PnpSolver::Impl::solve(
   // Full camera model validation using camxiom's comprehensive validator
   {
     const camxiom::CameraModel64 model64_check =
-      camxiom::toCameraModel64(initial_guess.camera_model);
+      camxiom::detail::asModel64(initial_guess.camera_model);
     if (camxiom::validateCameraModel64(model64_check) != camxiom::StatusCode::OK)
     {
       return false;
     }
   }
 
-  camxiom::CameraModel camera_model = initial_guess.camera_model;
+  auto camera_model = initial_guess.camera_model;
   std::vector<Eigen::Vector3d> rvecs = initial_guess.rvecs;
   std::vector<Eigen::Vector3d> tvecs = initial_guess.tvecs;
 
@@ -485,7 +488,7 @@ bool PnpSolver::Impl::solve(
     focal_lengths_[1] = static_cast<double>(camera_model.intrinsics.fy);
     principal_points_[0] = static_cast<double>(camera_model.intrinsics.cx);
     principal_points_[1] = static_cast<double>(camera_model.intrinsics.cy);
-    dist_count_ = effectiveDistCount(camera_model);
+    dist_count_ = effectiveDistCount(camxiom::detail::asModel64(camera_model));
     dist_.fill(0.0);
     for (int i = 0; i < std::min(dist_count_, static_cast<int>(camera_model.distortion.count)); ++i)
       dist_[static_cast<std::size_t>(i)] =
@@ -495,8 +498,8 @@ bool PnpSolver::Impl::solve(
     bool gn_all_converged = true;
     int gn_total_iterations = 0;
     rmse = optimizeGaussNewton(
-      object_points, image_points, camera_model, gn_valid_count, gn_all_converged,
-      gn_total_iterations
+      object_points, image_points, camxiom::detail::asModel64(camera_model), gn_valid_count,
+      gn_all_converged, gn_total_iterations
     );
     writeBack(camera_model, rvecs, tvecs);
 
@@ -528,8 +531,12 @@ bool PnpSolver::Impl::solve(
   }
   else
   {
-    setupProblem(camera_model, rvecs, tvecs, options.upper_bound, options.lower_bound, flags);
-    rmse = optimize(object_points, image_points, camera_model, cost_type_);
+    setupProblem(
+      camxiom::detail::asModel64(camera_model), rvecs, tvecs, options.upper_bound,
+      options.lower_bound, flags
+    );
+    rmse =
+      optimize(object_points, image_points, camxiom::detail::asModel64(camera_model), cost_type_);
     writeBack(camera_model, rvecs, tvecs);
   }
 
@@ -542,7 +549,7 @@ bool PnpSolver::Impl::solve(
   // via updateThetaMax(), so the endpoint consistency check passes by
   // construction (the mid-solve equivalent lives in the analytical batch
   // cost, where theta_max IS still frozen at the seed value).
-  const bool model_valid = camxiom::validateCameraModel(camera_model) == camxiom::StatusCode::OK;
+  const bool model_valid = camxiom::detail::validateModel(camera_model) == camxiom::StatusCode::OK;
 
   if (!use_gn)
   {
@@ -554,7 +561,7 @@ bool PnpSolver::Impl::solve(
     std::size_t ceres_valid = 0;
     if (model_valid)
     {
-      const camxiom::CameraModel64 model64 = camxiom::toCameraModel64(camera_model);
+      const camxiom::CameraModel64 model64 = camxiom::detail::asModel64(camera_model);
       for (std::size_t i = 0; i < object_points.size(); ++i)
       {
         Eigen::Matrix3d R;
@@ -609,10 +616,10 @@ bool PnpSolver::Impl::solve(
   return result_out.success;
 }
 
+template <typename Guess, typename Result>
 bool PnpSolver::Impl::solve(
-  const ObjectPoints &object_points, const ImagePoints &image_points,
-  const PnpInitialGuess &initial_guess, PnpResult &result_out, const PnpSolverOptions &options,
-  PnpFlag flags
+  const ObjectPoints &object_points, const ImagePoints &image_points, const Guess &initial_guess,
+  Result &result_out, const PnpSolverOptions &options, PnpFlag flags
 )
 {
   ObjectPointSets obj_sets{object_points};
@@ -621,7 +628,7 @@ bool PnpSolver::Impl::solve(
 }
 
 void PnpSolver::Impl::setupProblem(
-  const camxiom::CameraModel &camera_model, const std::vector<Eigen::Vector3d> &rvecs,
+  const camxiom::CameraModel64 &camera_model, const std::vector<Eigen::Vector3d> &rvecs,
   const std::vector<Eigen::Vector3d> &tvecs, const PnpBound &upper_bound,
   const PnpBound &lower_bound, PnpFlag flags
 )
@@ -633,7 +640,7 @@ void PnpSolver::Impl::setupProblem(
   principal_points_[0] = static_cast<double>(camera_model.intrinsics.cx);
   principal_points_[1] = static_cast<double>(camera_model.intrinsics.cy);
 
-  dist_count_ = effectiveDistCount(camera_model);
+  dist_count_ = effectiveDistCount(camxiom::detail::asModel64(camera_model));
   dist_.fill(0.0);
   for (int i = 0; i < std::min(dist_count_, static_cast<int>(camera_model.distortion.count)); ++i)
   {
@@ -742,25 +749,26 @@ void PnpSolver::Impl::setupProblem(
   }
 }
 
+template <typename T>
 void PnpSolver::Impl::writeBack(
-  camxiom::CameraModel &camera_model, std::vector<Eigen::Vector3d> &rvecs,
+  camxiom::CameraModelT<T> &camera_model, std::vector<Eigen::Vector3d> &rvecs,
   std::vector<Eigen::Vector3d> &tvecs
 ) const
 {
-  camera_model.intrinsics.fx = static_cast<float>(focal_lengths_[0]);
-  camera_model.intrinsics.fy = static_cast<float>(focal_lengths_[1]);
-  camera_model.intrinsics.cx = static_cast<float>(principal_points_[0]);
-  camera_model.intrinsics.cy = static_cast<float>(principal_points_[1]);
+  camera_model.intrinsics.fx = static_cast<T>(focal_lengths_[0]);
+  camera_model.intrinsics.fy = static_cast<T>(focal_lengths_[1]);
+  camera_model.intrinsics.cx = static_cast<T>(principal_points_[0]);
+  camera_model.intrinsics.cy = static_cast<T>(principal_points_[1]);
 
   for (int i = 0; i < std::min(dist_count_, static_cast<int>(camera_model.distortion.count)); ++i)
   {
     camera_model.distortion.coeffs[static_cast<std::size_t>(i)] =
-      static_cast<float>(dist_[static_cast<std::size_t>(i)]);
+      static_cast<T>(dist_[static_cast<std::size_t>(i)]);
   }
 
-  camera_model.projection.xi = static_cast<float>(projection_params_[0]);
-  camera_model.projection.alpha = static_cast<float>(projection_params_[1]);
-  camera_model.projection.beta = static_cast<float>(projection_params_[2]);
+  camera_model.projection.xi = static_cast<T>(projection_params_[0]);
+  camera_model.projection.alpha = static_cast<T>(projection_params_[1]);
+  camera_model.projection.beta = static_cast<T>(projection_params_[2]);
 
   // Rebuild distortion auxiliary state from updated coeffs so the returned
   // CameraModel is self-consistent (is_rational, has_thin_prism, has_tilt,
@@ -771,7 +779,7 @@ void PnpSolver::Impl::writeBack(
   // For polynomial fisheye models (KB4/KB8/OpenCV_Fisheye4) the safe monotonic
   // range of the distortion polynomial depends on the coefficients, so
   // theta_max must be refreshed whenever they change.
-  camxiom::updateThetaMax(camera_model);
+  camxiom::detail::updateModelThetaMax(camera_model);
 
   arrayToEigen(rvecs_, rvecs);
   arrayToEigen(tvecs_, tvecs);
@@ -779,7 +787,7 @@ void PnpSolver::Impl::writeBack(
 
 double PnpSolver::Impl::optimize(
   const ObjectPointSets &object_points, const ImagePointSets &image_points,
-  const camxiom::CameraModel &camera_model, PnpCostType cost_type
+  const camxiom::CameraModel64 &camera_model, PnpCostType cost_type
 )
 {
   solver_summary_ = ceres::Solver::Summary();
@@ -871,11 +879,11 @@ double PnpSolver::Impl::optimize(
 
 double PnpSolver::Impl::optimizeGaussNewton(
   const ObjectPointSets &object_points, const ImagePointSets &image_points,
-  const camxiom::CameraModel &camera_model, std::size_t &valid_count_out, bool &all_converged_out,
+  const camxiom::CameraModel64 &camera_model, std::size_t &valid_count_out, bool &all_converged_out,
   int &total_iterations_out
 )
 {
-  const camxiom::CameraModel64 model64 = camxiom::toCameraModel64(camera_model);
+  const camxiom::CameraModel64 model64 = camxiom::detail::asModel64(camera_model);
 
   GaussNewtonOptions gn_opts;
   gn_opts.max_iterations = std::max(1, solver_options_.max_num_iterations);
@@ -964,6 +972,24 @@ bool PnpSolver::solve(
 bool PnpSolver::solve(
   const ObjectPoints &object_points, const ImagePoints &image_points,
   const PnpInitialGuess &initial_guess, PnpResult &result_out, const PnpSolverOptions &options,
+  PnpFlag flags
+)
+{
+  return impl_->solve(object_points, image_points, initial_guess, result_out, options, flags);
+}
+
+bool PnpSolver::solve(
+  const ObjectPointSets &object_points, const ImagePointSets &image_points,
+  const PnpInitialGuess64 &initial_guess, PnpResult64 &result_out, const PnpSolverOptions &options,
+  PnpFlag flags
+)
+{
+  return impl_->solve(object_points, image_points, initial_guess, result_out, options, flags);
+}
+
+bool PnpSolver::solve(
+  const ObjectPoints &object_points, const ImagePoints &image_points,
+  const PnpInitialGuess64 &initial_guess, PnpResult64 &result_out, const PnpSolverOptions &options,
   PnpFlag flags
 )
 {

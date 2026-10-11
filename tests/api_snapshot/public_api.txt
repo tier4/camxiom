@@ -430,10 +430,12 @@ camxiom::optimizer | class PnpSolver
 camxiom::optimizer | enum class PnpCostType : std::uint8_t
 camxiom::optimizer | struct PnpBound
 camxiom::optimizer | struct PnpInitialGuess
+camxiom::optimizer | struct PnpInitialGuess64
 camxiom::optimizer | struct PnpOptimizerOptions
 camxiom::optimizer | struct PnpSolverOptions
 camxiom::optimizer | struct PnpSummary
 camxiom::optimizer | struct [[nodiscard]] PnpResult
+camxiom::optimizer | struct [[nodiscard]] PnpResult64
 camxiom::optimizer | using ImagePointSets = std::vector<ImagePoints>
 camxiom::optimizer | using ImagePoints = std::vector<Eigen::Vector2d>
 camxiom::optimizer | using ObjectPointSets = std::vector<ObjectPoints>
@@ -449,19 +451,25 @@ camxiom::optimizer::PnpCostType | #001 ANALYTICAL = 1
 camxiom::optimizer::PnpInitialGuess | camxiom::CameraModel camera_model
 camxiom::optimizer::PnpInitialGuess | std::vector<Eigen::Vector3d> rvecs
 camxiom::optimizer::PnpInitialGuess | std::vector<Eigen::Vector3d> tvecs
+camxiom::optimizer::PnpInitialGuess64 | camxiom::CameraModel64 camera_model
+camxiom::optimizer::PnpInitialGuess64 | std::vector<Eigen::Vector3d> rvecs
+camxiom::optimizer::PnpInitialGuess64 | std::vector<Eigen::Vector3d> tvecs
 camxiom::optimizer::PnpOptimizerOptions | bool minimizer_progress_to_stdout
 camxiom::optimizer::PnpOptimizerOptions | double function_tolerance
 camxiom::optimizer::PnpOptimizerOptions | double gradient_tolerance
 camxiom::optimizer::PnpOptimizerOptions | double parameter_tolerance
 camxiom::optimizer::PnpOptimizerOptions | int max_num_iterations
 camxiom::optimizer::PnpSolver | PnpResult solve( const ObjectPointSets &object_points, const ImagePointSets &image_points, const PnpInitialGuess &initial_guess, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
+camxiom::optimizer::PnpSolver | PnpResult64 solve( const ObjectPointSets &object_points, const ImagePointSets &image_points, const PnpInitialGuess64 &initial_guess, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
 camxiom::optimizer::PnpSolver | PnpSolver &operator=(PnpSolver &&) noexcept
 camxiom::optimizer::PnpSolver | PnpSolver &operator=(const PnpSolver &) = delete
 camxiom::optimizer::PnpSolver | PnpSolver()
 camxiom::optimizer::PnpSolver | PnpSolver(PnpSolver &&) noexcept
 camxiom::optimizer::PnpSolver | PnpSolver(const PnpSolver &) = delete
 camxiom::optimizer::PnpSolver | bool solve( const ObjectPointSets &object_points, const ImagePointSets &image_points, const PnpInitialGuess &initial_guess, PnpResult &result_out, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
+camxiom::optimizer::PnpSolver | bool solve( const ObjectPointSets &object_points, const ImagePointSets &image_points, const PnpInitialGuess64 &initial_guess, PnpResult64 &result_out, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
 camxiom::optimizer::PnpSolver | bool solve( const ObjectPoints &object_points, const ImagePoints &image_points, const PnpInitialGuess &initial_guess, PnpResult &result_out, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
+camxiom::optimizer::PnpSolver | bool solve( const ObjectPoints &object_points, const ImagePoints &image_points, const PnpInitialGuess64 &initial_guess, PnpResult64 &result_out, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
 camxiom::optimizer::PnpSolver | const PnpSummary &lastSummary() const
 camxiom::optimizer::PnpSolver | ~PnpSolver()
 camxiom::optimizer::PnpSolverOptions | PnpBound lower_bound
