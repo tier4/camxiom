@@ -779,7 +779,11 @@ void PnpSolver::Impl::writeBack(
   // For polynomial fisheye models (KB4/KB8/OpenCV_Fisheye4) the safe monotonic
   // range of the distortion polynomial depends on the coefficients, so
   // theta_max must be refreshed whenever they change.
+  const T initial_cap = camera_model.projection.theta_max;
   camxiom::detail::updateModelThetaMax(camera_model);
+  // Keep the caller's cap while allowing a fitted polynomial to contract its
+  // monotone range, just as residual evaluation does during optimization.
+  camera_model.projection.theta_max = std::min(initial_cap, camera_model.projection.theta_max);
 
   arrayToEigen(rvecs_, rvecs);
   arrayToEigen(tvecs_, tvecs);

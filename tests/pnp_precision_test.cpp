@@ -56,6 +56,8 @@ CameraModel64 makeModel64(const std::string &family, const std::vector<double> &
   info.distortion_model = family;
   info.d = coeffs;
   auto model = makeCameraModel64(info);
+  if (model.projection.type != ProjectionModelType::PINHOLE)
+    model.projection.theta_max = 0.912345678901234;
   return model;
 }
 
@@ -165,4 +167,48 @@ TEST(PnpPrecision, PoseOnlyPathPreservesDoubleAndFailureResetsResult)
   EXPECT_TRUE(result.rvecs.empty());
   EXPECT_EQ(result.valid_count, 0U);
   EXPECT_FALSE(solver.lastSummary().solution_usable);
+}
+
+TEST(PnpPrecision, FloatAndDoubleSolvesPreserveExplicitDomainCaps)
+{
+  for (const auto &family :
+       {std::string("ideal_equidistant"), std::string("omnidirectional"),
+        std::string("double_sphere"), std::string("eucm")})
+  {
+    const auto coeffs = family == "double_sphere"     ? std::vector<double>{0.2, 0.6}
+                        : family == "eucm"            ? std::vector<double>{0.4, 1.0}
+                        : family == "omnidirectional" ? std::vector<double>{0.5}
+                                                      : std::vector<double>{};
+    const auto model64 = makeModel64(family, coeffs);
+    const auto model = fromCameraModel64(model64);
+    ObjectPoints objects;
+    ImagePoints images;
+    makeObservations(toCameraModel64(model), objects, images);
+    PnpInitialGuess guess;
+    guess.camera_model = model;
+    guess.rvecs = {Eigen::Vector3d::Zero()};
+    guess.tvecs = {Eigen::Vector3d::Zero()};
+    PnpResult result;
+    PnpSolver solver;
+    const auto flags =
+      PnpFlag::FIX_INTRINSICS | PnpFlag::FIX_DISTORTION | PnpFlag::FIX_PROJECTION_PARAMS;
+    ASSERT_TRUE(solver.solve(objects, images, guess, result, PnpSolverOptions{}, flags));
+    EXPECT_EQ(result.camera_model.projection.theta_max, model.projection.theta_max);
+    const double theta = model.projection.theta_max + 0.01;
+    const Eigen::Vector3d outside(std::sin(theta), 0.0, std::cos(theta));
+    EXPECT_EQ(
+      rayToPixel64(toCameraModel64(result.camera_model), outside).status, StatusCode::OUT_OF_FOV
+    );
+    objects.clear();
+    images.clear();
+    makeObservations(model64, objects, images);
+    PnpInitialGuess64 guess64;
+    guess64.camera_model = model64;
+    guess64.rvecs = guess.rvecs;
+    guess64.tvecs = guess.tvecs;
+    PnpResult64 result64;
+    ASSERT_TRUE(solver.solve(objects, images, guess64, result64, PnpSolverOptions{}, flags));
+    EXPECT_EQ(result64.camera_model.projection.theta_max, model64.projection.theta_max);
+    EXPECT_EQ(rayToPixel64(result64.camera_model, outside).status, StatusCode::OUT_OF_FOV);
+  }
 }
