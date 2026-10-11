@@ -73,3 +73,11 @@ if (conv.ok() && conv.rms_fit_error_px < 0.5 &&
   // the conversion is lossy for this camera — decide explicitly what to do
 }
 ```
+
+### 倍精度のモデル変換
+
+`convertCameraModel64` は入力元・初期値に `CameraModel64` を受け取り、
+`ModelConversionResult64` を返します。入力の光線生成、最適化、結果の誤差評価に
+float モデルを挟みません。終了状態・点数・誤差の意味は上記と共通です。
+反復上限に達した場合の「数値的に一致」の許容RMSは、float版の `1e-3 px` に対し
+倍精度版では `1e-9 px` です。通常のソルバ収束判定は従来どおり適用します。

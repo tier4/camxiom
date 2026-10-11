@@ -17,6 +17,7 @@
 
 #include "camxiom/optimizer/pnp_flag.hpp"
 #include "camxiom/types.hpp"
+#include "camxiom/types64.hpp"
 
 #include <Eigen/Core>
 
@@ -235,6 +236,32 @@ struct CalibrationResult
   explicit operator bool() const { return ok(); }
 };
 
+/// Double-precision counterpart; all status and diagnostic contracts above apply.
+struct CalibrationResult64
+{
+  StatusCode status{StatusCode::OK};
+  CameraModel64 camera_model{};
+  std::vector<Eigen::Matrix3d> per_view_rotations;
+  std::vector<Eigen::Vector3d> per_view_translations;
+  double rms_reprojection_error_px{0.0};
+  double max_reprojection_error_px{0.0};
+  std::vector<double> per_view_rms_px;
+  std::vector<std::vector<Eigen::Vector2d>> per_point_residuals;
+  int iterations_used{0};
+  bool uncertainty_available{false};
+  std::vector<std::string> uncertainty_labels;
+  std::vector<double> parameter_std;
+  bool observability_available{false};
+  bool observability_ok{false};
+  double normalized_condition_number{0.0};
+  double min_singular_value{0.0};
+  std::vector<std::string> underdetermined_parameters;
+  bool uncertainty_has_parameters_near_bounds{false};
+  std::vector<std::string> parameters_at_or_near_bounds;
+  constexpr bool ok() const { return status == StatusCode::OK; }
+  explicit operator bool() const { return ok(); }
+};
+
 /// Re-export so the application can compose per-stage lock flags without
 /// reaching into the optimizer namespace directly.
 using optimizer::PnpFlag;
@@ -299,6 +326,23 @@ using optimizer::PnpFlag;
 /// match views.size() the result is empty.
 [[nodiscard]] std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals(
   const std::vector<CalibrationView> &views, const CameraModel &model,
+  const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t
+);
+
+/// Calibrate without narrowing the seed or fitted model through float.
+[[nodiscard]] CalibrationResult64 calibrate64(
+  const std::vector<CalibrationView> &views, const CameraModel64 &initial_model, PnpFlag lock_flags,
+  const CalibrationOptions &options
+);
+
+/// Double-precision counterparts of the diagnostic helpers above.
+[[nodiscard]] double computeReprojErrors64(
+  const std::vector<CalibrationView> &views, const CameraModel64 &model,
+  const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t,
+  std::vector<double> &per_view_rms_out, double &max_err_out
+);
+[[nodiscard]] std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals64(
+  const std::vector<CalibrationView> &views, const CameraModel64 &model,
   const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t
 );
 

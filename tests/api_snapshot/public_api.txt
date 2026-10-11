@@ -22,8 +22,10 @@ namespace camxiom
 
 === include/camxiom/calib/convert.hpp ===
 camxiom::calib | [[nodiscard]] ModelConversionResult convertCameraModel( const CameraModel &src_model, int image_width, int image_height, const CameraModel &dst_seed, const ModelConversionOptions &options = ModelConversionOptions{} )
+camxiom::calib | [[nodiscard]] ModelConversionResult64 convertCameraModel64( const CameraModel64 &src_model, int image_width, int image_height, const CameraModel64 &dst_seed, const ModelConversionOptions &options = ModelConversionOptions{} )
 camxiom::calib | struct ModelConversionOptions
 camxiom::calib | struct [[nodiscard]] ModelConversionResult
+camxiom::calib | struct [[nodiscard]] ModelConversionResult64
 camxiom::calib::ModelConversionOptions | int grid_cols
 camxiom::calib::ModelConversionOptions | int grid_rows
 camxiom::calib::ModelConversionOptions | int max_iterations
@@ -31,10 +33,14 @@ namespace camxiom::calib
 
 === include/camxiom/calib/intrinsics.hpp ===
 camxiom::calib | [[nodiscard]] CalibrationResult calibrate( const std::vector<CalibrationView> &views, const CameraModel &initial_model, PnpFlag lock_flags, const CalibrationOptions &options )
+camxiom::calib | [[nodiscard]] CalibrationResult64 calibrate64( const std::vector<CalibrationView> &views, const CameraModel64 &initial_model, PnpFlag lock_flags, const CalibrationOptions &options )
 camxiom::calib | [[nodiscard]] double computeReprojErrors( const std::vector<CalibrationView> &views, const CameraModel &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t, std::vector<double> &per_view_rms_out, double &max_err_out )
+camxiom::calib | [[nodiscard]] double computeReprojErrors64( const std::vector<CalibrationView> &views, const CameraModel64 &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t, std::vector<double> &per_view_rms_out, double &max_err_out )
 camxiom::calib | [[nodiscard]] std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals( const std::vector<CalibrationView> &views, const CameraModel &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t )
+camxiom::calib | [[nodiscard]] std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals64( const std::vector<CalibrationView> &views, const CameraModel64 &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t )
 camxiom::calib | struct CalibrationOptions
 camxiom::calib | struct CalibrationResult
+camxiom::calib | struct CalibrationResult64
 camxiom::calib | struct CalibrationView
 camxiom::calib | using optimizer::PnpFlag
 camxiom::calib::CalibrationOptions | bool apply_initial_value_bounds
@@ -72,6 +78,27 @@ camxiom::calib::CalibrationResult | std::vector<std::string> parameters_at_or_ne
 camxiom::calib::CalibrationResult | std::vector<std::string> uncertainty_labels
 camxiom::calib::CalibrationResult | std::vector<std::string> underdetermined_parameters
 camxiom::calib::CalibrationResult | std::vector<std::vector<Eigen::Vector2d>> per_point_residuals
+camxiom::calib::CalibrationResult64 | CameraModel64 camera_model
+camxiom::calib::CalibrationResult64 | StatusCode status
+camxiom::calib::CalibrationResult64 | bool observability_available
+camxiom::calib::CalibrationResult64 | bool observability_ok
+camxiom::calib::CalibrationResult64 | bool uncertainty_available
+camxiom::calib::CalibrationResult64 | bool uncertainty_has_parameters_near_bounds
+camxiom::calib::CalibrationResult64 | constexpr bool ok() const
+camxiom::calib::CalibrationResult64 | double max_reprojection_error_px
+camxiom::calib::CalibrationResult64 | double min_singular_value
+camxiom::calib::CalibrationResult64 | double normalized_condition_number
+camxiom::calib::CalibrationResult64 | double rms_reprojection_error_px
+camxiom::calib::CalibrationResult64 | explicit operator bool() const
+camxiom::calib::CalibrationResult64 | int iterations_used
+camxiom::calib::CalibrationResult64 | std::vector<Eigen::Matrix3d> per_view_rotations
+camxiom::calib::CalibrationResult64 | std::vector<Eigen::Vector3d> per_view_translations
+camxiom::calib::CalibrationResult64 | std::vector<double> parameter_std
+camxiom::calib::CalibrationResult64 | std::vector<double> per_view_rms_px
+camxiom::calib::CalibrationResult64 | std::vector<std::string> parameters_at_or_near_bounds
+camxiom::calib::CalibrationResult64 | std::vector<std::string> uncertainty_labels
+camxiom::calib::CalibrationResult64 | std::vector<std::string> underdetermined_parameters
+camxiom::calib::CalibrationResult64 | std::vector<std::vector<Eigen::Vector2d>> per_point_residuals
 camxiom::calib::CalibrationView | std::vector<Eigen::Vector2d> image_points
 camxiom::calib::CalibrationView | std::vector<Eigen::Vector3d> world_points
 namespace camxiom::calib

@@ -250,3 +250,21 @@ std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals(views, model,
 入力モデル、最適化後の書き戻し、返却モデルを `CameraModel64` のまま保持します。
 単一ビュー・複数ビュー、解析ヤコビアン・自動微分・姿勢のみの高速経路に対応します。
 既存の `PnpInitialGuess` / `PnpResult` は float のまま利用できます。
+
+### 校正結果を倍精度で保持する
+
+`calib::calibrate64(views, initial_model64, flags, options)` は
+`CalibrationResult64` を返します。初期値、主点制約、PnPへの受け渡し、結果モデル、
+再投影誤差・共分散・可観測性の評価まで float への変換を挟みません。
+`computeReprojErrors64` と `computePerPointResiduals64` でも同じモデルを直接評価できます。
+終了状態・失敗時の空の結果・最良の推定値の返却条件は既存の float API と共通です。
+
+```cpp
+camxiom::CameraModel64 seed = camxiom::makeCameraModel64(camera_info);
+auto fit = camxiom::calib::calibrate64(views, seed, flags, options);
+if (fit.status == camxiom::StatusCode::OK) {
+  auto next = camxiom::calib::calibrate64(views, fit.camera_model, flags, options);
+}
+```
+
+倍精度の保持は数値表現の保証です。実データから得られる精度は観測条件やモデルに依存します。
