@@ -616,3 +616,72 @@ TEST(AutoDiffJacobian, WideModelsRejectPolesAndOverflowWithUnrestrictedCap)
     }
   }
 }
+
+TEST(AutoDiffJacobian, AcceptsZeroPaddedIdealFisheyeCoefficients)
+{
+  for (auto type :
+       {DistortionModelType::EQUIDISTANT, DistortionModelType::EQUISOLID,
+        DistortionModelType::STEREOGRAPHIC, DistortionModelType::ORTHOGRAPHIC})
+    for (int count : {0, 4, 8, 14})
+    {
+      CameraModel64 model = makePinholeRadtan5();
+      model.projection.type = ProjectionModelType::FISHEYE_THETA;
+      model.projection.theta_max = 1.4;
+      model.distortion = DistortionModel64{};
+      model.distortion.type = type;
+      model.distortion.space = DistortionSpace::ANGLE;
+      model.distortion.count = static_cast<std::uint8_t>(count);
+      ASSERT_EQ(validateCameraModel64(model), StatusCode::OK);
+      for (const auto &ray : sampleRays())
+      {
+        const auto analytic = rayToPixelWithJacobian64(model, ray);
+        ASSERT_TRUE(analytic.ok());
+        const auto ad = autodiffJacobian(model, ray);
+        ASSERT_TRUE(ad.ok) << "type=" << int(type) << " count=" << count;
+        EXPECT_NEAR(ad.u, analytic.pixel.u, 1e-6);
+        EXPECT_NEAR(ad.v, analytic.pixel.v, 1e-6);
+        EXPECT_LT((ad.J - analytic.J).cwiseAbs().maxCoeff(), 1e-5);
+        double u, v;
+        ASSERT_TRUE(
+          camxiom::projection_template::projectGeneric(model, ray.x(), ray.y(), ray.z(), u, v)
+        );
+        EXPECT_NEAR(u, analytic.pixel.u, 1e-6);
+        EXPECT_NEAR(v, analytic.pixel.v, 1e-6);
+      }
+      if (count > 0)
+      {
+        model.distortion.coeffs[0] = 0.1;
+        EXPECT_EQ(validateCameraModel64(model), StatusCode::INVALID_MODEL);
+        EXPECT_FALSE(autodiffJacobian(model, Eigen::Vector3d(0.1, 0.2, 1)).ok);
+      }
+    }
+}
+
+TEST(AutoDiffJacobian, AcceptsTheLegacyFiveCoefficientRadtan4Layout)
+{
+  for (auto named : representativeModels())
+  {
+    auto model = named.model;
+    if (model.distortion.type != DistortionModelType::RADTAN5) continue;
+    model.distortion.type = DistortionModelType::RADTAN4;
+    model.distortion.count = 5;
+    model.distortion.coeffs[4] = 0.02;
+    ASSERT_EQ(validateCameraModel64(model), StatusCode::OK) << named.name;
+    for (const auto &ray : sampleRays())
+    {
+      const auto analytic = rayToPixelWithJacobian64(model, ray);
+      ASSERT_TRUE(analytic.ok());
+      const auto ad = autodiffJacobian(model, ray);
+      ASSERT_TRUE(ad.ok) << named.name;
+      EXPECT_NEAR(ad.u, analytic.pixel.u, 1e-6);
+      EXPECT_NEAR(ad.v, analytic.pixel.v, 1e-6);
+      EXPECT_LT((ad.J - analytic.J).cwiseAbs().maxCoeff(), 1e-5);
+      double u, v;
+      ASSERT_TRUE(
+        camxiom::projection_template::projectGeneric(model, ray.x(), ray.y(), ray.z(), u, v)
+      );
+      EXPECT_NEAR(u, analytic.pixel.u, 1e-6);
+      EXPECT_NEAR(v, analytic.pixel.v, 1e-6);
+    }
+  }
+}

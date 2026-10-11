@@ -816,6 +816,10 @@ template <typename T>
         case DistortionModelType::TILTED14:
           return projectTilted14(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
         case DistortionModelType::RADTAN4: {
+          // Runtime also accepts the legacy 5-entry RADTAN4 layout, where
+          // the fifth entry is evaluated as k3. Only pad a true 4-wide block.
+          if (dist_count == 5)
+            return projectRadtan5(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
           // The caller's dist parameter block really is 4 wide for RADTAN4
           // (e.g. the Ceres block in the AUTO_DIFF PnP cost): reading a
           // fifth coefficient would run off the block. Widen with k3 = 0.
@@ -955,7 +959,21 @@ template <typename T>
     case DistortionModelType::UNKNOWN:
       return detail::reject(u_out, v_out);
   }
-  if (dist_count != required) return detail::reject(u_out, v_out);
+  if (dist_count != required)
+  {
+    const bool legacy_radtan4 = dist_type == DistortionModelType::RADTAN4 && dist_count == 5;
+    const bool padded_ideal =
+      dist_type == DistortionModelType::EQUIDISTANT ||
+      dist_type == DistortionModelType::EQUISOLID ||
+      dist_type == DistortionModelType::STEREOGRAPHIC ||
+      dist_type == DistortionModelType::ORTHOGRAPHIC;
+    if (!legacy_radtan4 && !padded_ideal) return detail::reject(u_out, v_out);
+    // Ideal mappings may carry zero padding, as accepted by the runtime
+    // validator. Non-zero values would disagree with fixed-width kernels.
+    if (padded_ideal)
+      for (int i = 0; i < dist_count; ++i)
+        if (detail::scalarValue(dist[i]) != 0) return detail::reject(u_out, v_out);
+  }
   if (proj_type == ProjectionModelType::OMNIDIRECTIONAL || proj_type == ProjectionModelType::DOUBLE_SPHERE || proj_type == ProjectionModelType::EUCM)
   {
     switch (dist_type)
