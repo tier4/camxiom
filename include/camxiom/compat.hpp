@@ -53,6 +53,9 @@ struct CameraInfo
 /// funnel through it.
 [[nodiscard]] CameraModel makeCameraModel(const CameraInfo &camera_info);
 
+/// Parse K/D directly into double storage, without a float intermediate.
+[[nodiscard]] CameraModel64 makeCameraModel64(const CameraInfo &camera_info);
+
 enum class PinholeCompatProfile : std::uint8_t {
   CANONICAL = 0U,
   OPENCV_CALIB3D_D4,
@@ -185,6 +188,42 @@ struct EucmExternalModel
 [[nodiscard]] StatusCode exportEucmCameraInfo(
   const CameraModel &model, EucmCompatProfile profile, CameraInfo &camera_info_out
 );
+
+/// Double-precision counterparts of the profile-aware interchange functions.
+[[nodiscard]] StatusCode importPinholeModel64(
+  const PinholeExternalModel &external_model, PinholeCompatProfile profile, CameraModel64 &model_out);
+[[nodiscard]] StatusCode exportPinholeModel64(
+  const CameraModel64 &model, PinholeCompatProfile profile, PinholeExternalModel &external_model_out);
+[[nodiscard]] StatusCode exportPinholeCameraInfo64(
+  const CameraModel64 &model, PinholeCompatProfile profile, CameraInfo &camera_info_out);
+
+[[nodiscard]] StatusCode importFisheyeModel64(
+  const FisheyeExternalModel &external_model, FisheyeCompatProfile profile, CameraModel64 &model_out);
+[[nodiscard]] StatusCode exportFisheyeModel64(
+  const CameraModel64 &model, FisheyeCompatProfile profile, FisheyeExternalModel &external_model_out);
+[[nodiscard]] StatusCode exportFisheyeCameraInfo64(
+  const CameraModel64 &model, FisheyeCompatProfile profile, CameraInfo &camera_info_out);
+
+[[nodiscard]] StatusCode importOmnidirectionalModel64(
+  const OmnidirectionalExternalModel &external_model, OmnidirectionalCompatProfile profile, CameraModel64 &model_out);
+[[nodiscard]] StatusCode exportOmnidirectionalModel64(
+  const CameraModel64 &model, OmnidirectionalCompatProfile profile, OmnidirectionalExternalModel &external_model_out);
+[[nodiscard]] StatusCode exportOmnidirectionalCameraInfo64(
+  const CameraModel64 &model, OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out);
+
+[[nodiscard]] StatusCode importDoubleSphereModel64(
+  const DoubleSphereExternalModel &external_model, DoubleSphereCompatProfile profile, CameraModel64 &model_out);
+[[nodiscard]] StatusCode exportDoubleSphereModel64(
+  const CameraModel64 &model, DoubleSphereCompatProfile profile, DoubleSphereExternalModel &external_model_out);
+[[nodiscard]] StatusCode exportDoubleSphereCameraInfo64(
+  const CameraModel64 &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out);
+
+[[nodiscard]] StatusCode importEucmModel64(
+  const EucmExternalModel &external_model, EucmCompatProfile profile, CameraModel64 &model_out);
+[[nodiscard]] StatusCode exportEucmModel64(
+  const CameraModel64 &model, EucmCompatProfile profile, EucmExternalModel &external_model_out);
+[[nodiscard]] StatusCode exportEucmCameraInfo64(
+  const CameraModel64 &model, EucmCompatProfile profile, CameraInfo &camera_info_out);
 
 const char *toString(PinholeCompatProfile profile);
 const char *toString(FisheyeCompatProfile profile);

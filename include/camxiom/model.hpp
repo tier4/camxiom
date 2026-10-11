@@ -65,6 +65,11 @@ namespace camxiom
 /// no-op.
 void updateThetaMax(CameraModel &model);
 
+/// Recompute the derived field of view without narrowing coefficients to float.
+void updateThetaMax64(CameraModel64 &model);
+
+[[nodiscard]] CameraModel64 makeDistortionFree64(const CameraModel64 &model);
+
 }  // namespace camxiom
 
 #endif  // CAMXIOM__MODEL_HPP

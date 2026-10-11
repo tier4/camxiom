@@ -19,9 +19,10 @@
 namespace camxiom
 {
 
-StatusCode importOmnidirectionalModel(
+template <typename T>
+StatusCode importOmnidirectionalModelImpl(
   const OmnidirectionalExternalModel &external_model, const OmnidirectionalCompatProfile profile,
-  CameraModel &model_out
+  CameraModelT<T> &model_out
 )
 {
   if (!isFiniteArray9(external_model.K) || !isFiniteScalar(external_model.xi) ||
@@ -56,8 +57,9 @@ StatusCode importOmnidirectionalModel(
   );
 }
 
-StatusCode exportOmnidirectionalModel(
-  const CameraModel &model, const OmnidirectionalCompatProfile profile,
+template <typename T>
+StatusCode exportOmnidirectionalModelImpl(
+  const CameraModelT<T> &model, const OmnidirectionalCompatProfile profile,
   OmnidirectionalExternalModel &external_model_out
 )
 {
@@ -93,6 +95,30 @@ StatusCode exportOmnidirectionalModel(
     external_model_out.D[index] = static_cast<double>(model.distortion.coeffs[index]);
   }
   return StatusCode::OK;
+}
+
+StatusCode importOmnidirectionalModel(
+  const OmnidirectionalExternalModel &external_model, OmnidirectionalCompatProfile profile, CameraModel &model_out)
+{
+  return importOmnidirectionalModelImpl(external_model, profile, model_out);
+}
+
+StatusCode exportOmnidirectionalModel(
+  const CameraModel &model, OmnidirectionalCompatProfile profile, OmnidirectionalExternalModel &external_model_out)
+{
+  return exportOmnidirectionalModelImpl(model, profile, external_model_out);
+}
+
+StatusCode importOmnidirectionalModel64(
+  const OmnidirectionalExternalModel &external_model, OmnidirectionalCompatProfile profile, CameraModel64 &model_out)
+{
+  return importOmnidirectionalModelImpl(external_model, profile, model_out);
+}
+
+StatusCode exportOmnidirectionalModel64(
+  const CameraModel64 &model, OmnidirectionalCompatProfile profile, OmnidirectionalExternalModel &external_model_out)
+{
+  return exportOmnidirectionalModelImpl(model, profile, external_model_out);
 }
 
 }  // namespace camxiom

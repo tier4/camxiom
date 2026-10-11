@@ -36,4 +36,23 @@ void updateThetaMax(CameraModel &model)
   }
 }
 
+void updateThetaMax64(CameraModel64 &model)
+{
+  using P = ProjectionModelType;
+  if (model.projection.type == P::OMNIDIRECTIONAL ||
+      model.projection.type == P::DOUBLE_SPHERE || model.projection.type == P::EUCM)
+    model.projection.theta_max = constants::kPi;
+  else if (model.projection.type == P::FISHEYE_THETA)
+  {
+    if (detail::isPolynomialFisheyeDistortion(model.distortion.type))
+      model.projection.theta_max = detail::estimateSafeThetaMaxForPolynomialFisheyeT(model.distortion);
+    else if (model.distortion.type == DistortionModelType::ORTHOGRAPHIC)
+      model.projection.theta_max = constants::kHalfPi - 1e-4;
+    else
+      model.projection.theta_max = constants::kPi - 1e-4;
+  }
+  else
+    model.projection.theta_max = constants::kHalfPi - 1e-4;
+}
+
 }  // namespace camxiom

@@ -992,9 +992,9 @@ template <typename T>
     proj_xi, proj_alpha, proj_beta, x_cam, y_cam, z_cam, u_out, v_out);
 }
 
-template <typename T>
+template <typename T, typename Scalar>
 [[nodiscard]] bool projectGeneric(
-  const CameraModel &model, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out
+  const CameraModelT<Scalar> &model, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out
 )
 {
   if (model.distortion.count > 14) return detail::reject(u_out, v_out);
