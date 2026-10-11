@@ -24,9 +24,15 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
+#include <limits>
 #include <locale>
+#include <random>
 #include <sstream>
 #include <string>
 
@@ -213,4 +219,112 @@ TEST(CameraInfoYaml, SaveWritesTheExactStringAndFailsOnBadPath)
     camxiom::saveCameraInfoYaml("/nonexistent-dir-for-camxiom-test/x.yaml", info),
     StatusCode::INVALID_INPUT
   );
+}
+
+namespace
+{
+std::vector<double> parseNumericSequence(const std::string &yaml, const std::string &section)
+{
+  const auto section_start = yaml.find(section + ":");
+  const auto start = yaml.find('[', section_start);
+  const auto end = yaml.find(']', start);
+  EXPECT_NE(section_start, std::string::npos);
+  EXPECT_NE(start, std::string::npos);
+  EXPECT_NE(end, std::string::npos);
+  if (end == std::string::npos || start == std::string::npos) return {};
+  auto data = yaml.substr(start + 1, end - start - 1);
+  std::replace(data.begin(), data.end(), ',', ' ');
+  std::istringstream input(data);
+  input.imbue(std::locale::classic());
+  std::vector<double> values;
+  double value;
+  while (input >> value) values.push_back(value);
+  EXPECT_TRUE(input.eof());
+  return values;
+}
+
+template <typename Values>
+void expectExactValues(const std::vector<double> &actual, const Values &expected)
+{
+  ASSERT_EQ(actual.size(), expected.size());
+  for (std::size_t i = 0; i < expected.size(); ++i)
+  {
+    EXPECT_EQ(actual[i], expected[i]) << i;
+    EXPECT_EQ(std::signbit(actual[i]), std::signbit(expected[i])) << i;
+  }
+}
+}  // namespace
+
+TEST(CameraInfoYaml, RoundTripModePreservesEveryFiniteDouble)
+{
+  CameraInfo info = makeTestInfo();
+  info.k[0] = 513.1234567890123;
+  info.k[1] = -0.0;
+  info.k[2] = std::nextafter(320.0, 321.0);
+  info.r[1] = 1.0 / 3.0;
+  info.p[3] = -35.087512345678901;
+  info.d = {
+    0.0,
+    -0.0,
+    1.0 / 3.0,
+    std::numeric_limits<double>::min(),
+    std::numeric_limits<double>::denorm_min(),
+    std::numeric_limits<double>::max(),
+    -std::numeric_limits<double>::denorm_min(),
+    std::nextafter(1.0, 2.0)};
+  // Exercise a reproducible spread of mantissas and exponents, independently
+  // of the formatting implementation, including values fixed decimals erase.
+  std::mt19937_64 random(42);
+  for (int i = 0; i < 256; ++i)
+  {
+    const std::uint64_t bits = random();
+    double value;
+    static_assert(sizeof(value) == sizeof(bits));
+    std::memcpy(&value, &bits, sizeof(value));
+    if (std::isfinite(value)) info.d.push_back(value);
+  }
+  const auto yaml = camxiom::toCameraInfoYaml(info, camxiom::CameraInfoYamlPrecision::ROUND_TRIP);
+  expectExactValues(parseNumericSequence(yaml, "camera_matrix"), info.k);
+  expectExactValues(parseNumericSequence(yaml, "distortion_coefficients"), info.d);
+  expectExactValues(parseNumericSequence(yaml, "rectification_matrix"), info.r);
+  expectExactValues(parseNumericSequence(yaml, "projection_matrix"), info.p);
+  EXPECT_EQ(
+    camxiom::toCameraInfoYaml(info, camxiom::CameraInfoYamlPrecision::FIXED),
+    camxiom::toCameraInfoYaml(info)
+  );
+}
+
+TEST(CameraInfoYaml, RoundTripModeIsLocaleIndependentAndSavesExactText)
+{
+  auto info = makeTestInfo();
+  info.k[0] = 513.1234567890123;
+  const auto precision = camxiom::CameraInfoYamlPrecision::ROUND_TRIP;
+  const auto reference = camxiom::toCameraInfoYaml(info, precision, "cam0");
+  const auto old_locale = std::locale();
+  std::locale::global(std::locale(old_locale, new CommaDecimalPunct));
+  const auto actual = camxiom::toCameraInfoYaml(info, precision, "cam0");
+  std::locale::global(old_locale);
+  EXPECT_EQ(actual, reference);
+  const auto path = testing::TempDir() + "/camxiom_camera_info_round_trip_test.yaml";
+  ASSERT_EQ(camxiom::saveCameraInfoYaml(path, info, precision, "cam0"), StatusCode::OK);
+  std::ifstream file(path);
+  ASSERT_TRUE(file.is_open());
+  std::ostringstream contents;
+  contents << file.rdbuf();
+  EXPECT_EQ(contents.str(), reference);
+  std::remove(path.c_str());
+  EXPECT_EQ(
+    camxiom::saveCameraInfoYaml("/nonexistent-dir-for-camxiom-test/x.yaml", info, precision),
+    StatusCode::INVALID_INPUT
+  );
+}
+
+TEST(CameraInfoYaml, RoundTripModeUsesYamlNonFiniteSpellings)
+{
+  auto info = makeTestInfo();
+  info.d = {
+    std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(),
+    -std::numeric_limits<double>::infinity()};
+  const auto yaml = camxiom::toCameraInfoYaml(info, camxiom::CameraInfoYamlPrecision::ROUND_TRIP);
+  EXPECT_NE(yaml.find("data: [.nan, .inf, -.inf]"), std::string::npos);
 }

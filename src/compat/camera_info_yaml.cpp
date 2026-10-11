@@ -14,8 +14,10 @@
 
 #include "camxiom/camera_info_yaml.hpp"
 
+#include <cmath>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <locale>
 #include <sstream>
 #include <string>
@@ -33,14 +35,28 @@ namespace
 constexpr int kMatrixPrecision = 6;
 constexpr int kDistortionPrecision = 12;
 
-std::string formatFixedDouble(const double value, const int precision)
+std::string formatDouble(
+  const double value, const int fixed_digits, CameraInfoYamlPrecision precision
+)
 {
   std::ostringstream stream;
   // A machine-readable serializer must not follow the ambient global locale:
   // a comma decimal point (e.g. de_DE) would split every number into two
   // flow-sequence entries for any real YAML parser reading the file back.
   stream.imbue(std::locale::classic());
-  stream << std::fixed << std::setprecision(precision) << value;
+  if (precision == CameraInfoYamlPrecision::ROUND_TRIP)
+  {
+    if (std::isnan(value)) return ".nan";
+    if (std::isinf(value)) return std::signbit(value) ? "-.inf" : ".inf";
+    // Scientific notation gives every value an explicit decimal point, so
+    // YAML readers retain floating-point type and the sign of negative zero.
+    stream << std::scientific << std::setprecision(std::numeric_limits<double>::max_digits10 - 1)
+           << value;
+  }
+  else
+  {
+    stream << std::fixed << std::setprecision(fixed_digits) << value;
+  }
   return stream.str();
 }
 
@@ -127,7 +143,8 @@ std::string rightPad(const std::string &text, const std::size_t width)
 // output line, continuation lines indented under the opening bracket and the
 // cells right-padded so columns line up vertically.
 void appendAlignedMatrix(
-  std::ostringstream &out, const char *name, const int rows, const int cols, const double *data
+  std::ostringstream &out, const char *name, const int rows, const int cols, const double *data,
+  CameraInfoYamlPrecision precision
 )
 {
   out << name << ":\n"
@@ -138,7 +155,7 @@ void appendAlignedMatrix(
   std::vector<std::string> cells(cell_count);
   for (std::size_t i = 0; i < cell_count; ++i)
   {
-    cells[i] = formatFixedDouble(data[i], kMatrixPrecision);
+    cells[i] = formatDouble(data[i], kMatrixPrecision, precision);
   }
 
   std::vector<std::size_t> column_widths(static_cast<std::size_t>(cols), 0U);
@@ -178,10 +195,12 @@ void appendAlignedMatrix(
 
 }  // namespace
 
-std::string toCameraInfoYaml(const CameraInfo &camera_info, const std::string &camera_name)
+std::string toCameraInfoYaml(
+  const CameraInfo &camera_info, CameraInfoYamlPrecision precision, const std::string &camera_name
+)
 {
   std::ostringstream out;
-  // Same locale pinning as formatFixedDouble: integer fields (width/height,
+  // Same locale pinning as formatDouble: integer fields (width/height,
   // rows/cols) would otherwise pick up thousands grouping from the ambient
   // global locale ("1.920" for 1920 under de_DE).
   out.imbue(std::locale::classic());
@@ -190,7 +209,7 @@ std::string toCameraInfoYaml(const CameraInfo &camera_info, const std::string &c
   out << "image_height: " << camera_info.height << "\n";
   out << "camera_name: " << yamlScalar(camera_name) << "\n";
 
-  appendAlignedMatrix(out, "camera_matrix", 3, 3, camera_info.k.data());
+  appendAlignedMatrix(out, "camera_matrix", 3, 3, camera_info.k.data(), precision);
 
   out << "distortion_model: " << yamlScalar(camera_info.distortion_model) << "\n";
   out << "distortion_coefficients:\n";
@@ -203,17 +222,18 @@ std::string toCameraInfoYaml(const CameraInfo &camera_info, const std::string &c
     {
       out << ", ";
     }
-    out << formatFixedDouble(camera_info.d[i], kDistortionPrecision);
+    out << formatDouble(camera_info.d[i], kDistortionPrecision, precision);
   }
   out << "]\n";
 
-  appendAlignedMatrix(out, "rectification_matrix", 3, 3, camera_info.r.data());
-  appendAlignedMatrix(out, "projection_matrix", 3, 4, camera_info.p.data());
+  appendAlignedMatrix(out, "rectification_matrix", 3, 3, camera_info.r.data(), precision);
+  appendAlignedMatrix(out, "projection_matrix", 3, 4, camera_info.p.data(), precision);
   return out.str();
 }
 
 StatusCode saveCameraInfoYaml(
-  const std::string &path, const CameraInfo &camera_info, const std::string &camera_name
+  const std::string &path, const CameraInfo &camera_info, CameraInfoYamlPrecision precision,
+  const std::string &camera_name
 )
 {
   std::ofstream file(path, std::ios::out | std::ios::trunc);
@@ -221,9 +241,21 @@ StatusCode saveCameraInfoYaml(
   {
     return StatusCode::INVALID_INPUT;
   }
-  file << toCameraInfoYaml(camera_info, camera_name);
+  file << toCameraInfoYaml(camera_info, precision, camera_name);
   file.flush();
   return file.good() ? StatusCode::OK : StatusCode::INVALID_INPUT;
+}
+
+std::string toCameraInfoYaml(const CameraInfo &camera_info, const std::string &camera_name)
+{
+  return toCameraInfoYaml(camera_info, CameraInfoYamlPrecision::FIXED, camera_name);
+}
+
+StatusCode saveCameraInfoYaml(
+  const std::string &path, const CameraInfo &camera_info, const std::string &camera_name
+)
+{
+  return saveCameraInfoYaml(path, camera_info, CameraInfoYamlPrecision::FIXED, camera_name);
 }
 
 }  // namespace camxiom

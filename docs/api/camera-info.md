@@ -145,3 +145,25 @@ The writer emits what it is given — it does not re-validate K/D consistency
       ├── toCameraInfoYaml / saveCameraInfoYaml         (ROS-free calibration YAML)
       └── ros.hpp: sensor_msgs ⇄ CameraInfo POD         (optional layer, binning/ROI folded)
 ```
+
+### 倍精度の保存・再読込
+
+`makeCameraModel64` と `import*Model64` / `export*Model64` /
+`export*CameraInfo64` は、内参・歪み係数・投影パラメータを float に丸めずに受け渡します。
+YAMLへの保存にも `CameraInfoYamlPrecision::ROUND_TRIP` を指定してください。
+既存の省略時の書式は小数点以下6桁／12桁を維持します。
+
+```cpp
+camxiom::CameraInfo info;
+auto status = camxiom::exportFisheyeCameraInfo64(
+    fit.camera_model, camxiom::FisheyeCompatProfile::CANONICAL, info);
+if (status == camxiom::StatusCode::OK) {
+  status = camxiom::saveCameraInfoYaml(
+      path, info, camxiom::CameraInfoYamlPrecision::ROUND_TRIP, "front_camera");
+}
+```
+
+`ROUND_TRIP` は科学表記・17有効桁で有限の double を保存し、負のゼロや極小値も保持します。
+再読込は既存のYAMLリーダーで数値を double として `CameraInfo` に読み、
+`makeCameraModel64` に渡します。camxiom自体にYAMLリーダーの依存は追加しません。
+CameraInfoの形式にない `theta_max` は保存されないため、用途固有の視野上限は別途保持してください。

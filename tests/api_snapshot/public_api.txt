@@ -106,8 +106,13 @@ namespace camxiom::calib
 === include/camxiom/calibration.hpp ===
 
 === include/camxiom/camera_info_yaml.hpp ===
+camxiom | [[nodiscard]] StatusCode saveCameraInfoYaml( const std::string &path, const CameraInfo &camera_info, CameraInfoYamlPrecision precision, const std::string &camera_name = "" )
 camxiom | [[nodiscard]] StatusCode saveCameraInfoYaml( const std::string &path, const CameraInfo &camera_info, const std::string &camera_name = "" )
+camxiom | [[nodiscard]] std::string toCameraInfoYaml( const CameraInfo &camera_info, CameraInfoYamlPrecision precision, const std::string &camera_name = "" )
 camxiom | [[nodiscard]] std::string toCameraInfoYaml( const CameraInfo &camera_info, const std::string &camera_name = "" )
+camxiom | enum class CameraInfoYamlPrecision : std::uint8_t
+camxiom::CameraInfoYamlPrecision | #000 FIXED = 0U
+camxiom::CameraInfoYamlPrecision | #001 ROUND_TRIP = 1U
 namespace camxiom
 
 === include/camxiom/camxiom.hpp ===
