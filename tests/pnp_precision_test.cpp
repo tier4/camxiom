@@ -224,3 +224,52 @@ TEST(PnpPrecision, FloatAndDoubleSolvesPreserveExplicitDomainCaps)
     EXPECT_EQ(rayToPixel64(result64.camera_model, outside).status, StatusCode::OUT_OF_FOV);
   }
 }
+
+TEST(PnpPrecision, AutoDiffRefreshesTheFisheyeDomainAndResetsItOnReuse)
+{
+  // The fitted polynomial folds before the seed's declared cap. Every new
+  // coefficient trial must refresh its domain; reusing the solver must also
+  // discard the previous model, including when switching cost backends.
+  PnpSolver solver;
+  for (auto cost : {PnpCostType::AUTO_DIFF, PnpCostType::ANALYTICAL, PnpCostType::AUTO_DIFF})
+    for (double k1 : {-0.15, -0.08})
+    {
+      auto truth = makeModel64("equidistant", {k1, 0.0, 0.0, 0.0});
+      updateThetaMax64(truth);
+      ObjectPoints objects;
+      ImagePoints images;
+      for (int i = 1; i <= 40; ++i)
+      {
+        const double theta = 1.3 * i / 40;
+        const double azimuth = 0.4 * i;
+        Eigen::Vector3d ray(
+          std::sin(theta) * std::cos(azimuth), std::sin(theta) * std::sin(azimuth), std::cos(theta)
+        );
+        const auto pixel = rayToPixel64(truth, ray);
+        ASSERT_TRUE(pixel.ok());
+        objects.push_back(ray);
+        images.emplace_back(pixel.pixel.u, pixel.pixel.v);
+      }
+      PnpInitialGuess64 guess;
+      guess.camera_model = truth;
+      guess.camera_model.distortion.coeffs[0] = -0.02;
+      guess.camera_model.projection.theta_max = 2.5;
+      guess.rvecs = {Eigen::Vector3d::Zero()};
+      guess.tvecs = {Eigen::Vector3d::Zero()};
+      PnpSolverOptions options;
+      options.cost_type = cost;
+      options.huber_loss_delta = 0.0;
+      options.solver_options.function_tolerance = 1e-14;
+      options.solver_options.gradient_tolerance = 1e-14;
+      options.solver_options.parameter_tolerance = 1e-14;
+      const auto flags = PnpFlag::FIX_EXTRINSICS | PnpFlag::FIX_INTRINSICS |
+                         PnpFlag::FIX_PROJECTION_PARAMS | PnpFlag::FIX_DIST_1 |
+                         PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3;
+      PnpResult64 result;
+      ASSERT_TRUE(solver.solve(objects, images, guess, result, options, flags));
+      EXPECT_NEAR(result.camera_model.distortion.coeffs[0], k1, 1e-12);
+      EXPECT_LT(result.rmse, 1e-9);
+      EXPECT_EQ(result.valid_count, objects.size());
+      EXPECT_NEAR(result.camera_model.projection.theta_max, truth.projection.theta_max, 1e-12);
+    }
+}

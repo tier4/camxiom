@@ -143,13 +143,63 @@ constexpr double kInvalidPenaltyScale = 1e3;
 
 // ======================== Cost Functor ========================
 
+// Ceres refreshes user parameter blocks before this callback and then keeps
+// them fixed while evaluating all residuals/Jacobians. Validate the shared
+// camera once per evaluation point, rather than scanning a fisheye polynomial
+// once per observed point. Each solver owns its cache; residuals only read it.
+class PnpModelEvaluation : public ceres::EvaluationCallback
+{
+public:
+  PnpModelEvaluation(
+    const CameraModel64 &model, const double *focal, const double *principal,
+    const double *distortion, const double *projection
+  )
+  : model_template_(model),
+    focal_(focal),
+    principal_(principal),
+    distortion_(distortion),
+    projection_(projection)
+  {
+  }
+
+  void PrepareForEvaluation(bool, bool new_evaluation_point) override
+  {
+    if (prepared_ && !new_evaluation_point) return;
+    model = model_template_;
+    model.intrinsics.fx = focal_[0];
+    model.intrinsics.fy = focal_[1];
+    model.intrinsics.cx = principal_[0];
+    model.intrinsics.cy = principal_[1];
+    for (int i = 0; i < model.distortion.count; ++i) model.distortion.coeffs[i] = distortion_[i];
+    model.projection.xi = projection_[0];
+    model.projection.alpha = projection_[1];
+    model.projection.beta = projection_[2];
+    camxiom::detail::rebuildDistortionAuxState(model.distortion);
+    valid = camxiom::validateCameraModel64(model) == StatusCode::OK;
+    if (!valid && camxiom::detail::shrinkThetaMaxToPolynomialMonotoneRange(model))
+      valid = camxiom::validateCameraModel64(model) == StatusCode::OK;
+    prepared_ = true;
+  }
+
+  CameraModel64 model{};
+  bool valid{false};
+
+private:
+  const CameraModel64 model_template_;
+  const double *focal_;
+  const double *principal_;
+  const double *distortion_;
+  const double *projection_;
+  bool prepared_{false};
+};
+
 struct PnpCost
 {
   PnpCost(
     const Eigen::Vector3d &point3d, const Eigen::Vector2d &point2d,
-    const camxiom::CameraModel64 &camera_model
+    const PnpModelEvaluation &evaluation
   )
-  : point3d(point3d), point2d(point2d), camera_model(camera_model)
+  : point3d(point3d), point2d(point2d), evaluation(evaluation)
   {
   }
 
@@ -168,35 +218,21 @@ struct PnpCost
     const T y_cam = rp[1] + tvec[1];
     const T z_cam = rp[2] + tvec[2];
 
+    const auto &camera_model = evaluation.model;
     const T sk = T(camera_model.intrinsics.skew);
     const T intrinsics[4] = {
       focal_lengths[0], focal_lengths[1], principal_points[0], principal_points[1]};
-    // Use the same current-parameter domain as the analytical cost, including
-    // the local cap shrink when free fisheye coefficients move the fold.
-    auto evaluation_model = camxiom::detail::asModel64(camera_model);
-    evaluation_model.intrinsics.fx = tpl::detail::scalarValue(focal_lengths[0]);
-    evaluation_model.intrinsics.fy = tpl::detail::scalarValue(focal_lengths[1]);
-    evaluation_model.intrinsics.cx = tpl::detail::scalarValue(principal_points[0]);
-    evaluation_model.intrinsics.cy = tpl::detail::scalarValue(principal_points[1]);
-    for (int i = 0; i < camera_model.distortion.count; ++i)
-      evaluation_model.distortion.coeffs[i] = tpl::detail::scalarValue(dist_coeffs[i]);
-    evaluation_model.projection.xi = tpl::detail::scalarValue(proj_params[0]);
-    evaluation_model.projection.alpha = tpl::detail::scalarValue(proj_params[1]);
-    evaluation_model.projection.beta = tpl::detail::scalarValue(proj_params[2]);
-    camxiom::detail::rebuildDistortionAuxState(evaluation_model.distortion);
-    bool model_valid = camxiom::validateCameraModel64(evaluation_model) == StatusCode::OK;
-    if (!model_valid && camxiom::detail::shrinkThetaMaxToPolynomialMonotoneRange(evaluation_model))
-      model_valid = camxiom::validateCameraModel64(evaluation_model) == StatusCode::OK;
+    const auto &evaluation_model = evaluation.model;
     T u, v;
     const bool ok =
-      model_valid && tpl::projectGenericParametric(
-                       camera_model.projection.type, camera_model.distortion.type, intrinsics,
-                       dist_coeffs, static_cast<int>(camera_model.distortion.count),
-                       proj_params[0],  // xi
-                       proj_params[1],  // alpha
-                       proj_params[2],  // beta
-                       x_cam, y_cam, z_cam, u, v, evaluation_model.projection.theta_max
-                     );
+      evaluation.valid && tpl::projectGenericParametric(
+                            camera_model.projection.type, camera_model.distortion.type, intrinsics,
+                            dist_coeffs, static_cast<int>(camera_model.distortion.count),
+                            proj_params[0],  // xi
+                            proj_params[1],  // alpha
+                            proj_params[2],  // beta
+                            x_cam, y_cam, z_cam, u, v, evaluation_model.projection.theta_max
+                          );
     if (!ok)
     {
       // Large constant penalty. For AutoDiff, a z_cam-based gradient is
@@ -221,12 +257,12 @@ struct PnpCost
 
   const Eigen::Vector3d point3d;
   const Eigen::Vector2d point2d;
-  const camxiom::CameraModel64 camera_model;
+  const PnpModelEvaluation &evaluation;
 };
 
 ceres::CostFunction *createCost(
   const Eigen::Vector3d &point3d, const Eigen::Vector2d &point2d,
-  const camxiom::CameraModel64 &camera_model, int dist_count
+  const PnpModelEvaluation &evaluation, int dist_count
 )
 {
   switch (dist_count)
@@ -234,60 +270,60 @@ ceres::CostFunction *createCost(
     case 0:
     case 1:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 1, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 2:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 2, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 3:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 3, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 4:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 4, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 5:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 5, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 6:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 6, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 7:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 7, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 8:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 8, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 9:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 9, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 10:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 10, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 11:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 11, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 12:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 12, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 13:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 13, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
     case 14:
     default:
       return new ceres::AutoDiffCostFunction<PnpCost, 2, 3, 3, 2, 2, 14, 3>(
-        new PnpCost(point3d, point2d, camera_model)
+        new PnpCost(point3d, point2d, evaluation)
       );
   }
 }
@@ -344,6 +380,8 @@ private:
   void resetProblem();
 
   ceres::Problem::Options problem_options_{};
+  // Outlive the Problem and its residual blocks (members destroy in reverse).
+  std::unique_ptr<PnpModelEvaluation> model_evaluation_{};
   std::unique_ptr<ceres::Problem> problem_{};
   ceres::Solver::Options solver_options_{};
   ceres::Solver::Summary solver_summary_{};
@@ -633,6 +671,14 @@ void PnpSolver::Impl::setupProblem(
   const PnpBound &lower_bound, PnpFlag flags
 )
 {
+  problem_.reset();
+  model_evaluation_.reset();
+  if (cost_type_ == PnpCostType::AUTO_DIFF)
+    model_evaluation_ = std::make_unique<PnpModelEvaluation>(
+      camera_model, focal_lengths_.data(), principal_points_.data(), dist_.data(),
+      projection_params_.data()
+    );
+  problem_options_.evaluation_callback = model_evaluation_.get();
   resetProblem();
 
   focal_lengths_[0] = static_cast<double>(camera_model.intrinsics.fx);
@@ -841,7 +887,7 @@ double PnpSolver::Impl::optimize(
       // Per-point: one CostFunction per point with 2 residuals
       for (std::size_t j = 0; j < pts; ++j)
       {
-        ceres::CostFunction *cost = createCost(obj[j], img[j], camera_model, effective_dc);
+        ceres::CostFunction *cost = createCost(obj[j], img[j], *model_evaluation_, effective_dc);
         ceres::LossFunction *loss = nullptr;
         if (huber_loss_delta_ > 0.0)
         {
