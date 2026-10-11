@@ -310,7 +310,7 @@ struct NamedModel
 
 std::vector<NamedModel> representativeModels()
 {
-  return {
+  std::vector<NamedModel> models{
     {"pinhole+none", makePinholeNone()},
     {"pinhole+radtan5", makePinholeRadtan5()},
     {"pinhole+rational8", makePinholeRational8()},
@@ -325,6 +325,19 @@ std::vector<NamedModel> representativeModels()
     {"double_sphere", makeDoubleSphere()},
     {"eucm", makeEucm()},
   };
+  for (const auto &base : std::vector<NamedModel>{
+         {"omni", makeOmnidirectional()}, {"ds", makeDoubleSphere()}, {"eucm", makeEucm()}})
+    for (const auto &plane : std::vector<NamedModel>{
+           {"radtan5", makePinholeRadtan5()},
+           {"rational8", makePinholeRational8()},
+           {"thin_prism12", makePinholeThinPrism12()},
+           {"tilted14", makePinholeTilted14()}})
+    {
+      auto model = base.model;
+      model.distortion = plane.model.distortion;
+      models.push_back({base.name + "+" + plane.name, model});
+    }
+  return models;
 }
 
 // Moderate off-axis rays valid (z>0, well within FOV) for every model. On-axis
@@ -500,9 +513,15 @@ TEST(AutoDiffJacobian, RejectsTheSameRayDomainAsRuntime)
     if (nm.model.projection.type != ProjectionModelType::PINHOLE)
       nm.model.projection.theta_max = 1.0;
     for (const Eigen::Vector3d &ray : std::vector<Eigen::Vector3d>{
-           {0, 0, 0}, {0, 0, -1}, {1, 0, 0}, {nan, 0, 1}, {0, inf, 1},
-           {1e200, 0, 1}, {std::sin(0.999), 0, std::cos(0.999)},
-           {std::sin(1.001), 0, std::cos(1.001)}, {1e-8, 0, 1e-8}})
+           {0, 0, 0},
+           {0, 0, -1},
+           {1, 0, 0},
+           {nan, 0, 1},
+           {0, inf, 1},
+           {1e200, 0, 1},
+           {std::sin(0.999), 0, std::cos(0.999)},
+           {std::sin(1.001), 0, std::cos(1.001)},
+           {1e-8, 0, 1e-8}})
     {
       const auto runtime = rayToPixel64(nm.model, ray);
       const auto ad = autodiffJacobian(nm.model, ray);
@@ -541,6 +560,58 @@ TEST(AutoDiffJacobian, RationalPoleAndNegativeBranchMatchRuntime)
         auto pp = rayToPixel64(model, plus), pm = rayToPixel64(model, minus);
         EXPECT_NEAR(ad.J(0, k), (pp.pixel.u - pm.pixel.u) / 2e-6, 1e-5);
         EXPECT_NEAR(ad.J(1, k), (pp.pixel.v - pm.pixel.v) / 2e-6, 1e-5);
+      }
+    }
+  }
+}
+
+TEST(AutoDiffJacobian, WidePlaneModelsMatchIndependentFiniteDifferences)
+{
+  for (const auto &nm : representativeModels())
+  {
+    if (nm.model.projection.type == ProjectionModelType::PINHOLE || nm.model.projection.type == ProjectionModelType::FISHEYE_THETA)
+      continue;
+    for (const auto &ray : sampleRays())
+    {
+      const auto ad = autodiffJacobian(nm.model, ray);
+      ASSERT_TRUE(ad.ok) << nm.name;
+      for (int k = 0; k < 3; ++k)
+      {
+        auto plus = ray, minus = ray;
+        plus[k] += 1e-6;
+        minus[k] -= 1e-6;
+        const auto pp = rayToPixel64(nm.model, plus), pm = rayToPixel64(nm.model, minus);
+        ASSERT_TRUE(pp.ok());
+        ASSERT_TRUE(pm.ok());
+        EXPECT_NEAR(ad.J(0, k), (pp.pixel.u - pm.pixel.u) / 2e-6, 1e-5) << nm.name;
+        EXPECT_NEAR(ad.J(1, k), (pp.pixel.v - pm.pixel.v) / 2e-6, 1e-5) << nm.name;
+      }
+    }
+  }
+}
+
+TEST(AutoDiffJacobian, WideModelsRejectPolesAndOverflowWithUnrestrictedCap)
+{
+  for (auto model : {makeOmnidirectional(), makeDoubleSphere(), makeEucm()})
+  {
+    model.projection.xi = 0.0;
+    model.projection.alpha = 0.0;
+    model.projection.beta = 1.0;
+    model.projection.theta_max = constants::kPi;
+    for (auto plane : {makePinholeRational8(), makePinholeThinPrism12(), makePinholeTilted14()})
+    {
+      model.distortion = plane.distortion;
+      model.distortion.coeffs[5] = -1.0;
+      model.distortion.coeffs[6] = model.distortion.coeffs[7] = 0.0;
+      ASSERT_EQ(validateCameraModel64(model), StatusCode::OK);
+      for (const Eigen::Vector3d &ray : std::vector<Eigen::Vector3d>{{1, 0, 1}, {1e200, 0, 1}})
+      {
+        EXPECT_FALSE(rayToPixel64(model, ray).ok());
+        const auto ad = autodiffJacobian(model, ray);
+        EXPECT_FALSE(ad.ok);
+        EXPECT_EQ(ad.u, 0.0);
+        EXPECT_EQ(ad.v, 0.0);
+        EXPECT_TRUE(ad.J.isZero());
       }
     }
   }

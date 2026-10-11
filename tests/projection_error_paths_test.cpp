@@ -26,12 +26,12 @@
 // tests cannot flake on rounding.
 
 #include "camxiom/batch.hpp"
+#include "camxiom/compat.hpp"
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/model.hpp"
 #include "camxiom/projection.hpp"
 #include "camxiom/projection64.hpp"
 #include "camxiom/projection_template.hpp"
-#include "camxiom/compat.hpp"
 #include "camxiom/types.hpp"
 #include "camxiom/types64.hpp"
 
@@ -201,12 +201,14 @@ TEST(ProjectionTemplateDomain, HonorsModelCapAndRejectsNonFiniteResults)
   auto model = camxiom::makeCameraModel(info);
   model.projection.theta_max = 1.0f;
   double u = 17, v = 19;
-  EXPECT_FALSE(camxiom::projection_template::projectGeneric(
-    model, std::sin(1.2), 0.0, std::cos(1.2), u, v));
+  EXPECT_FALSE(
+    camxiom::projection_template::projectGeneric(model, std::sin(1.2), 0.0, std::cos(1.2), u, v)
+  );
   EXPECT_EQ(u, 0);
   EXPECT_EQ(v, 0);
-  EXPECT_TRUE(camxiom::projection_template::projectGeneric(
-    model, std::sin(0.5), 0.0, std::cos(0.5), u, v));
+  EXPECT_TRUE(
+    camxiom::projection_template::projectGeneric(model, std::sin(0.5), 0.0, std::cos(0.5), u, v)
+  );
   info.distortion_model = "rational_polynomial";
   info.d = {0, 0, 0, 0, 0, -1, 0, 0};
   model = camxiom::makeCameraModel(info);
@@ -217,5 +219,29 @@ TEST(ProjectionTemplateDomain, HonorsModelCapAndRejectsNonFiniteResults)
   const double dist[8] = {0, 0, 0, 0, 0, -1, 0, 0};
   EXPECT_FALSE(camxiom::projection_template::projectRational8(intr, dist, 1.0, 0.0, 1.0, u, v));
   EXPECT_FALSE(camxiom::projection_template::projectGeneric(
-    model, std::numeric_limits<double>::infinity(), 0.0, 1.0, u, v));
+    model, std::numeric_limits<double>::infinity(), 0.0, 1.0, u, v
+  ));
+}
+
+TEST(ProjectionTemplateDomain, RejectsAngleDistortionOnWidePlaneModels)
+{
+  camxiom::CameraInfo info;
+  info.k = {500, 0, 320, 0, 500, 240, 0, 0, 1};
+  info.distortion_model = "equidistant";
+  info.d = {0.01, 0.0, 0.0, 0.0};
+  auto model = camxiom::makeCameraModel64(info);
+  for (auto type :
+       {camxiom::ProjectionModelType::OMNIDIRECTIONAL, camxiom::ProjectionModelType::DOUBLE_SPHERE,
+        camxiom::ProjectionModelType::EUCM})
+  {
+    model.projection.type = type;
+    model.projection.xi = 0.2;
+    model.projection.alpha = 0.5;
+    model.projection.beta = 1.0;
+    double u = 17, v = 19;
+    EXPECT_NE(camxiom::validateCameraModel64(model), camxiom::StatusCode::OK);
+    EXPECT_FALSE(camxiom::projection_template::projectGeneric(model, 0.2, 0.1, 1.0, u, v));
+    EXPECT_EQ(u, 0.0);
+    EXPECT_EQ(v, 0.0);
+  }
 }

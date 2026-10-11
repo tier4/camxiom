@@ -90,7 +90,19 @@ TEST(PnpPrecision, FitsAndReusesDoubleModelsInBothCeresPaths)
                           0.000123456789012, -0.000234567890123}
     ),
     makeModel64("double_sphere", {0.213456789012345, 0.613456789012345}),
-    makeModel64("eucm", {0.413456789012345, 1.013456789012345})};
+    makeModel64("eucm", {0.413456789012345, 1.013456789012345}),
+    makeModel64(
+      "omnidirectional",
+      {0.513456789012345, 0.01, -0.002, 0.0001, -0.0002, 0.0003, 0.02, 0.003, -0.0004}
+    ),
+    makeModel64(
+      "double_sphere", {0.213456789012345, 0.613456789012345, 0.01, -0.002, 0.0001, -0.0002, 0.0003,
+                        0.02, 0.003, -0.0004}
+    ),
+    makeModel64(
+      "eucm", {0.413456789012345, 1.013456789012345, 0.01, -0.002, 0.0001, -0.0002, 0.0003, 0.02,
+               0.003, -0.0004}
+    )};
   for (const auto &truth : models)
     for (const auto cost : {PnpCostType::ANALYTICAL, PnpCostType::AUTO_DIFF})
     {

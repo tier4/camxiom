@@ -45,8 +45,8 @@
 ///   }
 /// @endcode
 
-#include "camxiom/types.hpp"
 #include "camxiom/internal/constants.hpp"
+#include "camxiom/types.hpp"
 
 #include <cmath>
 #include <type_traits>
@@ -61,8 +61,10 @@ namespace detail
 template <typename T>
 auto scalarValue(const T &value)
 {
-  if constexpr (std::is_arithmetic_v<T>) return value;
-  else return scalarValue(value.a);
+  if constexpr (std::is_arithmetic_v<T>)
+    return value;
+  else
+    return scalarValue(value.a);
 }
 
 template <typename T>
@@ -201,8 +203,7 @@ template <typename T>
 
   const T num = T(1.0) + k1 * r2 + k2 * r4 + k3 * r6;
   const T den = T(1.0) + k4 * r2 + k5 * r4 + k6 * r6;
-  if (!std::isfinite(detail::scalarValue(den)) ||
-      std::abs(detail::scalarValue(den)) <= detail::epsilon<T>())
+  if (!std::isfinite(detail::scalarValue(den)) || std::abs(detail::scalarValue(den)) <= detail::epsilon<T>())
     return detail::reject(u_out, v_out);
   const T cdist = num / den;
 
@@ -258,8 +259,7 @@ template <typename T>
 
   const T num = T(1.0) + k1 * r2 + k2 * r4 + k3 * r6;
   const T den = T(1.0) + k4 * r2 + k5 * r4 + k6 * r6;
-  if (!std::isfinite(detail::scalarValue(den)) ||
-      std::abs(detail::scalarValue(den)) <= detail::epsilon<T>())
+  if (!std::isfinite(detail::scalarValue(den)) || std::abs(detail::scalarValue(den)) <= detail::epsilon<T>())
     return detail::reject(u_out, v_out);
   const T cdist = num / den;
 
@@ -321,8 +321,7 @@ template <typename T>
 
   const T num = T(1.0) + k1 * r2 + k2 * r4 + k3 * r6;
   const T den = T(1.0) + k4 * r2 + k5 * r4 + k6 * r6;
-  if (!std::isfinite(detail::scalarValue(den)) ||
-      std::abs(detail::scalarValue(den)) <= detail::epsilon<T>())
+  if (!std::isfinite(detail::scalarValue(den)) || std::abs(detail::scalarValue(den)) <= detail::epsilon<T>())
     return detail::reject(u_out, v_out);
   const T cdist = num / den;
 
@@ -339,8 +338,7 @@ template <typename T>
   const T s_ty = sin(tau_y);
 
   const T r22 = c_ty * c_tx;
-  if (std::abs(detail::scalarValue(r22)) <=
-      (std::is_same_v<decltype(detail::scalarValue(r22)), float> ? 1e-8 : 1e-12))
+  if (std::abs(detail::scalarValue(r22)) <= (std::is_same_v<decltype(detail::scalarValue(r22)), float> ? 1e-8 : 1e-12))
   {
     u_out = fx * xpd_no_tilt + cx;
     v_out = fy * ypd_no_tilt + cy;
@@ -368,8 +366,7 @@ template <typename T>
 
   const T mx = t00 * xpd_no_tilt + t01 * ypd_no_tilt + t02;
   const T my = t10 * xpd_no_tilt + t11 * ypd_no_tilt + t12;
-  if (!std::isfinite(detail::scalarValue(mz)) ||
-      std::abs(detail::scalarValue(mz)) <= detail::epsilon<T>())
+  if (!std::isfinite(detail::scalarValue(mz)) || std::abs(detail::scalarValue(mz)) <= detail::epsilon<T>())
     return detail::reject(u_out, v_out);
   const T inv_mz = T(1.0) / mz;
   const T x_tilt = mx * inv_mz;
@@ -618,6 +615,40 @@ template <typename T>
   return detail::finish(u_out, v_out);
 }
 
+namespace detail
+{
+// Wide-angle projections share the same normalized-plane distortion models as
+// pinhole. Dispatch by the raw helpers' coefficient-count convention; the
+// checked generic entry point additionally validates the distortion enum.
+template <typename T>
+bool projectPlaneDistortion(
+  const T *intrinsics, const T *dist, int dist_count, const T &x, const T &y, T &u, T &v
+)
+{
+  switch (dist_count)
+  {
+    case 0:
+      u = intrinsics[0] * x + intrinsics[2];
+      v = intrinsics[1] * y + intrinsics[3];
+      return finish(u, v);
+    case 4: {
+      const T dist5[5] = {dist[0], dist[1], dist[2], dist[3], T(0)};
+      return projectRadtan5(intrinsics, dist5, x, y, T(1), u, v);
+    }
+    case 5:
+      return projectRadtan5(intrinsics, dist, x, y, T(1), u, v);
+    case 8:
+      return projectRational8(intrinsics, dist, x, y, T(1), u, v);
+    case 12:
+      return projectThinPrism12(intrinsics, dist, x, y, T(1), u, v);
+    case 14:
+      return projectTilted14(intrinsics, dist, x, y, T(1), u, v);
+    default:
+      return reject(u, v);
+  }
+}
+}  // namespace detail
+
 // ============================================================================
 // Omnidirectional (Mei) model
 // ============================================================================
@@ -631,15 +662,12 @@ template <typename T>
   if (!detail::finiteRay(x_cam, y_cam, z_cam)) return detail::reject(u_out, v_out);
   using std::sqrt;
 
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
   const T ray_norm = sqrt(x_cam * x_cam + y_cam * y_cam + z_cam * z_cam);
   const T eps = T(detail::epsilon<T>());
+  if (!std::isfinite(detail::scalarValue(ray_norm)) || !(ray_norm > eps))
+    return detail::reject(u_out, v_out);
   const T denom = z_cam + xi * ray_norm;
-  if (!(denom > eps))
+  if (!std::isfinite(detail::scalarValue(denom)) || !(denom > eps))
   {
     u_out = T(0.0);
     v_out = T(0.0);
@@ -655,26 +683,9 @@ template <typename T>
     return false;
   }
 
-  T xn = x_cam / denom;
-  T yn = y_cam / denom;
-
-  if (dist_count >= 4)
-  {
-    const T r2 = xn * xn + yn * yn;
-    const T r4 = r2 * r2;
-    const T r6 = r4 * r2;
-    const T k3 = (dist_count >= 5) ? dist[4] : T(0.0);
-    const T cdist = T(1.0) + dist[0] * r2 + dist[1] * r4 + k3 * r6;
-    const T a1 = T(2.0) * xn * yn;
-    const T a2 = r2 + T(2.0) * xn * xn;
-    const T a3 = r2 + T(2.0) * yn * yn;
-    xn = xn * cdist + dist[2] * a1 + dist[3] * a2;
-    yn = yn * cdist + dist[2] * a3 + dist[3] * a1;
-  }
-
-  u_out = fx * xn + cx;
-  v_out = fy * yn + cy;
-  return detail::finish(u_out, v_out);
+  return detail::projectPlaneDistortion(
+    intrinsics, dist, dist_count, x_cam / denom, y_cam / denom, u_out, v_out
+  );
 }
 
 // ============================================================================
@@ -690,14 +701,9 @@ template <typename T>
   if (!detail::finiteRay(x_cam, y_cam, z_cam)) return detail::reject(u_out, v_out);
   using std::sqrt;
 
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
   const T d1 = sqrt(x_cam * x_cam + y_cam * y_cam + z_cam * z_cam);
   const T eps = T(detail::epsilon<T>());
-  if (!(d1 > eps))
+  if (!std::isfinite(detail::scalarValue(d1)) || !(d1 > eps))
   {
     u_out = T(0.0);
     v_out = T(0.0);
@@ -706,8 +712,9 @@ template <typename T>
 
   const T xi_d1_z = xi * d1 + z_cam;
   const T d2 = sqrt(x_cam * x_cam + y_cam * y_cam + xi_d1_z * xi_d1_z);
+  if (!std::isfinite(detail::scalarValue(d2))) return detail::reject(u_out, v_out);
   const T denom = alpha * d2 + (T(1.0) - alpha) * xi_d1_z;
-  if (!(denom > eps))
+  if (!std::isfinite(detail::scalarValue(denom)) || !(denom > eps))
   {
     u_out = T(0.0);
     v_out = T(0.0);
@@ -726,26 +733,9 @@ template <typename T>
     return false;
   }
 
-  T xn = x_cam / denom;
-  T yn = y_cam / denom;
-
-  if (dist_count >= 4)
-  {
-    const T r2 = xn * xn + yn * yn;
-    const T r4 = r2 * r2;
-    const T r6 = r4 * r2;
-    const T k3 = (dist_count >= 5) ? dist[4] : T(0.0);
-    const T cdist = T(1.0) + dist[0] * r2 + dist[1] * r4 + k3 * r6;
-    const T a1 = T(2.0) * xn * yn;
-    const T a2 = r2 + T(2.0) * xn * xn;
-    const T a3 = r2 + T(2.0) * yn * yn;
-    xn = xn * cdist + dist[2] * a1 + dist[3] * a2;
-    yn = yn * cdist + dist[2] * a3 + dist[3] * a1;
-  }
-
-  u_out = fx * xn + cx;
-  v_out = fy * yn + cy;
-  return detail::finish(u_out, v_out);
+  return detail::projectPlaneDistortion(
+    intrinsics, dist, dist_count, x_cam / denom, y_cam / denom, u_out, v_out
+  );
 }
 
 // ============================================================================
@@ -761,15 +751,11 @@ template <typename T>
   if (!detail::finiteRay(x_cam, y_cam, z_cam)) return detail::reject(u_out, v_out);
   using std::sqrt;
 
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
   const T d = sqrt(beta * (x_cam * x_cam + y_cam * y_cam) + z_cam * z_cam);
   const T eps = T(detail::epsilon<T>());
+  if (!std::isfinite(detail::scalarValue(d)) || !(d > eps)) return detail::reject(u_out, v_out);
   const T denom = alpha * d + (T(1.0) - alpha) * z_cam;
-  if (!(denom > eps))
+  if (!std::isfinite(detail::scalarValue(denom)) || !(denom > eps))
   {
     u_out = T(0.0);
     v_out = T(0.0);
@@ -787,26 +773,9 @@ template <typename T>
     return false;
   }
 
-  T xn = x_cam / denom;
-  T yn = y_cam / denom;
-
-  if (dist_count >= 4)
-  {
-    const T r2 = xn * xn + yn * yn;
-    const T r4 = r2 * r2;
-    const T r6 = r4 * r2;
-    const T k3 = (dist_count >= 5) ? dist[4] : T(0.0);
-    const T cdist = T(1.0) + dist[0] * r2 + dist[1] * r4 + k3 * r6;
-    const T a1 = T(2.0) * xn * yn;
-    const T a2 = r2 + T(2.0) * xn * xn;
-    const T a3 = r2 + T(2.0) * yn * yn;
-    xn = xn * cdist + dist[2] * a1 + dist[3] * a2;
-    yn = yn * cdist + dist[2] * a3 + dist[3] * a1;
-  }
-
-  u_out = fx * xn + cx;
-  v_out = fy * yn + cy;
-  return detail::finish(u_out, v_out);
+  return detail::projectPlaneDistortion(
+    intrinsics, dist, dist_count, x_cam / denom, y_cam / denom, u_out, v_out
+  );
 }
 
 // ============================================================================
@@ -944,67 +913,91 @@ template <typename T>
 [[nodiscard]] bool projectGenericParametric(
   ProjectionModelType proj_type, DistortionModelType dist_type, const T *intrinsics, const T *dist,
   int dist_count, const T &proj_xi, const T &proj_alpha, const T &proj_beta, const T &x_cam,
-  const T &y_cam, const T &z_cam, T &u_out, T &v_out,
-  double theta_max = constants::kPi
+  const T &y_cam, const T &z_cam, T &u_out, T &v_out, double theta_max = constants::kPi
 )
 {
-  if (!intrinsics || dist_count < 0 || dist_count > 14 || (dist_count && !dist) ||
-      !detail::finiteRay(x_cam, y_cam, z_cam) ||
-      !detail::withinTheta(proj_type, x_cam, y_cam, z_cam, theta_max))
+  if (!intrinsics || dist_count < 0 || dist_count > 14 || (dist_count && !dist) || !detail::finiteRay(x_cam, y_cam, z_cam) || !detail::withinTheta(proj_type, x_cam, y_cam, z_cam, theta_max))
     return detail::reject(u_out, v_out);
   for (int i = 0; i < 4; ++i)
     if (!std::isfinite(detail::scalarValue(intrinsics[i]))) return detail::reject(u_out, v_out);
   for (int i = 0; i < dist_count; ++i)
     if (!std::isfinite(detail::scalarValue(dist[i]))) return detail::reject(u_out, v_out);
-  if (std::abs(detail::scalarValue(intrinsics[0])) <= detail::epsilon<T>() ||
-      std::abs(detail::scalarValue(intrinsics[1])) <= detail::epsilon<T>())
+  if (std::abs(detail::scalarValue(intrinsics[0])) <= detail::epsilon<T>() || std::abs(detail::scalarValue(intrinsics[1])) <= detail::epsilon<T>())
     return detail::reject(u_out, v_out);
   int required = 0;
   switch (dist_type)
   {
     case DistortionModelType::RADTAN4:
     case DistortionModelType::OPENCV_FISHEYE4:
-    case DistortionModelType::KB4: required = 4; break;
-    case DistortionModelType::RADTAN5: required = 5; break;
+    case DistortionModelType::KB4:
+      required = 4;
+      break;
+    case DistortionModelType::RADTAN5:
+      required = 5;
+      break;
     case DistortionModelType::RATIONAL8:
-    case DistortionModelType::KB8: required = 8; break;
-    case DistortionModelType::THIN_PRISM12: required = 12; break;
-    case DistortionModelType::TILTED14: required = 14; break;
+    case DistortionModelType::KB8:
+      required = 8;
+      break;
+    case DistortionModelType::THIN_PRISM12:
+      required = 12;
+      break;
+    case DistortionModelType::TILTED14:
+      required = 14;
+      break;
     case DistortionModelType::NONE:
     case DistortionModelType::EQUIDISTANT:
     case DistortionModelType::EQUISOLID:
     case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC: break;
+    case DistortionModelType::ORTHOGRAPHIC:
+      break;
     case DistortionModelType::OMNIDIRECTIONAL:
-    case DistortionModelType::UNKNOWN: return detail::reject(u_out, v_out);
+    case DistortionModelType::UNKNOWN:
+      return detail::reject(u_out, v_out);
   }
   if (dist_count != required) return detail::reject(u_out, v_out);
+  if (proj_type == ProjectionModelType::OMNIDIRECTIONAL || proj_type == ProjectionModelType::DOUBLE_SPHERE || proj_type == ProjectionModelType::EUCM)
+  {
+    switch (dist_type)
+    {
+      case DistortionModelType::NONE:
+      case DistortionModelType::RADTAN4:
+      case DistortionModelType::RADTAN5:
+      case DistortionModelType::RATIONAL8:
+      case DistortionModelType::THIN_PRISM12:
+      case DistortionModelType::TILTED14:
+        break;
+      default:
+        return detail::reject(u_out, v_out);
+    }
+  }
   const auto xi = detail::scalarValue(proj_xi);
   const auto alpha = detail::scalarValue(proj_alpha);
   const auto beta = detail::scalarValue(proj_beta);
-  if ((proj_type == ProjectionModelType::OMNIDIRECTIONAL && !std::isfinite(xi)) ||
-      (proj_type == ProjectionModelType::DOUBLE_SPHERE &&
-       (!std::isfinite(xi) || xi <= -1 || xi >= 1 || !std::isfinite(alpha) || alpha < 0 || alpha > 1)) ||
-      (proj_type == ProjectionModelType::EUCM &&
-       (!std::isfinite(beta) || beta <= 0 || !std::isfinite(alpha) || alpha < 0 || alpha > 1)))
+  if ((proj_type == ProjectionModelType::OMNIDIRECTIONAL && !std::isfinite(xi)) || (proj_type == ProjectionModelType::DOUBLE_SPHERE && (!std::isfinite(xi) || xi <= -1 || xi >= 1 || !std::isfinite(alpha) || alpha < 0 || alpha > 1)) || (proj_type == ProjectionModelType::EUCM && (!std::isfinite(beta) || beta <= 0 || !std::isfinite(alpha) || alpha < 0 || alpha > 1)))
     return detail::reject(u_out, v_out);
-  return detail::dispatchParametric(proj_type, dist_type, intrinsics, dist, dist_count,
-    proj_xi, proj_alpha, proj_beta, x_cam, y_cam, z_cam, u_out, v_out);
+  return detail::dispatchParametric(
+    proj_type, dist_type, intrinsics, dist, dist_count, proj_xi, proj_alpha, proj_beta, x_cam,
+    y_cam, z_cam, u_out, v_out
+  );
 }
 
 template <typename T, typename Scalar>
 [[nodiscard]] bool projectGeneric(
-  const CameraModelT<Scalar> &model, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out
+  const CameraModelT<Scalar> &model, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out,
+  T &v_out
 )
 {
   if (model.distortion.count > 14) return detail::reject(u_out, v_out);
-  const T intrinsics[4] = {T(model.intrinsics.fx), T(model.intrinsics.fy),
-                           T(model.intrinsics.cx), T(model.intrinsics.cy)};
+  const T intrinsics[4] = {
+    T(model.intrinsics.fx), T(model.intrinsics.fy), T(model.intrinsics.cx), T(model.intrinsics.cy)};
   T dist[14];
   for (int i = 0; i < 14; ++i) dist[i] = T(model.distortion.coeffs[i]);
-  return projectGenericParametric(model.projection.type, model.distortion.type, intrinsics,
-    dist, model.distortion.count, T(model.projection.xi), T(model.projection.alpha),
-    T(model.projection.beta), x_cam, y_cam, z_cam, u_out, v_out, model.projection.theta_max);
+  return projectGenericParametric(
+    model.projection.type, model.distortion.type, intrinsics, dist, model.distortion.count,
+    T(model.projection.xi), T(model.projection.alpha), T(model.projection.beta), x_cam, y_cam,
+    z_cam, u_out, v_out, model.projection.theta_max
+  );
 }
 
 }  // namespace camxiom::projection_template
