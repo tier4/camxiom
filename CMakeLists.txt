@@ -375,6 +375,8 @@ option(CAMXIOM_BUILD_BENCHMARKS "Build camxiom microbenchmarks" OFF)
 if(CAMXIOM_BUILD_BENCHMARKS)
   add_executable(camxiom_projection_benchmark benchmarks/projection_benchmark.cpp)
   target_link_libraries(camxiom_projection_benchmark PRIVATE camxiom_core)
+  add_executable(camxiom_projection_template_benchmark benchmarks/projection_template_benchmark.cpp)
+  target_link_libraries(camxiom_projection_template_benchmark PRIVATE camxiom_core)
   if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(WARNING
       "camxiom: CAMXIOM_BUILD_BENCHMARKS is ON but CMAKE_BUILD_TYPE is unset; "
@@ -440,6 +442,7 @@ if(BUILD_TESTING)
     # denominators and overflow triggers through the public projection API,
     # float and double, scalar and batch.
     camxiom_add_gtest(camxiom_projection_error_paths_test tests/projection_error_paths_test.cpp)
+    camxiom_add_gtest(camxiom_projection_template_test tests/projection_template_test.cpp)
     camxiom_add_gtest(camxiom_camera_info_yaml_test tests/camera_info_yaml_test.cpp)
     camxiom_add_gtest(camxiom_remap_test tests/remap_test.cpp)
     camxiom_add_gtest(camxiom_remap_kernel_test tests/remap_kernel_test.cpp)

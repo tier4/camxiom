@@ -545,7 +545,8 @@ camxiom | RayResult64 pixelToRay64( const CameraModel64 &model, const Pixel2d &p
 namespace camxiom
 
 === include/camxiom/projection_template.hpp ===
-camxiom::projection_template | template <typename T, typename Scalar> [[nodiscard]] bool projectGeneric( const CameraModelT<Scalar> &model, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
+camxiom::projection_template | template <typename T, typename Scalar> [[gnu::always_inline]] [[nodiscard]] inline bool projectGeneric( const CameraModelT<Scalar> &model, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
+camxiom::projection_template | template <typename T> [[gnu::always_inline]] [[nodiscard]] inline bool projectRadtan5( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectDoubleSphere( const T *intrinsics, const T &xi, const T &alpha, const T *dist, int dist_count, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectEquidistant( const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectEquisolid( const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
@@ -556,7 +557,6 @@ camxiom::projection_template | template <typename T> [[nodiscard]] bool projectK
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectKB8( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectOmnidirectional( const T *intrinsics, const T &xi, const T *dist, int dist_count, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectOrthographic( const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
-camxiom::projection_template | template <typename T> [[nodiscard]] bool projectRadtan5( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectRational8( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectStereographic( const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectThinPrism12( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )

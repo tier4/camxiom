@@ -685,3 +685,74 @@ TEST(AutoDiffJacobian, AcceptsTheLegacyFiveCoefficientRadtan4Layout)
     }
   }
 }
+
+TEST(AutoDiffJacobian, NonFiniteParametersRejectAndClearBothTemplatePaths)
+{
+  using Jet = ceres::Jet<double, 3>;
+  const double inf = std::numeric_limits<double>::infinity();
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  for (const auto &named : representativeModels())
+    for (const Eigen::Vector3d &ray : {Eigen::Vector3d(0, 0, 1), Eigen::Vector3d(.2, .1, 1)})
+      for (double invalid : {nan, inf, -inf})
+        for (int i = 0; i < 4 + named.model.distortion.count; ++i)
+        {
+          auto m = named.model;
+          const std::array<double *, 4> intr = {
+            &m.intrinsics.fx, &m.intrinsics.fy, &m.intrinsics.cx, &m.intrinsics.cy};
+          if (i < 4)
+            *intr[i] = invalid;
+          else
+            m.distortion.coeffs[i - 4] = invalid;
+          SCOPED_TRACE(named.name);
+          SCOPED_TRACE(i);
+          const auto ad = autodiffJacobian(m, ray);
+          EXPECT_FALSE(ad.ok);
+          EXPECT_EQ(ad.u, 0.0);
+          EXPECT_EQ(ad.v, 0.0);
+          EXPECT_TRUE(ad.J.isZero());
+          Jet u(17), v(19);
+          EXPECT_FALSE(camxiom::projection_template::projectGeneric(
+            m, Jet(ray.x(), 0), Jet(ray.y(), 1), Jet(ray.z(), 2), u, v
+          ));
+          EXPECT_EQ(u.a, 0.0);
+          EXPECT_EQ(v.a, 0.0);
+          EXPECT_TRUE(u.v.isZero());
+          EXPECT_TRUE(v.v.isZero());
+        }
+}
+
+TEST(AutoDiffJacobian, ModelDispatchPreservesRayDerivativesAtTheFisheyeCap)
+{
+  using Jet = ceres::Jet<double, 3>;
+  for (auto named : representativeModels())
+  {
+    auto &m = named.model;
+    if (m.projection.type != ProjectionModelType::FISHEYE_THETA) continue;
+    for (double x : {0.0, 1e-16, .25, 1.0})
+    {
+      const Eigen::Vector3d ray(x, 0, 1);
+      const double angle = std::atan2(x, 1.0);
+      for (double cap : {std::nextafter(angle, 0.0), angle, std::nextafter(angle, 1.0), 1e-20, 1.4})
+      {
+        m.projection.theta_max = cap;
+        const bool expected = cap > 0 && angle <= cap;
+        const auto ad = autodiffJacobian(m, ray);
+        Jet u(17), v(19);
+        EXPECT_EQ(
+          camxiom::projection_template::projectGeneric(m, Jet(x, 0), Jet(0, 1), Jet(1, 2), u, v),
+          expected
+        );
+        EXPECT_EQ(ad.ok, expected);
+        EXPECT_DOUBLE_EQ(u.a, ad.u);
+        EXPECT_DOUBLE_EQ(v.a, ad.v);
+        for (int i = 0; i < 3; ++i)
+        {
+          EXPECT_DOUBLE_EQ(u.v[i], ad.J(0, i));
+          EXPECT_DOUBLE_EQ(v.v[i], ad.J(1, i));
+          EXPECT_TRUE(std::isfinite(u.v[i]));
+          EXPECT_TRUE(std::isfinite(v.v[i]));
+        }
+      }
+    }
+  }
+}
