@@ -30,6 +30,8 @@
 #include "camxiom/model.hpp"
 #include "camxiom/projection.hpp"
 #include "camxiom/projection64.hpp"
+#include "camxiom/projection_template.hpp"
+#include "camxiom/compat.hpp"
 #include "camxiom/types.hpp"
 #include "camxiom/types64.hpp"
 
@@ -188,4 +190,32 @@ TEST(ProjectionErrorPaths, BatchForwardPropagatesTheScalarErrorStatuses)
       << c.name << ": the trigger lane did not produce DOMAIN_ERROR";
     EXPECT_EQ(valid, expected_valid) << c.name;
   }
+}
+
+TEST(ProjectionTemplateDomain, HonorsModelCapAndRejectsNonFiniteResults)
+{
+  camxiom::CameraInfo info;
+  info.k = {500, 0, 320, 0, 500, 240, 0, 0, 1};
+  info.distortion_model = "equidistant";
+  info.d = {0, 0, 0, 0};
+  auto model = camxiom::makeCameraModel(info);
+  model.projection.theta_max = 1.0f;
+  double u = 17, v = 19;
+  EXPECT_FALSE(camxiom::projection_template::projectGeneric(
+    model, std::sin(1.2), 0.0, std::cos(1.2), u, v));
+  EXPECT_EQ(u, 0);
+  EXPECT_EQ(v, 0);
+  EXPECT_TRUE(camxiom::projection_template::projectGeneric(
+    model, std::sin(0.5), 0.0, std::cos(0.5), u, v));
+  info.distortion_model = "rational_polynomial";
+  info.d = {0, 0, 0, 0, 0, -1, 0, 0};
+  model = camxiom::makeCameraModel(info);
+  EXPECT_FALSE(camxiom::projection_template::projectGeneric(model, 1.0, 0.0, 1.0, u, v));
+  EXPECT_EQ(u, 0);
+  EXPECT_EQ(v, 0);
+  const double intr[4] = {500, 500, 320, 240};
+  const double dist[8] = {0, 0, 0, 0, 0, -1, 0, 0};
+  EXPECT_FALSE(camxiom::projection_template::projectRational8(intr, dist, 1.0, 0.0, 1.0, u, v));
+  EXPECT_FALSE(camxiom::projection_template::projectGeneric(
+    model, std::numeric_limits<double>::infinity(), 0.0, 1.0, u, v));
 }

@@ -158,3 +158,17 @@ struct ReprojCost {
 
 Note that these templates apply `u = fx·x + cx` without skew (the
 4-element intrinsics block is `[fx, fy, cx, cy]`).
+
+## テンプレート投影の定義域
+
+`projectGeneric` はモデルの `theta_max` を適用します。
+`projectGenericParametric` は末尾の省略可能な `double theta_max` で評価上限を
+指定できます（既定値は π）。観測採用の上限とは別に、利用側が評価上限を選べます。
+PnP の自動微分経路は現在のパラメータから求めた上限を渡し、解析微分経路と同じ
+多項式の単調範囲への縮小を適用します。
+
+両ディスパッチとモデル別テンプレートは、非有限の入力・結果および分母の特異点で
+`false` を返し、出力をゼロにします。rational の分母は通常投影と同じく符号の両方を
+許し、絶対値が精度別の閾値以下なら拒否します。正の分母だけを採用する方針や
+画像内判定は利用側の責務です。モデル別テンプレートはモデルの視野宣言を受け取らない
+数式部品なので、視野上限を含む判定には generic API を使ってください。

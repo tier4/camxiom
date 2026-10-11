@@ -379,7 +379,7 @@ AutoDiffJacobian autodiffJacobian(const CameraModel64 &m, const Eigen::Vector3d 
   AutoDiffJacobian out;
   out.ok = tpl::projectGenericParametric<Jet>(
     m.projection.type, m.distortion.type, intrinsics, dist, static_cast<int>(m.distortion.count),
-    xi, alpha, beta, x, y, z, u, v
+    xi, alpha, beta, x, y, z, u, v, m.projection.theta_max
   );
   out.u = u.a;
   out.v = v.a;
@@ -488,5 +488,60 @@ TEST(AutoDiffJacobian, Radtan4ReadsOnlyFourCoefficients)
     ASSERT_TRUE(ok);
     EXPECT_TRUE(close(u.a, analytic.pixel.u, 1e-6, 1e-9));
     EXPECT_TRUE(close(v.a, analytic.pixel.v, 1e-6, 1e-9));
+  }
+}
+
+TEST(AutoDiffJacobian, RejectsTheSameRayDomainAsRuntime)
+{
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  for (auto nm : representativeModels())
+  {
+    if (nm.model.projection.type != ProjectionModelType::PINHOLE)
+      nm.model.projection.theta_max = 1.0;
+    for (const Eigen::Vector3d &ray : std::vector<Eigen::Vector3d>{
+           {0, 0, 0}, {0, 0, -1}, {1, 0, 0}, {nan, 0, 1}, {0, inf, 1},
+           {1e200, 0, 1}, {std::sin(0.999), 0, std::cos(0.999)},
+           {std::sin(1.001), 0, std::cos(1.001)}, {1e-8, 0, 1e-8}})
+    {
+      const auto runtime = rayToPixel64(nm.model, ray);
+      const auto ad = autodiffJacobian(nm.model, ray);
+      EXPECT_EQ(ad.ok, runtime.ok()) << nm.name << " ray=" << ray.transpose();
+      if (!ad.ok)
+      {
+        EXPECT_EQ(ad.u, 0.0);
+        EXPECT_EQ(ad.v, 0.0);
+        EXPECT_TRUE(ad.J.isZero());
+      }
+    }
+  }
+}
+
+TEST(AutoDiffJacobian, RationalPoleAndNegativeBranchMatchRuntime)
+{
+  auto model = makePinholeRational8();
+  model.distortion.coeffs.fill(0.0);
+  model.distortion.coeffs[5] = -1.0;
+  for (double x : {0.5, 1.0, std::sqrt(2.0)})
+  {
+    const Eigen::Vector3d ray(x, 0, 1);
+    const auto runtime = rayToPixelWithJacobian64(model, ray);
+    const auto ad = autodiffJacobian(model, ray);
+    ASSERT_EQ(ad.ok, runtime.ok());
+    if (ad.ok)
+    {
+      EXPECT_NEAR(ad.u, runtime.pixel.u, 1e-9);
+      EXPECT_TRUE(ad.J.isApprox(runtime.J, 1e-9));
+      // Independent finite difference away from the pole.
+      for (int k = 0; k < 3; ++k)
+      {
+        auto plus = ray, minus = ray;
+        plus[k] += 1e-6;
+        minus[k] -= 1e-6;
+        auto pp = rayToPixel64(model, plus), pm = rayToPixel64(model, minus);
+        EXPECT_NEAR(ad.J(0, k), (pp.pixel.u - pm.pixel.u) / 2e-6, 1e-5);
+        EXPECT_NEAR(ad.J(1, k), (pp.pixel.v - pm.pixel.v) / 2e-6, 1e-5);
+      }
+    }
   }
 }

@@ -20,6 +20,7 @@
 #include "camxiom/projection_template.hpp"
 #include "camxiom/types64.hpp"
 #include "model/distortion_aux.hpp"
+#include "model/internal.hpp"
 #include "optimizer/pnp/pnp_cost_analytical_batch.hpp"
 #include "optimizer/pnp/pnp_gauss_newton.hpp"
 #include "optimizer/pnp/pnp_parameter_bounds.hpp"
@@ -169,14 +170,30 @@ struct PnpCost
     const T sk = T(camera_model.intrinsics.skew);
     const T intrinsics[4] = {
       focal_lengths[0], focal_lengths[1], principal_points[0], principal_points[1]};
+    // Use the same current-parameter domain as the analytical cost, including
+    // the local cap shrink when free fisheye coefficients move the fold.
+    auto evaluation_model = camxiom::toCameraModel64(camera_model);
+    evaluation_model.intrinsics.fx = tpl::detail::scalarValue(focal_lengths[0]);
+    evaluation_model.intrinsics.fy = tpl::detail::scalarValue(focal_lengths[1]);
+    evaluation_model.intrinsics.cx = tpl::detail::scalarValue(principal_points[0]);
+    evaluation_model.intrinsics.cy = tpl::detail::scalarValue(principal_points[1]);
+    for (int i = 0; i < camera_model.distortion.count; ++i)
+      evaluation_model.distortion.coeffs[i] = tpl::detail::scalarValue(dist_coeffs[i]);
+    evaluation_model.projection.xi = tpl::detail::scalarValue(proj_params[0]);
+    evaluation_model.projection.alpha = tpl::detail::scalarValue(proj_params[1]);
+    evaluation_model.projection.beta = tpl::detail::scalarValue(proj_params[2]);
+    camxiom::detail::rebuildDistortionAuxState(evaluation_model.distortion);
+    bool model_valid = camxiom::validateCameraModel64(evaluation_model) == StatusCode::OK;
+    if (!model_valid && camxiom::detail::shrinkThetaMaxToPolynomialMonotoneRange(evaluation_model))
+      model_valid = camxiom::validateCameraModel64(evaluation_model) == StatusCode::OK;
     T u, v;
-    const bool ok = tpl::projectGenericParametric(
+    const bool ok = model_valid && tpl::projectGenericParametric(
       camera_model.projection.type, camera_model.distortion.type, intrinsics, dist_coeffs,
       static_cast<int>(camera_model.distortion.count),
       proj_params[0],  // xi
       proj_params[1],  // alpha
       proj_params[2],  // beta
-      x_cam, y_cam, z_cam, u, v
+      x_cam, y_cam, z_cam, u, v, evaluation_model.projection.theta_max
     );
     if (!ok)
     {
