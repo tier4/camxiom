@@ -221,10 +221,23 @@ struct ReducedNormal
   std::vector<std::string> labels;  // p labels, parallel to S rows/cols
 };
 
+/// Mirror of the solver-side principal-point prior for the diagnostics
+/// rebuild: when the objective carried a prior, its information
+/// (1/sigma^2 on the cx/cy diagonal) must appear in S too, or the reported
+/// parameter_std / observability would describe a DIFFERENT (prior-less)
+/// objective than the one Ceres minimised. The prior residuals are NOT added
+/// to rss/dof: sigma^2 stays estimated from reprojection residuals only, so
+/// Cov = sigma^2 · (JᵀJ + sigma_prior^-2·P)^-1.
+struct PrincipalPointPriorInfo
+{
+  bool enabled{false};
+  double sigma_px{0.0};
+};
+
 bool buildReducedNormal(
   const std::vector<CalibrationView> &views, const CameraModel &model,
   const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t,
-  camxiom::optimizer::PnpFlag flags, ReducedNormal &out
+  camxiom::optimizer::PnpFlag flags, const PrincipalPointPriorInfo &pp_prior, ReducedNormal &out
 )
 {
   namespace opt = camxiom::optimizer;
@@ -353,6 +366,24 @@ bool buildReducedNormal(
   // has its pose absent from the residual graph (D_v = B_v = 0), so it is
   // skipped from the Schur sum AND excluded from the pose degrees of freedom —
   // it must not, on its own, make S unbuildable.
+  // Principal-point prior information. Added to A before the Schur reduction
+  // so it reaches both the covariance (C3) and observability (C4) readouts.
+  // A prior-backed cx/cy is determined BY the prior — it must not show up as
+  // underdetermined, and its std saturates at sigma_px when the data itself
+  // carries no information.
+  if (pp_prior.enabled && pp_prior.sigma_px > 0.0)
+  {
+    const double info = 1.0 / (pp_prior.sigma_px * pp_prior.sigma_px);
+    for (int i = 0; i < p; ++i)
+    {
+      if (params[static_cast<std::size_t>(i)].kind == ParamKind::CX ||
+          params[static_cast<std::size_t>(i)].kind == ParamKind::CY)
+      {
+        A(i, i) += info;
+      }
+    }
+  }
+
   Eigen::MatrixXd S = A;
   long n_active = 0;
   if (!fix_ext)
@@ -637,11 +668,12 @@ void fillNearBounds(
 void computeCalibrationDiagnostics(
   const std::vector<CalibrationView> &views, const CameraModel &model,
   const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t,
-  camxiom::optimizer::PnpFlag flags, CalibrationResult &result
+  camxiom::optimizer::PnpFlag flags, const PrincipalPointPriorInfo &pp_prior,
+  CalibrationResult &result
 )
 {
   ReducedNormal rn;
-  if (!buildReducedNormal(views, model, R, t, flags, rn))
+  if (!buildReducedNormal(views, model, R, t, flags, pp_prior, rn))
   {
     return;
   }
@@ -731,6 +763,19 @@ CalibrationResult calibrate(
     pp_lower_y = std::min(pp_lower_y, static_cast<double>(solve_initial_model.intrinsics.cy));
     pp_upper_x = std::max(pp_upper_x, static_cast<double>(solve_initial_model.intrinsics.cx));
     pp_upper_y = std::max(pp_upper_y, static_cast<double>(solve_initial_model.intrinsics.cy));
+  }
+
+  if (options.apply_principal_point_prior)
+  {
+    const double ref_x = options.principal_point_prior_reference_x;
+    const double ref_y = options.principal_point_prior_reference_y;
+    const double sigma = options.principal_point_prior_sigma_px;
+    if (
+      !std::isfinite(ref_x) || !std::isfinite(ref_y) || !std::isfinite(sigma) || ref_x <= 0.0 ||
+      ref_y <= 0.0 || sigma <= 0.0)
+    {
+      return failedCalibrationResult(StatusCode::INVALID_INPUT);
+    }
   }
 
   const std::size_t n_views = views.size();
@@ -874,6 +919,14 @@ CalibrationResult calibrate(
     opts.upper_bound.principal_points = Eigen::Vector2d(cx * (1.0 + r), cy * (1.0 + r));
   }
 
+  if (options.apply_principal_point_prior)
+  {
+    opts.principal_point_prior.enabled = true;
+    opts.principal_point_prior.reference_x = options.principal_point_prior_reference_x;
+    opts.principal_point_prior.reference_y = options.principal_point_prior_reference_y;
+    opts.principal_point_prior.sigma_px = options.principal_point_prior_sigma_px;
+  }
+
   // --------------------------------------------------------------------
   // Step 4: a single Ceres pass. This is the ONLY solve() call -- no
   // loop, no restart, no staging (D46).
@@ -960,9 +1013,11 @@ CalibrationResult calibrate(
   if (options.estimate_uncertainty && (result.status == StatusCode::OK || result.status == StatusCode::NON_CONVERGED))
   {
     fillNearBounds(result.camera_model, lock_flags, opts.lower_bound, opts.upper_bound, result);
+    const PrincipalPointPriorInfo pp_prior{
+      options.apply_principal_point_prior, options.principal_point_prior_sigma_px};
     computeCalibrationDiagnostics(
       views, result.camera_model, result.per_view_rotations, result.per_view_translations,
-      lock_flags, result
+      lock_flags, pp_prior, result
     );
   }
 

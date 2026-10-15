@@ -80,6 +80,37 @@ void applyScalarBound(
   }
 }
 
+/// Gaussian prior residual on the principal-point block [cx, cy]:
+/// r = (p - reference) / sigma. Constant Jacobian (sigma^-1 * I2), so an
+/// analytic SizedCostFunction avoids the autodiff machinery entirely.
+class PrincipalPointPriorCost final : public ceres::SizedCostFunction<2, 2>
+{
+public:
+  PrincipalPointPriorCost(double reference_x, double reference_y, double inv_sigma)
+  : reference_x_(reference_x), reference_y_(reference_y), inv_sigma_(inv_sigma)
+  {
+  }
+
+  bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const final
+  {
+    residuals[0] = (parameters[0][0] - reference_x_) * inv_sigma_;
+    residuals[1] = (parameters[0][1] - reference_y_) * inv_sigma_;
+    if (jacobians != nullptr && jacobians[0] != nullptr)
+    {
+      jacobians[0][0] = inv_sigma_;
+      jacobians[0][1] = 0.0;
+      jacobians[0][2] = 0.0;
+      jacobians[0][3] = inv_sigma_;
+    }
+    return true;
+  }
+
+private:
+  double reference_x_;
+  double reference_y_;
+  double inv_sigma_;
+};
+
 void eigenToArray(const std::vector<Eigen::Vector3d> &src, std::vector<std::array<double, 3>> &dst)
 {
   dst.resize(src.size());
@@ -329,6 +360,7 @@ private:
   ceres::Solver::Summary solver_summary_{};
   double huber_loss_delta_{1.0};
   bool print_summary_{false};
+  PnpPrincipalPointPrior pp_prior_{};
 
   std::array<double, 2> focal_lengths_{0.0, 0.0};
   std::array<double, 2> principal_points_{0.0, 0.0};
@@ -440,6 +472,7 @@ bool PnpSolver::Impl::solve(
     options.solver_options.minimizer_progress_to_stdout;
   huber_loss_delta_ = options.huber_loss_delta;
   print_summary_ = options.print_summary;
+  pp_prior_ = options.principal_point_prior;
 
   cost_type_ = options.cost_type;
   flags_ = flags;
@@ -769,6 +802,10 @@ double PnpSolver::Impl::optimize(
   std::size_t total_points = 0;
   const int effective_dc = std::max(1, dist_count_);
 
+  // Reprojection blocks only: the principal-point prior block (if any) is
+  // excluded so the returned rmse stays a pure reprojection statistic.
+  std::vector<ceres::ResidualBlockId> reprojection_block_ids;
+
   for (std::size_t i = 0; i < object_points.size(); ++i)
   {
     const auto &obj = object_points[i];
@@ -791,20 +828,20 @@ double PnpSolver::Impl::optimize(
           ceres::CostFunction *cost = createAnalyticalBatchCost(
             ObjectPoints{obj[j]}, ImagePoints{img[j]}, camera_model, effective_dc
           );
-          problem_->AddResidualBlock(
+          reprojection_block_ids.push_back(problem_->AddResidualBlock(
             cost, new ceres::HuberLoss(huber_loss_delta_), rvecs_[i].data(), tvecs_[i].data(),
             focal_lengths_.data(), principal_points_.data(), dist_.data(), projection_params_.data()
-          );
+          ));
         }
       }
       else
       {
         // Batch: one CostFunction per view with 2*N residuals
         ceres::CostFunction *cost = createAnalyticalBatchCost(obj, img, camera_model, effective_dc);
-        problem_->AddResidualBlock(
+        reprojection_block_ids.push_back(problem_->AddResidualBlock(
           cost, nullptr, rvecs_[i].data(), tvecs_[i].data(), focal_lengths_.data(),
           principal_points_.data(), dist_.data(), projection_params_.data()
-        );
+        ));
       }
     }
     else
@@ -818,10 +855,10 @@ double PnpSolver::Impl::optimize(
         {
           loss = new ceres::HuberLoss(huber_loss_delta_);
         }
-        problem_->AddResidualBlock(
+        reprojection_block_ids.push_back(problem_->AddResidualBlock(
           cost, loss, rvecs_[i].data(), tvecs_[i].data(), focal_lengths_.data(),
           principal_points_.data(), dist_.data(), projection_params_.data()
-        );
+        ));
       }
     }
   }
@@ -829,6 +866,21 @@ double PnpSolver::Impl::optimize(
   if (total_points == 0)
   {
     return std::numeric_limits<double>::infinity();
+  }
+
+  if (
+    pp_prior_.enabled && pp_prior_.sigma_px > 0.0 &&
+    !hasFlag(flags_, PnpFlag::FIX_PRINCIPAL_POINTS))
+  {
+    // Soft Gaussian prior on [cx, cy]. Added to the minimized objective (and
+    // therefore to last_summary_.final_cost) but deliberately NOT to
+    // reprojection_block_ids: the rmse below must stay reprojection-only.
+    problem_->AddResidualBlock(
+      new PrincipalPointPriorCost(
+        pp_prior_.reference_x, pp_prior_.reference_y, 1.0 / pp_prior_.sigma_px
+      ),
+      nullptr, principal_points_.data()
+    );
   }
 
   ceres::Solver::Options opt = solver_options_;
@@ -846,6 +898,9 @@ double PnpSolver::Impl::optimize(
 
   ceres::Problem::EvaluateOptions eval;
   eval.apply_loss_function = false;
+  // Evaluate only the reprojection blocks: identical to a full evaluation when
+  // no prior exists, and keeps rmse a pure reprojection statistic when it does.
+  eval.residual_blocks = reprojection_block_ids;
   double half_l2_cost = 0.0;
   problem_->Evaluate(eval, &half_l2_cost, nullptr, nullptr, nullptr);
   const double rmse_2d = std::sqrt((2.0 * half_l2_cost) / static_cast<double>(total_points));

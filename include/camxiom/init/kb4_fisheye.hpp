@@ -109,9 +109,11 @@ struct KB4InitResult
 ///   value) because they are not uniquely identifiable from typical
 ///   fisheye calibration geometries under sub-pixel noise; freeing them
 ///   creates aliasing local minima that inflate |D| by orders of
-///   magnitude while reprojection RMS stays acceptable. The downstream
-///   full calibration (calib::calibrate) may refine k3, k4 with additional
-///   data. On any failure (solver_failure, non-finite output) we fall back
+///   magnitude while reprojection RMS stays acceptable. Whether a
+///   downstream calib::calibrate pass frees k3, k4 (and under what data
+///   conditions) is the caller's policy decision; this routine only
+///   guarantees a usable (k1, k2) seed.
+///   On any failure (solver_failure, non-finite output) we fall back
 ///   to the Phase A estimate and still return OK, because Phase A is
 ///   already a usable initial guess for the downstream calibrator.
 ///

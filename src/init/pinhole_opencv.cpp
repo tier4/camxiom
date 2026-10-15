@@ -21,6 +21,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <limits>
 
 namespace camxiom::init
 {
@@ -37,6 +38,22 @@ StatusCode estimatePinholeOpenCv(
   double aspect_ratio, Eigen::Matrix3d &K_out
 )
 {
+  return estimatePinholeOpenCv(
+    views, image_width, image_height, aspect_ratio, K_out, nullptr,
+    kDefaultMaxNormalConditionNumber
+  );
+}
+
+StatusCode estimatePinholeOpenCv(
+  const std::vector<PlanarObservation> &views, int image_width, int image_height,
+  double aspect_ratio, Eigen::Matrix3d &K_out, PinholeInitDiagnostics *diagnostics,
+  double max_normal_condition_number
+)
+{
+  if (diagnostics != nullptr)
+  {
+    *diagnostics = PinholeInitDiagnostics{};
+  }
   if (views.empty() || image_width <= 0 || image_height <= 0 || !std::isfinite(aspect_ratio) || aspect_ratio < 0.0)
   {
     return StatusCode::INVALID_INPUT;
@@ -109,7 +126,26 @@ StatusCode estimatePinholeOpenCv(
   const Eigen::Vector2d rhs = A.transpose() * b;
   Eigen::JacobiSVD<Eigen::Matrix2d> svd(normal, Eigen::ComputeFullU | Eigen::ComputeFullV);
   svd.setThreshold(Eigen::NumTraits<double>::epsilon());
+  const Eigen::Vector2d singular_values = svd.singularValues();
+  const double normal_condition = singular_values(1) > 0.0
+    ? singular_values(0) / singular_values(1)
+    : std::numeric_limits<double>::infinity();
+  if (diagnostics != nullptr)
+  {
+    diagnostics->normal_max_singular_value = singular_values(0);
+    diagnostics->normal_min_singular_value = singular_values(1);
+    diagnostics->normal_condition_number = normal_condition;
+  }
   if (svd.rank() < 2)
+  {
+    return StatusCode::DEGENERATE_CONFIG;
+  }
+  // Views sharing one tilt direction keep the system rank-2 but nearly
+  // singular; the least-squares solution is then numerically meaningless even
+  // when both components come out positive. Refuse it instead of seeding the
+  // joint refinement with fiction (the fx=11396 incident class). The negated
+  // comparison also rejects a NaN condition number.
+  if (!(normal_condition <= max_normal_condition_number))
   {
     return StatusCode::DEGENERATE_CONFIG;
   }
@@ -130,6 +166,12 @@ StatusCode estimatePinholeOpenCv(
 
   double fx = std::sqrt(1.0 / inverse_focal_sq.x());
   double fy = std::sqrt(1.0 / inverse_focal_sq.y());
+  if (diagnostics != nullptr)
+  {
+    diagnostics->solution_positive = true;
+    diagnostics->fx = fx;
+    diagnostics->fy = fy;
+  }
   if (aspect_ratio > 0.0)
   {
     const double shared = (fx + fy) / (aspect_ratio + 1.0);

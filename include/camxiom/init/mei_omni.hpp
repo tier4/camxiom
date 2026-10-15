@@ -76,8 +76,10 @@ struct MEIInitResult
 ///
 /// Phase B (Ceres polish with xi locked): PnpSolver refines (fx, fy, cx, cy,
 /// all per-view poses) starting from the Phase A heuristic seed. xi is held
-/// at 1.0 via PnpFlag::FIX_PROJECTION_PARAMS: xi refinement is deferred to
-/// the downstream full calibration with more data and multi-seed restarts.
+/// at 1.0 via PnpFlag::FIX_PROJECTION_PARAMS within this routine. Whether
+/// (and when) a downstream calib::calibrate pass frees xi is the caller's
+/// policy decision; identifying xi typically needs more data than this
+/// initializer requires.
 ///
 /// If phaseBLooksUsable() rejects the Ceres result we fall back to the
 /// Phase A heuristic K + estimatePoseDLT poses and still return OK (Phase

@@ -64,6 +64,21 @@ struct CalibrationOptions
   double principal_point_reference_x{0.0};
   double principal_point_reference_y{0.0};
   double principal_point_bound_relative_tolerance{0.10};
+  /// Soft Gaussian prior pulling cx/cy toward a caller-supplied reference
+  /// (typically the image centre): two extra residuals
+  /// ((cx-ref_x)/sigma, (cy-ref_y)/sigma) appended to the objective (MAP).
+  /// Complements — does not replace — the hard box bounds above: on
+  /// narrow-FOV data the principal point is near-unobservable and otherwise
+  /// drifts along a flat valley onto a bound. WHEN a prior is warranted and
+  /// how tight sigma is are the caller's policy; camxiom only applies it.
+  /// The prior information (1/sigma^2 on the cx/cy diagonal) is included in
+  /// the uncertainty / observability diagnostics so parameter_std reflects
+  /// the objective actually minimised. rms_reprojection_error_px is never
+  /// affected (reprojection-only by construction). Pixel units.
+  bool apply_principal_point_prior{false};
+  double principal_point_prior_reference_x{0.0};
+  double principal_point_prior_reference_y{0.0};
+  double principal_point_prior_sigma_px{0.0};
   /// When true (default), calibrate() also fills the parameter uncertainty
   /// and the observability diagnostic on CalibrationResult. That costs one
   /// extra full-Jacobian pass at the solution plus small (p x p, p<=~20) linear
@@ -260,12 +275,16 @@ using optimizer::PnpFlag;
 ///
 /// `lock_flags` is caller-supplied and decides which intrinsic /
 /// distortion / projection parameters are held fixed in the Ceres pass.
-/// The caller MUST pass per-model identifiability locks: KB4
-/// FIX_DIST_2|FIX_DIST_3, MEI/DS/EUCM FIX_PROJECTION_PARAMS, pinhole NONE.
-/// Leaving non-identifiable distortion/projection parameters free will
-/// drive the solve into the aliasing failure described in the
-/// CalibrationResult observability notes (huge parameter values while the
-/// reprojection RMS still looks fine).
+/// camxiom does not prescribe a lock policy: which parameters to free,
+/// and when, is the application's strategy decision. Identifiability
+/// fact to inform that decision: KB4's high-order terms (k3, k4) and
+/// the MEI/DS/EUCM projection parameters (xi/alpha/beta) can be
+/// unobservable from narrow-coverage planar-board data and/or a
+/// cold-start seed; freeing them under those conditions can converge to
+/// an aliasing minimum (huge parameter values while the reprojection
+/// RMS still looks fine — see the CalibrationResult observability
+/// notes). The C4 observability diagnostics detect this after the
+/// solve; lock flags and box bounds are the tools to prevent it.
 ///
 /// @param views          One CalibrationView per board observation.
 /// @param initial_model   Fully specified seed (e.g. from getDefaultSeed

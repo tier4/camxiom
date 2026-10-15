@@ -39,6 +39,7 @@ camxiom::calib | struct CalibrationView
 camxiom::calib | using optimizer::PnpFlag
 camxiom::calib::CalibrationOptions | bool apply_initial_value_bounds
 camxiom::calib::CalibrationOptions | bool apply_principal_point_bounds
+camxiom::calib::CalibrationOptions | bool apply_principal_point_prior
 camxiom::calib::CalibrationOptions | bool compute_per_point_residuals
 camxiom::calib::CalibrationOptions | bool estimate_uncertainty
 camxiom::calib::CalibrationOptions | double bound_relative_tolerance
@@ -46,6 +47,9 @@ camxiom::calib::CalibrationOptions | double function_tolerance
 camxiom::calib::CalibrationOptions | double huber_loss_delta
 camxiom::calib::CalibrationOptions | double parameter_tolerance
 camxiom::calib::CalibrationOptions | double principal_point_bound_relative_tolerance
+camxiom::calib::CalibrationOptions | double principal_point_prior_reference_x
+camxiom::calib::CalibrationOptions | double principal_point_prior_reference_y
+camxiom::calib::CalibrationOptions | double principal_point_prior_sigma_px
 camxiom::calib::CalibrationOptions | double principal_point_reference_x
 camxiom::calib::CalibrationOptions | double principal_point_reference_y
 camxiom::calib::CalibrationOptions | int image_height
@@ -74,6 +78,30 @@ camxiom::calib::CalibrationResult | std::vector<std::string> underdetermined_par
 camxiom::calib::CalibrationResult | std::vector<std::vector<Eigen::Vector2d>> per_point_residuals
 camxiom::calib::CalibrationView | std::vector<Eigen::Vector2d> image_points
 camxiom::calib::CalibrationView | std::vector<Eigen::Vector3d> world_points
+namespace camxiom::calib
+
+=== include/camxiom/calib/mapping_compare.hpp ===
+camxiom::calib | [[nodiscard]] MappingComparison compareProjectionMappings( const CameraModel &model_a, const CameraModel &model_b, const MappingDomainSpec &spec )
+camxiom::calib | [[nodiscard]] MappingDomainReport validateMappingDomain( const CameraModel &model, const MappingDomainSpec &spec )
+camxiom::calib | struct MappingComparison
+camxiom::calib | struct MappingDomainReport
+camxiom::calib | struct MappingDomainSpec
+camxiom::calib::MappingComparison | StatusCode status
+camxiom::calib::MappingComparison | double max_angular_delta_rad
+camxiom::calib::MappingComparison | double p95_angular_delta_rad
+camxiom::calib::MappingComparison | double rms_angular_delta_rad
+camxiom::calib::MappingComparison | int both_valid
+camxiom::calib::MappingComparison | int lattice_points
+camxiom::calib::MappingComparison | int neither_valid
+camxiom::calib::MappingComparison | int only_a_valid
+camxiom::calib::MappingComparison | int only_b_valid
+camxiom::calib::MappingDomainReport | StatusCode status
+camxiom::calib::MappingDomainReport | int lattice_points
+camxiom::calib::MappingDomainReport | int valid_points
+camxiom::calib::MappingDomainSpec | int image_height
+camxiom::calib::MappingDomainSpec | int image_width
+camxiom::calib::MappingDomainSpec | int lattice_cols
+camxiom::calib::MappingDomainSpec | int lattice_rows
 namespace camxiom::calib
 
 === include/camxiom/calibration.hpp ===
@@ -218,6 +246,15 @@ namespace camxiom::init
 
 === include/camxiom/init/pinhole_opencv.hpp ===
 camxiom::init | [[nodiscard]] StatusCode estimatePinholeOpenCv( const std::vector<PlanarObservation> &views, int image_width, int image_height, double aspect_ratio, Eigen::Matrix3d &K_out )
+camxiom::init | [[nodiscard]] StatusCode estimatePinholeOpenCv( const std::vector<PlanarObservation> &views, int image_width, int image_height, double aspect_ratio, Eigen::Matrix3d &K_out, PinholeInitDiagnostics *diagnostics, double max_normal_condition_number )
+camxiom::init | inline constexpr double kDefaultMaxNormalConditionNumber = 3e4
+camxiom::init | struct PinholeInitDiagnostics
+camxiom::init::PinholeInitDiagnostics | bool solution_positive
+camxiom::init::PinholeInitDiagnostics | double fx
+camxiom::init::PinholeInitDiagnostics | double fy
+camxiom::init::PinholeInitDiagnostics | double normal_condition_number
+camxiom::init::PinholeInitDiagnostics | double normal_max_singular_value
+camxiom::init::PinholeInitDiagnostics | double normal_min_singular_value
 namespace camxiom::init
 
 === include/camxiom/init/pinhole_zhang.hpp ===
@@ -413,6 +450,7 @@ camxiom::optimizer | enum class PnpCostType : std::uint8_t
 camxiom::optimizer | struct PnpBound
 camxiom::optimizer | struct PnpInitialGuess
 camxiom::optimizer | struct PnpOptimizerOptions
+camxiom::optimizer | struct PnpPrincipalPointPrior
 camxiom::optimizer | struct PnpSolverOptions
 camxiom::optimizer | struct PnpSummary
 camxiom::optimizer | struct [[nodiscard]] PnpResult
@@ -436,6 +474,10 @@ camxiom::optimizer::PnpOptimizerOptions | double function_tolerance
 camxiom::optimizer::PnpOptimizerOptions | double gradient_tolerance
 camxiom::optimizer::PnpOptimizerOptions | double parameter_tolerance
 camxiom::optimizer::PnpOptimizerOptions | int max_num_iterations
+camxiom::optimizer::PnpPrincipalPointPrior | bool enabled
+camxiom::optimizer::PnpPrincipalPointPrior | double reference_x
+camxiom::optimizer::PnpPrincipalPointPrior | double reference_y
+camxiom::optimizer::PnpPrincipalPointPrior | double sigma_px
 camxiom::optimizer::PnpSolver | PnpResult solve( const ObjectPointSets &object_points, const ImagePointSets &image_points, const PnpInitialGuess &initial_guess, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
 camxiom::optimizer::PnpSolver | PnpSolver &operator=(PnpSolver &&) noexcept
 camxiom::optimizer::PnpSolver | PnpSolver &operator=(const PnpSolver &) = delete
@@ -450,6 +492,7 @@ camxiom::optimizer::PnpSolverOptions | PnpBound lower_bound
 camxiom::optimizer::PnpSolverOptions | PnpBound upper_bound
 camxiom::optimizer::PnpSolverOptions | PnpCostType cost_type
 camxiom::optimizer::PnpSolverOptions | PnpOptimizerOptions solver_options
+camxiom::optimizer::PnpSolverOptions | PnpPrincipalPointPrior principal_point_prior
 camxiom::optimizer::PnpSolverOptions | bool print_summary
 camxiom::optimizer::PnpSolverOptions | double huber_loss_delta
 camxiom::optimizer::PnpSummary | bool converged
