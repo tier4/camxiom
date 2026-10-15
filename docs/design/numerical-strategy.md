@@ -91,11 +91,13 @@ data cannot observe:
   length; joint optimization from a cold start routinely diverges.
 
 camxiom's stance: the library never silently fixes, drops, or regularizes
-anything. Instead it gives the caller `PnpFlag` locks (and documents the
-per-model required minimum), staged optimization as the recommended
-pattern, and — after the solve — the observability diagnostic that *names*
+anything — and it does not prescribe a lock policy either. It gives the
+caller `PnpFlag` locks, documents the per-model identifiability
+characteristics (which parameters can alias under which data conditions),
+and — after the solve — the observability diagnostic that *names*
 underdetermined parameters (Jacobi-scaled reduced normal matrix, condition
-number, weak-subspace projection). Low RMS with an unobservable focal
+number, weak-subspace projection). Which parameters to lock at which point
+is the application's strategy decision. Low RMS with an unobservable focal
 length is exactly the silent failure this machinery exists to expose.
 
 ## Uncertainty numbers: what they are and are not

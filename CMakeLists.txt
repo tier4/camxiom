@@ -259,6 +259,7 @@ if(CAMXIOM_WITH_CERES)
     # calib/ — single-pass intrinsics calibration (D46, strategy-free).
     src/calib/intrinsics.cpp
     src/calib/convert.cpp
+    src/calib/mapping_compare.cpp
   )
   add_library(camxiom::calib ALIAS camxiom_calib)
 
@@ -495,6 +496,7 @@ if(BUILD_TESTING)
       camxiom_add_gtest(camxiom_pinhole_zhang_test tests/pinhole_zhang_test.cpp)
       camxiom_add_gtest(camxiom_calib_intrinsics_test tests/calib_intrinsics_test.cpp)
       camxiom_add_gtest(camxiom_calib_precision_test tests/calib_precision_test.cpp)
+      camxiom_add_gtest(camxiom_mapping_compare_test tests/mapping_compare_test.cpp)
       camxiom_add_gtest(camxiom_model_convert_test tests/model_convert_test.cpp)
       camxiom_add_gtest(camxiom_calib_uncertainty_test tests/calib_uncertainty_test.cpp)
       # C5: this test also unit-tests the internal pure helpers
@@ -505,6 +507,7 @@ if(BUILD_TESTING)
         target_include_directories(camxiom_calib_uncertainty_test PRIVATE
           ${CMAKE_CURRENT_SOURCE_DIR}/src)
       endif()
+      camxiom_add_gtest(camxiom_calib_prior_test tests/calib_prior_test.cpp)
       camxiom_add_gtest(camxiom_dlt_pnp_test tests/dlt_pnp_test.cpp)
       camxiom_add_gtest(camxiom_pnp_huber_test tests/pnp_huber_test.cpp)
       camxiom_add_gtest(camxiom_pnp_precision_test tests/pnp_precision_test.cpp)

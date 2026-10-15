@@ -99,6 +99,12 @@ TEST(CalibPrecision, RetainsFittedParametersDiagnosticsAndWarmStart)
   EXPECT_NEAR(result.camera_model.intrinsics.cy, truth.intrinsics.cy, 1e-8);
   EXPECT_EQ(result.camera_model.intrinsics.skew, truth.intrinsics.skew);
   EXPECT_LT(result.rms_reprojection_error_px, 1e-9);
+  EXPECT_EQ(result.reprojection_status, StatusCode::OK);
+  EXPECT_EQ(result.valid_count, result.total_count);
+  EXPECT_EQ(result.total_count, views.size() * views.front().world_points.size());
+  ASSERT_EQ(result.per_view_valid_counts.size(), views.size());
+  for (std::size_t i = 0; i < views.size(); ++i)
+    EXPECT_EQ(result.per_view_valid_counts[i], views[i].world_points.size());
   EXPECT_TRUE(result.uncertainty_available);
   EXPECT_TRUE(result.observability_available);
   EXPECT_EQ(result.uncertainty_labels.size(), 4U);
@@ -145,9 +151,10 @@ TEST(CalibPrecision, FailureIsAtomicAndDiagnosticsHandleMissingPoses)
   EXPECT_TRUE(result.per_view_translations.empty());
   std::vector<double> errors{1.0};
   double max_error = 1.0;
-  EXPECT_EQ(computeReprojErrors64(precisionViews(model), model, {}, {}, errors, max_error), 0.0);
+  const double kInf = std::numeric_limits<double>::infinity();
+  EXPECT_EQ(computeReprojErrors64(precisionViews(model), model, {}, {}, errors, max_error), kInf);
   EXPECT_TRUE(errors.empty());
-  EXPECT_EQ(max_error, 0.0);
+  EXPECT_EQ(max_error, kInf);
   EXPECT_TRUE(computePerPointResiduals64(precisionViews(model), model, {}, {}).empty());
 }
 

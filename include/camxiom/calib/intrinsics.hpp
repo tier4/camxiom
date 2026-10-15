@@ -21,6 +21,8 @@
 
 #include <Eigen/Core>
 
+#include <cstddef>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -35,6 +37,25 @@ struct CalibrationView
 {
   std::vector<Eigen::Vector3d> world_points;
   std::vector<Eigen::Vector2d> image_points;
+};
+
+/// Reprojection statistics over projectable correspondences only. OK means
+/// at least one finite residual was evaluated, not that the pose/model is
+/// accurate or every view is usable. Inspect the counts as well as the errors.
+/// A view with no valid points has infinite RMS. With no valid points at all,
+/// status is DEGENERATE_CONFIG and both global errors are infinity.
+struct ReprojectionErrorResult
+{
+  StatusCode status{StatusCode::INVALID_INPUT};
+  double rms_reprojection_error_px{std::numeric_limits<double>::infinity()};
+  double max_reprojection_error_px{std::numeric_limits<double>::infinity()};
+  std::size_t valid_count{0};
+  std::size_t total_count{0};
+  std::vector<std::size_t> per_view_valid_counts;
+  std::vector<double> per_view_rms_px;
+
+  constexpr bool ok() const { return status == StatusCode::OK; }
+  explicit operator bool() const { return ok(); }
 };
 
 /// Knobs forwarded to the single Ceres pass. This struct intentionally
@@ -65,6 +86,21 @@ struct CalibrationOptions
   double principal_point_reference_x{0.0};
   double principal_point_reference_y{0.0};
   double principal_point_bound_relative_tolerance{0.10};
+  /// Soft Gaussian prior pulling cx/cy toward a caller-supplied reference
+  /// (typically the image centre): two extra residuals
+  /// ((cx-ref_x)/sigma, (cy-ref_y)/sigma) appended to the objective (MAP).
+  /// Complements — does not replace — the hard box bounds above: on
+  /// narrow-FOV data the principal point is near-unobservable and otherwise
+  /// drifts along a flat valley onto a bound. WHEN a prior is warranted and
+  /// how tight sigma is are the caller's policy; camxiom only applies it.
+  /// The prior information (1/sigma^2 on the cx/cy diagonal) is included in
+  /// the uncertainty / observability diagnostics so parameter_std reflects
+  /// the objective actually minimised. rms_reprojection_error_px is never
+  /// affected (reprojection-only by construction). Pixel units.
+  bool apply_principal_point_prior{false};
+  double principal_point_prior_reference_x{0.0};
+  double principal_point_prior_reference_y{0.0};
+  double principal_point_prior_sigma_px{0.0};
   /// When true (default), calibrate() also fills the parameter uncertainty
   /// and the observability diagnostic on CalibrationResult. That costs one
   /// extra full-Jacobian pass at the solution plus small (p x p, p<=~20) linear
@@ -228,6 +264,13 @@ struct CalibrationResult
   bool uncertainty_has_parameters_near_bounds{false};
   std::vector<std::string> parameters_at_or_near_bounds;
 
+  /// Evaluation state and projectable correspondence counts for the errors
+  /// above. Excluded correspondences = total_count - valid_count.
+  StatusCode reprojection_status{StatusCode::INVALID_INPUT};
+  std::size_t valid_count{0};
+  std::size_t total_count{0};
+  std::vector<std::size_t> per_view_valid_counts;
+
   /// Strict success: status == OK. Note that NON_CONVERGED is NOT ok() but
   /// still carries a best-effort model/poses (see the struct doc above);
   /// callers that want to consume best-effort results must test status
@@ -258,6 +301,10 @@ struct CalibrationResult64
   std::vector<std::string> underdetermined_parameters;
   bool uncertainty_has_parameters_near_bounds{false};
   std::vector<std::string> parameters_at_or_near_bounds;
+  StatusCode reprojection_status{StatusCode::INVALID_INPUT};
+  std::size_t valid_count{0};
+  std::size_t total_count{0};
+  std::vector<std::size_t> per_view_valid_counts;
   constexpr bool ok() const { return status == StatusCode::OK; }
   explicit operator bool() const { return ok(); }
 };
@@ -287,12 +334,16 @@ using optimizer::PnpFlag;
 ///
 /// `lock_flags` is caller-supplied and decides which intrinsic /
 /// distortion / projection parameters are held fixed in the Ceres pass.
-/// The caller MUST pass per-model identifiability locks: KB4
-/// FIX_DIST_2|FIX_DIST_3, MEI/DS/EUCM FIX_PROJECTION_PARAMS, pinhole NONE.
-/// Leaving non-identifiable distortion/projection parameters free will
-/// drive the solve into the aliasing failure described in the
-/// CalibrationResult observability notes (huge parameter values while the
-/// reprojection RMS still looks fine).
+/// camxiom does not prescribe a lock policy: which parameters to free,
+/// and when, is the application's strategy decision. Identifiability
+/// fact to inform that decision: KB4's high-order terms (k3, k4) and
+/// the MEI/DS/EUCM projection parameters (xi/alpha/beta) can be
+/// unobservable from narrow-coverage planar-board data and/or a
+/// cold-start seed; freeing them under those conditions can converge to
+/// an aliasing minimum (huge parameter values while the reprojection
+/// RMS still looks fine — see the CalibrationResult observability
+/// notes). The C4 observability diagnostics detect this after the
+/// solve; lock flags and box bounds are the tools to prevent it.
 ///
 /// @param views          One CalibrationView per board observation.
 /// @param initial_model   Fully specified seed (e.g. from getDefaultSeed
@@ -305,13 +356,19 @@ using optimizer::PnpFlag;
   const CalibrationOptions &options
 );
 
-/// Pure diagnostic helper: reprojection error of `model` with the given
-/// per-view poses against the observed corners. Only pixels whose
-/// rayToPixel64 status is OK contribute. Returns the global RMS in pixels;
-/// per_view_rms_out is resized to views.size() and max_err_out receives
-/// the largest single-point reprojection magnitude. With no valid points
-/// every quantity is 0.0. If R/t sizes do not match views.size() the
-/// function is a defensive no-op (clears per_view_rms_out, max=0, ret 0).
+/// Pure diagnostic helper with evaluation status and per-view valid counts.
+/// Empty input, mismatched sizes or non-finite observations/poses return
+/// INVALID_INPUT; an invalid camera returns INVALID_MODEL. These failures
+/// leave counts/vectors at their defaults and errors at infinity.
+[[nodiscard]] ReprojectionErrorResult computeReprojErrors(
+  const std::vector<CalibrationView> &views, const CameraModel &model,
+  const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t
+);
+
+/// Compatibility overload returning the global RMS. Errors are infinity when
+/// evaluation fails or no points project; per-view RMS is infinity for any
+/// view without valid points. Use the result overload to inspect coverage and
+/// distinguish invalid input from unprojectable observations.
 [[nodiscard]] double computeReprojErrors(
   const std::vector<CalibrationView> &views, const CameraModel &model,
   const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t,

@@ -34,6 +34,7 @@ namespace camxiom::calib
 === include/camxiom/calib/intrinsics.hpp ===
 camxiom::calib | [[nodiscard]] CalibrationResult calibrate( const std::vector<CalibrationView> &views, const CameraModel &initial_model, PnpFlag lock_flags, const CalibrationOptions &options )
 camxiom::calib | [[nodiscard]] CalibrationResult64 calibrate64( const std::vector<CalibrationView> &views, const CameraModel64 &initial_model, PnpFlag lock_flags, const CalibrationOptions &options )
+camxiom::calib | [[nodiscard]] ReprojectionErrorResult computeReprojErrors( const std::vector<CalibrationView> &views, const CameraModel &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t )
 camxiom::calib | [[nodiscard]] double computeReprojErrors( const std::vector<CalibrationView> &views, const CameraModel &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t, std::vector<double> &per_view_rms_out, double &max_err_out )
 camxiom::calib | [[nodiscard]] double computeReprojErrors64( const std::vector<CalibrationView> &views, const CameraModel64 &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t, std::vector<double> &per_view_rms_out, double &max_err_out )
 camxiom::calib | [[nodiscard]] std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals( const std::vector<CalibrationView> &views, const CameraModel &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t )
@@ -42,9 +43,11 @@ camxiom::calib | struct CalibrationOptions
 camxiom::calib | struct CalibrationResult
 camxiom::calib | struct CalibrationResult64
 camxiom::calib | struct CalibrationView
+camxiom::calib | struct ReprojectionErrorResult
 camxiom::calib | using optimizer::PnpFlag
 camxiom::calib::CalibrationOptions | bool apply_initial_value_bounds
 camxiom::calib::CalibrationOptions | bool apply_principal_point_bounds
+camxiom::calib::CalibrationOptions | bool apply_principal_point_prior
 camxiom::calib::CalibrationOptions | bool compute_per_point_residuals
 camxiom::calib::CalibrationOptions | bool estimate_uncertainty
 camxiom::calib::CalibrationOptions | double bound_relative_tolerance
@@ -52,12 +55,16 @@ camxiom::calib::CalibrationOptions | double function_tolerance
 camxiom::calib::CalibrationOptions | double huber_loss_delta
 camxiom::calib::CalibrationOptions | double parameter_tolerance
 camxiom::calib::CalibrationOptions | double principal_point_bound_relative_tolerance
+camxiom::calib::CalibrationOptions | double principal_point_prior_reference_x
+camxiom::calib::CalibrationOptions | double principal_point_prior_reference_y
+camxiom::calib::CalibrationOptions | double principal_point_prior_sigma_px
 camxiom::calib::CalibrationOptions | double principal_point_reference_x
 camxiom::calib::CalibrationOptions | double principal_point_reference_y
 camxiom::calib::CalibrationOptions | int image_height
 camxiom::calib::CalibrationOptions | int image_width
 camxiom::calib::CalibrationOptions | int max_iterations
 camxiom::calib::CalibrationResult | CameraModel camera_model
+camxiom::calib::CalibrationResult | StatusCode reprojection_status
 camxiom::calib::CalibrationResult | StatusCode status
 camxiom::calib::CalibrationResult | bool observability_available
 camxiom::calib::CalibrationResult | bool observability_ok
@@ -70,15 +77,19 @@ camxiom::calib::CalibrationResult | double normalized_condition_number
 camxiom::calib::CalibrationResult | double rms_reprojection_error_px
 camxiom::calib::CalibrationResult | explicit operator bool() const
 camxiom::calib::CalibrationResult | int iterations_used
+camxiom::calib::CalibrationResult | std::size_t total_count
+camxiom::calib::CalibrationResult | std::size_t valid_count
 camxiom::calib::CalibrationResult | std::vector<Eigen::Matrix3d> per_view_rotations
 camxiom::calib::CalibrationResult | std::vector<Eigen::Vector3d> per_view_translations
 camxiom::calib::CalibrationResult | std::vector<double> parameter_std
 camxiom::calib::CalibrationResult | std::vector<double> per_view_rms_px
+camxiom::calib::CalibrationResult | std::vector<std::size_t> per_view_valid_counts
 camxiom::calib::CalibrationResult | std::vector<std::string> parameters_at_or_near_bounds
 camxiom::calib::CalibrationResult | std::vector<std::string> uncertainty_labels
 camxiom::calib::CalibrationResult | std::vector<std::string> underdetermined_parameters
 camxiom::calib::CalibrationResult | std::vector<std::vector<Eigen::Vector2d>> per_point_residuals
 camxiom::calib::CalibrationResult64 | CameraModel64 camera_model
+camxiom::calib::CalibrationResult64 | StatusCode reprojection_status
 camxiom::calib::CalibrationResult64 | StatusCode status
 camxiom::calib::CalibrationResult64 | bool observability_available
 camxiom::calib::CalibrationResult64 | bool observability_ok
@@ -91,16 +102,52 @@ camxiom::calib::CalibrationResult64 | double normalized_condition_number
 camxiom::calib::CalibrationResult64 | double rms_reprojection_error_px
 camxiom::calib::CalibrationResult64 | explicit operator bool() const
 camxiom::calib::CalibrationResult64 | int iterations_used
+camxiom::calib::CalibrationResult64 | std::size_t total_count
+camxiom::calib::CalibrationResult64 | std::size_t valid_count
 camxiom::calib::CalibrationResult64 | std::vector<Eigen::Matrix3d> per_view_rotations
 camxiom::calib::CalibrationResult64 | std::vector<Eigen::Vector3d> per_view_translations
 camxiom::calib::CalibrationResult64 | std::vector<double> parameter_std
 camxiom::calib::CalibrationResult64 | std::vector<double> per_view_rms_px
+camxiom::calib::CalibrationResult64 | std::vector<std::size_t> per_view_valid_counts
 camxiom::calib::CalibrationResult64 | std::vector<std::string> parameters_at_or_near_bounds
 camxiom::calib::CalibrationResult64 | std::vector<std::string> uncertainty_labels
 camxiom::calib::CalibrationResult64 | std::vector<std::string> underdetermined_parameters
 camxiom::calib::CalibrationResult64 | std::vector<std::vector<Eigen::Vector2d>> per_point_residuals
 camxiom::calib::CalibrationView | std::vector<Eigen::Vector2d> image_points
 camxiom::calib::CalibrationView | std::vector<Eigen::Vector3d> world_points
+camxiom::calib::ReprojectionErrorResult | StatusCode status
+camxiom::calib::ReprojectionErrorResult | constexpr bool ok() const
+camxiom::calib::ReprojectionErrorResult | double max_reprojection_error_px
+camxiom::calib::ReprojectionErrorResult | double rms_reprojection_error_px
+camxiom::calib::ReprojectionErrorResult | explicit operator bool() const
+camxiom::calib::ReprojectionErrorResult | std::size_t total_count
+camxiom::calib::ReprojectionErrorResult | std::size_t valid_count
+camxiom::calib::ReprojectionErrorResult | std::vector<double> per_view_rms_px
+camxiom::calib::ReprojectionErrorResult | std::vector<std::size_t> per_view_valid_counts
+namespace camxiom::calib
+
+=== include/camxiom/calib/mapping_compare.hpp ===
+camxiom::calib | [[nodiscard]] MappingComparison compareProjectionMappings( const CameraModel &model_a, const CameraModel &model_b, const MappingDomainSpec &spec )
+camxiom::calib | [[nodiscard]] MappingDomainReport validateMappingDomain( const CameraModel &model, const MappingDomainSpec &spec )
+camxiom::calib | struct MappingComparison
+camxiom::calib | struct MappingDomainReport
+camxiom::calib | struct MappingDomainSpec
+camxiom::calib::MappingComparison | StatusCode status
+camxiom::calib::MappingComparison | double max_angular_delta_rad
+camxiom::calib::MappingComparison | double p95_angular_delta_rad
+camxiom::calib::MappingComparison | double rms_angular_delta_rad
+camxiom::calib::MappingComparison | int both_valid
+camxiom::calib::MappingComparison | int lattice_points
+camxiom::calib::MappingComparison | int neither_valid
+camxiom::calib::MappingComparison | int only_a_valid
+camxiom::calib::MappingComparison | int only_b_valid
+camxiom::calib::MappingDomainReport | StatusCode status
+camxiom::calib::MappingDomainReport | int lattice_points
+camxiom::calib::MappingDomainReport | int valid_points
+camxiom::calib::MappingDomainSpec | int image_height
+camxiom::calib::MappingDomainSpec | int image_width
+camxiom::calib::MappingDomainSpec | int lattice_cols
+camxiom::calib::MappingDomainSpec | int lattice_rows
 namespace camxiom::calib
 
 === include/camxiom/calibration.hpp ===
@@ -266,6 +313,15 @@ namespace camxiom::init
 
 === include/camxiom/init/pinhole_opencv.hpp ===
 camxiom::init | [[nodiscard]] StatusCode estimatePinholeOpenCv( const std::vector<PlanarObservation> &views, int image_width, int image_height, double aspect_ratio, Eigen::Matrix3d &K_out )
+camxiom::init | [[nodiscard]] StatusCode estimatePinholeOpenCv( const std::vector<PlanarObservation> &views, int image_width, int image_height, double aspect_ratio, Eigen::Matrix3d &K_out, PinholeInitDiagnostics *diagnostics, double max_normal_condition_number )
+camxiom::init | inline constexpr double kDefaultMaxNormalConditionNumber = 3e4
+camxiom::init | struct PinholeInitDiagnostics
+camxiom::init::PinholeInitDiagnostics | bool solution_positive
+camxiom::init::PinholeInitDiagnostics | double fx
+camxiom::init::PinholeInitDiagnostics | double fy
+camxiom::init::PinholeInitDiagnostics | double normal_condition_number
+camxiom::init::PinholeInitDiagnostics | double normal_max_singular_value
+camxiom::init::PinholeInitDiagnostics | double normal_min_singular_value
 namespace camxiom::init
 
 === include/camxiom/init/pinhole_zhang.hpp ===
@@ -476,6 +532,7 @@ camxiom::optimizer | struct PnpBound
 camxiom::optimizer | struct PnpInitialGuess
 camxiom::optimizer | struct PnpInitialGuess64
 camxiom::optimizer | struct PnpOptimizerOptions
+camxiom::optimizer | struct PnpPrincipalPointPrior
 camxiom::optimizer | struct PnpSolverOptions
 camxiom::optimizer | struct PnpSummary
 camxiom::optimizer | struct [[nodiscard]] PnpResult
@@ -503,6 +560,10 @@ camxiom::optimizer::PnpOptimizerOptions | double function_tolerance
 camxiom::optimizer::PnpOptimizerOptions | double gradient_tolerance
 camxiom::optimizer::PnpOptimizerOptions | double parameter_tolerance
 camxiom::optimizer::PnpOptimizerOptions | int max_num_iterations
+camxiom::optimizer::PnpPrincipalPointPrior | bool enabled
+camxiom::optimizer::PnpPrincipalPointPrior | double reference_x
+camxiom::optimizer::PnpPrincipalPointPrior | double reference_y
+camxiom::optimizer::PnpPrincipalPointPrior | double sigma_px
 camxiom::optimizer::PnpSolver | PnpResult solve( const ObjectPointSets &object_points, const ImagePointSets &image_points, const PnpInitialGuess &initial_guess, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
 camxiom::optimizer::PnpSolver | PnpResult64 solve( const ObjectPointSets &object_points, const ImagePointSets &image_points, const PnpInitialGuess64 &initial_guess, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
 camxiom::optimizer::PnpSolver | PnpSolver &operator=(PnpSolver &&) noexcept
@@ -520,6 +581,7 @@ camxiom::optimizer::PnpSolverOptions | PnpBound lower_bound
 camxiom::optimizer::PnpSolverOptions | PnpBound upper_bound
 camxiom::optimizer::PnpSolverOptions | PnpCostType cost_type
 camxiom::optimizer::PnpSolverOptions | PnpOptimizerOptions solver_options
+camxiom::optimizer::PnpSolverOptions | PnpPrincipalPointPrior principal_point_prior
 camxiom::optimizer::PnpSolverOptions | bool print_summary
 camxiom::optimizer::PnpSolverOptions | double huber_loss_delta
 camxiom::optimizer::PnpSummary | bool converged

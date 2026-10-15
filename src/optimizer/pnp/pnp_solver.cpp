@@ -82,6 +82,37 @@ void applyScalarBound(
   }
 }
 
+/// Gaussian prior residual on the principal-point block [cx, cy]:
+/// r = (p - reference) / sigma. Constant Jacobian (sigma^-1 * I2), so an
+/// analytic SizedCostFunction avoids the autodiff machinery entirely.
+class PrincipalPointPriorCost final : public ceres::SizedCostFunction<2, 2>
+{
+public:
+  PrincipalPointPriorCost(double reference_x, double reference_y, double inv_sigma)
+  : reference_x_(reference_x), reference_y_(reference_y), inv_sigma_(inv_sigma)
+  {
+  }
+
+  bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const final
+  {
+    residuals[0] = (parameters[0][0] - reference_x_) * inv_sigma_;
+    residuals[1] = (parameters[0][1] - reference_y_) * inv_sigma_;
+    if (jacobians != nullptr && jacobians[0] != nullptr)
+    {
+      jacobians[0][0] = inv_sigma_;
+      jacobians[0][1] = 0.0;
+      jacobians[0][2] = 0.0;
+      jacobians[0][3] = inv_sigma_;
+    }
+    return true;
+  }
+
+private:
+  double reference_x_;
+  double reference_y_;
+  double inv_sigma_;
+};
+
 void eigenToArray(const std::vector<Eigen::Vector3d> &src, std::vector<std::array<double, 3>> &dst)
 {
   dst.resize(src.size());
@@ -387,6 +418,7 @@ private:
   ceres::Solver::Summary solver_summary_{};
   double huber_loss_delta_{1.0};
   bool print_summary_{false};
+  PnpPrincipalPointPrior pp_prior_{};
 
   std::array<double, 2> focal_lengths_{0.0, 0.0};
   std::array<double, 2> principal_points_{0.0, 0.0};
@@ -498,6 +530,7 @@ bool PnpSolver::Impl::solve(
     options.solver_options.minimizer_progress_to_stdout;
   huber_loss_delta_ = options.huber_loss_delta;
   print_summary_ = options.print_summary;
+  pp_prior_ = options.principal_point_prior;
 
   cost_type_ = options.cost_type;
   flags_ = flags;
@@ -541,19 +574,13 @@ bool PnpSolver::Impl::solve(
     );
     writeBack(camera_model, rvecs, tvecs);
 
-    result_out.valid_count = gn_valid_count;
-
     // Build a summary for lastSummary() compatibility with actual iteration count
     solver_summary_ = ceres::Solver::Summary();
     solver_summary_.final_cost = rmse * rmse * 0.5;
-    // GN success requires convergence, finite RMSE, and sufficient valid points
-    const double valid_ratio =
-      (total_points > 0) ? static_cast<double>(gn_valid_count) / static_cast<double>(total_points)
-                         : 0.0;
-    constexpr double kMinValidRatio = 0.5;
-    const bool gn_success = gn_all_converged && std::isfinite(rmse) && gn_valid_count > 0 &&
-                            valid_ratio >= kMinValidRatio;
-    solver_summary_.termination_type = gn_success ? ceres::CONVERGENCE : ceres::FAILURE;
+    // Record termination separately from the shared result-validity checks
+    // below, just as Ceres does for a stationary invalid-projection penalty.
+    solver_summary_.termination_type =
+      gn_all_converged ? ceres::CONVERGENCE : ceres::NO_CONVERGENCE;
     for (int it = 0; it < gn_total_iterations; ++it)
     {
       ceres::IterationSummary iter_sum;
@@ -589,37 +616,42 @@ bool PnpSolver::Impl::solve(
   // cost, where theta_max IS still frozen at the seed value).
   const bool model_valid = camxiom::detail::validateModel(camera_model) == camxiom::StatusCode::OK;
 
-  if (!use_gn)
+  // Check the RETURNED model/poses on both backends. A global valid ratio
+  // alone can hide a view with no observations behind many healthy views.
+  bool views_usable = model_valid;
+  result_out.valid_count = 0;
+  result_out.per_view_valid_counts.assign(view_count, 0);
+  if (model_valid)
   {
-    // Count how many correspondences the *recovered* model and poses can
-    // actually project, mirroring the GN path. The old fixed
-    // valid_count = total_points made the field useless as a validity
-    // indicator whenever unprojectable (penalised) points survived the
-    // solve.
-    std::size_t ceres_valid = 0;
-    if (model_valid)
+    const camxiom::CameraModel64 model64 = camxiom::detail::asModel64(camera_model);
+    for (std::size_t i = 0; i < view_count; ++i)
     {
-      const camxiom::CameraModel64 model64 = camxiom::detail::asModel64(camera_model);
-      for (std::size_t i = 0; i < object_points.size(); ++i)
+      if (!rvecs[i].allFinite() || !tvecs[i].allFinite())
       {
-        Eigen::Matrix3d R;
+        views_usable = false;
+        continue;
+      }
+      double aa[3] = {rvecs[i].x(), rvecs[i].y(), rvecs[i].z()};
+      double rm[9];
+      ceres::AngleAxisToRotationMatrix(aa, rm);
+      const Eigen::Matrix3d R = Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::ColMajor>>(rm);
+      std::size_t &valid = result_out.per_view_valid_counts[i];
+      for (const auto &p_obj : object_points[i])
+      {
+        if (camxiom::rayToPixel64(model64, R * p_obj + tvecs[i]).ok())
         {
-          double aa[3] = {rvecs[i].x(), rvecs[i].y(), rvecs[i].z()};
-          double rm[9];
-          ceres::AngleAxisToRotationMatrix(aa, rm);
-          R = Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::ColMajor>>(rm);
-        }
-        for (const auto &p_obj : object_points[i])
-        {
-          const Eigen::Vector3d p_cam = R * p_obj + tvecs[i];
-          if (camxiom::rayToPixel64(model64, p_cam).status == camxiom::StatusCode::OK)
-          {
-            ++ceres_valid;
-          }
+          ++valid;
         }
       }
+      result_out.valid_count += valid;
+      // Preserve the GN path's half-valid safeguard, applying it per view
+      // and on Ceres as well. Three points are the solver's input minimum.
+      views_usable = views_usable && valid >= 3 && valid >= object_points[i].size() - valid;
     }
-    result_out.valid_count = ceres_valid;
+  }
+  if (result_out.valid_count == 0)
+  {
+    rmse = std::numeric_limits<double>::infinity();
   }
   if (!model_valid && print_summary_)
   {
@@ -631,9 +663,9 @@ bool PnpSolver::Impl::solve(
               << std::endl;
   }
 
-  const bool success =
-    model_valid && (use_gn ? (solver_summary_.termination_type == ceres::CONVERGENCE)
-                           : (solver_summary_.IsSolutionUsable() && std::isfinite(rmse)));
+  const bool success = views_usable && std::isfinite(rmse) &&
+                       (use_gn ? (solver_summary_.termination_type == ceres::CONVERGENCE)
+                               : solver_summary_.IsSolutionUsable());
 
   // Mirror the Ceres summary into the backend-agnostic snapshot exposed by
   // lastSummary(). The GN path leaves num_*_steps at 0 (it reports progress
@@ -641,9 +673,9 @@ bool PnpSolver::Impl::solve(
   last_summary_.num_successful_steps = solver_summary_.num_successful_steps;
   last_summary_.num_unsuccessful_steps = solver_summary_.num_unsuccessful_steps;
   last_summary_.final_cost = solver_summary_.final_cost;
-  last_summary_.solution_usable = solver_summary_.IsSolutionUsable();
+  last_summary_.solution_usable = success;
   // Both paths set termination_type: Ceres natively, the GN fast path
-  // synthesizes CONVERGENCE/FAILURE from its own convergence flag above.
+  // synthesizes CONVERGENCE/NO_CONVERGENCE from its convergence flag above.
   last_summary_.converged = solver_summary_.termination_type == ceres::CONVERGENCE;
 
   result_out.success = success;
@@ -844,6 +876,10 @@ double PnpSolver::Impl::optimize(
   std::size_t total_points = 0;
   const int effective_dc = std::max(1, dist_count_);
 
+  // Reprojection blocks only: the principal-point prior block (if any) is
+  // excluded so the returned rmse stays a pure reprojection statistic.
+  std::vector<ceres::ResidualBlockId> reprojection_block_ids;
+
   for (std::size_t i = 0; i < object_points.size(); ++i)
   {
     const auto &obj = object_points[i];
@@ -866,20 +902,20 @@ double PnpSolver::Impl::optimize(
           ceres::CostFunction *cost = createAnalyticalBatchCost(
             ObjectPoints{obj[j]}, ImagePoints{img[j]}, camera_model, effective_dc
           );
-          problem_->AddResidualBlock(
+          reprojection_block_ids.push_back(problem_->AddResidualBlock(
             cost, new ceres::HuberLoss(huber_loss_delta_), rvecs_[i].data(), tvecs_[i].data(),
             focal_lengths_.data(), principal_points_.data(), dist_.data(), projection_params_.data()
-          );
+          ));
         }
       }
       else
       {
         // Batch: one CostFunction per view with 2*N residuals
         ceres::CostFunction *cost = createAnalyticalBatchCost(obj, img, camera_model, effective_dc);
-        problem_->AddResidualBlock(
+        reprojection_block_ids.push_back(problem_->AddResidualBlock(
           cost, nullptr, rvecs_[i].data(), tvecs_[i].data(), focal_lengths_.data(),
           principal_points_.data(), dist_.data(), projection_params_.data()
-        );
+        ));
       }
     }
     else
@@ -893,10 +929,10 @@ double PnpSolver::Impl::optimize(
         {
           loss = new ceres::HuberLoss(huber_loss_delta_);
         }
-        problem_->AddResidualBlock(
+        reprojection_block_ids.push_back(problem_->AddResidualBlock(
           cost, loss, rvecs_[i].data(), tvecs_[i].data(), focal_lengths_.data(),
           principal_points_.data(), dist_.data(), projection_params_.data()
-        );
+        ));
       }
     }
   }
@@ -904,6 +940,21 @@ double PnpSolver::Impl::optimize(
   if (total_points == 0)
   {
     return std::numeric_limits<double>::infinity();
+  }
+
+  if (
+    pp_prior_.enabled && pp_prior_.sigma_px > 0.0 &&
+    !hasFlag(flags_, PnpFlag::FIX_PRINCIPAL_POINTS))
+  {
+    // Soft Gaussian prior on [cx, cy]. Added to the minimized objective (and
+    // therefore to last_summary_.final_cost) but deliberately NOT to
+    // reprojection_block_ids: the rmse below must stay reprojection-only.
+    problem_->AddResidualBlock(
+      new PrincipalPointPriorCost(
+        pp_prior_.reference_x, pp_prior_.reference_y, 1.0 / pp_prior_.sigma_px
+      ),
+      nullptr, principal_points_.data()
+    );
   }
 
   ceres::Solver::Options opt = solver_options_;
@@ -921,8 +972,14 @@ double PnpSolver::Impl::optimize(
 
   ceres::Problem::EvaluateOptions eval;
   eval.apply_loss_function = false;
+  // Evaluate only the reprojection blocks: identical to a full evaluation when
+  // no prior exists, and keeps rmse a pure reprojection statistic when it does.
+  eval.residual_blocks = reprojection_block_ids;
   double half_l2_cost = 0.0;
-  problem_->Evaluate(eval, &half_l2_cost, nullptr, nullptr, nullptr);
+  if (!problem_->Evaluate(eval, &half_l2_cost, nullptr, nullptr, nullptr))
+  {
+    return std::numeric_limits<double>::infinity();
+  }
   const double rmse_2d = std::sqrt((2.0 * half_l2_cost) / static_cast<double>(total_points));
   return rmse_2d;
 }

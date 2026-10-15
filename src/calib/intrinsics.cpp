@@ -224,11 +224,24 @@ struct ReducedNormal
   std::vector<std::string> labels;  // p labels, parallel to S rows/cols
 };
 
+/// Mirror of the solver-side principal-point prior for the diagnostics
+/// rebuild: when the objective carried a prior, its information
+/// (1/sigma^2 on the cx/cy diagonal) must appear in S too, or the reported
+/// parameter_std / observability would describe a DIFFERENT (prior-less)
+/// objective than the one Ceres minimised. The prior residuals are NOT added
+/// to rss/dof: sigma^2 stays estimated from reprojection residuals only, so
+/// Cov = sigma^2 · (JᵀJ + sigma_prior^-2·P)^-1.
+struct PrincipalPointPriorInfo
+{
+  bool enabled{false};
+  double sigma_px{0.0};
+};
+
 template <typename T>
 bool buildReducedNormal(
   const std::vector<CalibrationView> &views, const CameraModelT<T> &model,
   const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t,
-  camxiom::optimizer::PnpFlag flags, ReducedNormal &out
+  camxiom::optimizer::PnpFlag flags, const PrincipalPointPriorInfo &pp_prior, ReducedNormal &out
 )
 {
   namespace opt = camxiom::optimizer;
@@ -357,6 +370,24 @@ bool buildReducedNormal(
   // has its pose absent from the residual graph (D_v = B_v = 0), so it is
   // skipped from the Schur sum AND excluded from the pose degrees of freedom —
   // it must not, on its own, make S unbuildable.
+  // Principal-point prior information. Added to A before the Schur reduction
+  // so it reaches both the covariance (C3) and observability (C4) readouts.
+  // A prior-backed cx/cy is determined BY the prior — it must not show up as
+  // underdetermined, and its std saturates at sigma_px when the data itself
+  // carries no information.
+  if (pp_prior.enabled && pp_prior.sigma_px > 0.0)
+  {
+    const double info = 1.0 / (pp_prior.sigma_px * pp_prior.sigma_px);
+    for (int i = 0; i < p; ++i)
+    {
+      if (params[static_cast<std::size_t>(i)].kind == ParamKind::CX ||
+          params[static_cast<std::size_t>(i)].kind == ParamKind::CY)
+      {
+        A(i, i) += info;
+      }
+    }
+  }
+
   Eigen::MatrixXd S = A;
   long n_active = 0;
   if (!fix_ext)
@@ -645,11 +676,11 @@ template <typename T, typename Result>
 void computeCalibrationDiagnostics(
   const std::vector<CalibrationView> &views, const CameraModelT<T> &model,
   const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t,
-  camxiom::optimizer::PnpFlag flags, Result &result
+  camxiom::optimizer::PnpFlag flags, const PrincipalPointPriorInfo &pp_prior, Result &result
 )
 {
   ReducedNormal rn;
-  if (!buildReducedNormal(views, model, R, t, flags, rn))
+  if (!buildReducedNormal(views, model, R, t, flags, pp_prior, rn))
   {
     return;
   }
@@ -671,10 +702,9 @@ Result failedCalibrationResult(const StatusCode status)
 }
 
 template <typename T>
-double computeReprojErrorsImpl(
+ReprojectionErrorResult computeReprojErrorsImpl(
   const std::vector<CalibrationView> &views, const CameraModelT<T> &model,
-  const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t,
-  std::vector<double> &per_view_rms_out, double &max_err_out
+  const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t
 );
 template <typename T>
 std::vector<std::vector<Eigen::Vector2d>> computePerPointResidualsImpl(
@@ -751,6 +781,19 @@ Result calibrateImpl(
     pp_lower_y = std::min(pp_lower_y, static_cast<double>(solve_initial_model.intrinsics.cy));
     pp_upper_x = std::max(pp_upper_x, static_cast<double>(solve_initial_model.intrinsics.cx));
     pp_upper_y = std::max(pp_upper_y, static_cast<double>(solve_initial_model.intrinsics.cy));
+  }
+
+  if (options.apply_principal_point_prior)
+  {
+    const double ref_x = options.principal_point_prior_reference_x;
+    const double ref_y = options.principal_point_prior_reference_y;
+    const double sigma = options.principal_point_prior_sigma_px;
+    if (
+      !std::isfinite(ref_x) || !std::isfinite(ref_y) || !std::isfinite(sigma) || ref_x <= 0.0 ||
+      ref_y <= 0.0 || sigma <= 0.0)
+    {
+      return failedCalibrationResult<Result>(StatusCode::INVALID_INPUT);
+    }
   }
 
   const std::size_t n_views = views.size();
@@ -897,6 +940,14 @@ Result calibrateImpl(
     opts.upper_bound.principal_points = Eigen::Vector2d(cx * (1.0 + r), cy * (1.0 + r));
   }
 
+  if (options.apply_principal_point_prior)
+  {
+    opts.principal_point_prior.enabled = true;
+    opts.principal_point_prior.reference_x = options.principal_point_prior_reference_x;
+    opts.principal_point_prior.reference_y = options.principal_point_prior_reference_y;
+    opts.principal_point_prior.sigma_px = options.principal_point_prior_sigma_px;
+  }
+
   // --------------------------------------------------------------------
   // Step 4: a single Ceres pass. This is the ONLY solve() call -- no
   // loop, no restart, no staging (D46).
@@ -934,10 +985,16 @@ Result calibrateImpl(
   result.iterations_used =
     static_cast<int>(summary.num_successful_steps + summary.num_unsuccessful_steps);
 
-  result.rms_reprojection_error_px = computeReprojErrorsImpl(
-    views, result.camera_model, result.per_view_rotations, result.per_view_translations,
-    result.per_view_rms_px, result.max_reprojection_error_px
+  const ReprojectionErrorResult errors = computeReprojErrorsImpl(
+    views, result.camera_model, result.per_view_rotations, result.per_view_translations
   );
+  result.reprojection_status = errors.status;
+  result.rms_reprojection_error_px = errors.rms_reprojection_error_px;
+  result.max_reprojection_error_px = errors.max_reprojection_error_px;
+  result.per_view_rms_px = errors.per_view_rms_px;
+  result.valid_count = errors.valid_count;
+  result.total_count = errors.total_count;
+  result.per_view_valid_counts = errors.per_view_valid_counts;
 
   if (options.compute_per_point_residuals)
   {
@@ -950,7 +1007,11 @@ Result calibrateImpl(
   {
     result.status = StatusCode::NUMERIC_ERROR;
   }
-  else if (!pnp.success || !summary.converged)
+  else if (errors.status == StatusCode::NUMERIC_ERROR)
+  {
+    result.status = StatusCode::NUMERIC_ERROR;
+  }
+  else if (!pnp.success || !summary.converged || !errors.ok())
   {
     // Best-effort: keep the model/poses/diagnostics; the app may still
     // use them (e.g. as a warm start). Only the status flags the issue.
@@ -985,9 +1046,11 @@ Result calibrateImpl(
   if (options.estimate_uncertainty && (result.status == StatusCode::OK || result.status == StatusCode::NON_CONVERGED))
   {
     fillNearBounds(result.camera_model, lock_flags, opts.lower_bound, opts.upper_bound, result);
+    const PrincipalPointPriorInfo pp_prior{
+      options.apply_principal_point_prior, options.principal_point_prior_sigma_px};
     computeCalibrationDiagnostics(
       views, result.camera_model, result.per_view_rotations, result.per_view_translations,
-      lock_flags, result
+      lock_flags, pp_prior, result
     );
   }
 
@@ -995,28 +1058,45 @@ Result calibrateImpl(
 }
 
 template <typename T>
-double computeReprojErrorsImpl(
+ReprojectionErrorResult computeReprojErrorsImpl(
   const std::vector<CalibrationView> &views, const CameraModelT<T> &model,
-  const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t,
-  std::vector<double> &per_view_rms_out, double &max_err_out
+  const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t
 )
 {
-  // Defensive: calibrate() always passes consistent sizes, but guard
-  // against external misuse.
-  if (R.size() != views.size() || t.size() != views.size())
+  ReprojectionErrorResult result;
+  if (views.empty() || R.size() != views.size() || t.size() != views.size())
   {
-    per_view_rms_out.clear();
-    max_err_out = 0.0;
-    return 0.0;
+    return result;
+  }
+  // Validate every view before accumulating or indexing observations. These
+  // helpers are public and may be called independently of calibrate().
+  for (std::size_t i = 0; i < views.size(); ++i)
+  {
+    const auto &view = views[i];
+    if (view.world_points.size() != view.image_points.size() || !R[i].allFinite() || !t[i].allFinite())
+    {
+      return result;
+    }
+    for (std::size_t j = 0; j < view.world_points.size(); ++j)
+    {
+      if (!view.world_points[j].allFinite() || !view.image_points[j].allFinite())
+      {
+        return result;
+      }
+    }
+  }
+  if (camxiom::detail::validateModel(model) != StatusCode::OK)
+  {
+    result.status = StatusCode::INVALID_MODEL;
+    return result;
   }
 
   const camxiom::CameraModel64 m64 = camxiom::detail::asModel64(model);
-
-  per_view_rms_out.assign(views.size(), 0.0);
-  max_err_out = 0.0;
+  result.per_view_rms_px.assign(views.size(), std::numeric_limits<double>::infinity());
+  result.per_view_valid_counts.assign(views.size(), 0);
 
   double total_sum_sq = 0.0;
-  std::size_t total_valid = 0;
+  double max_error = 0.0;
 
   for (std::size_t i = 0; i < views.size(); ++i)
   {
@@ -1025,9 +1105,10 @@ double computeReprojErrorsImpl(
     const Eigen::Vector3d &ti = t[i];
 
     double view_sum_sq = 0.0;
-    std::size_t view_valid = 0;
+    std::size_t &view_valid = result.per_view_valid_counts[i];
 
     const std::size_t n = view.world_points.size();
+    result.total_count += n;
     for (std::size_t j = 0; j < n; ++j)
     {
       const Eigen::Vector3d P_cam = Ri * view.world_points[j] + ti;
@@ -1042,33 +1123,43 @@ double computeReprojErrorsImpl(
       const double res_sq = du * du + dv * dv;
 
       view_sum_sq += res_sq;
+      if (!std::isfinite(view_sum_sq))
+      {
+        ReprojectionErrorResult failed;
+        failed.status = StatusCode::NUMERIC_ERROR;
+        return failed;
+      }
       ++view_valid;
 
       const double res = std::sqrt(res_sq);
-      if (res > max_err_out)
-      {
-        max_err_out = res;
-      }
+      max_error = std::max(max_error, res);
     }
 
     if (view_valid > 0)
     {
-      per_view_rms_out[i] = std::sqrt(view_sum_sq / static_cast<double>(view_valid));
-    }
-    else
-    {
-      per_view_rms_out[i] = 0.0;
+      result.per_view_rms_px[i] = std::sqrt(view_sum_sq / static_cast<double>(view_valid));
     }
 
     total_sum_sq += view_sum_sq;
-    total_valid += view_valid;
+    result.valid_count += view_valid;
   }
 
-  if (total_valid == 0)
+  if (!std::isfinite(total_sum_sq))
   {
-    return 0.0;
+    ReprojectionErrorResult failed;
+    failed.status = StatusCode::NUMERIC_ERROR;
+    return failed;
   }
-  return std::sqrt(total_sum_sq / static_cast<double>(total_valid));
+  if (result.valid_count == 0)
+  {
+    result.status = StatusCode::DEGENERATE_CONFIG;
+    return result;
+  }
+  result.status = StatusCode::OK;
+  result.rms_reprojection_error_px =
+    std::sqrt(total_sum_sq / static_cast<double>(result.valid_count));
+  result.max_reprojection_error_px = max_error;
+  return result;
 }
 
 template <typename T>
@@ -1077,10 +1168,17 @@ std::vector<std::vector<Eigen::Vector2d>> computePerPointResidualsImpl(
   const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t
 )
 {
-  // Defensive: mirror computeReprojErrors' no-op on inconsistent sizes.
+  // Validate correspondence sizes as well as pose counts before indexing.
   if (R.size() != views.size() || t.size() != views.size())
   {
     return {};
+  }
+  for (const auto &view : views)
+  {
+    if (view.world_points.size() != view.image_points.size())
+    {
+      return {};
+    }
   }
 
   const camxiom::CameraModel64 m64 = camxiom::detail::asModel64(model);
@@ -1118,13 +1216,24 @@ CalibrationResult calibrate(
   return calibrateImpl<CalibrationResult>(views, initial_model, lock_flags, options);
 }
 
+ReprojectionErrorResult computeReprojErrors(
+  const std::vector<CalibrationView> &views, const CameraModel &model,
+  const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t
+)
+{
+  return computeReprojErrorsImpl(views, model, R, t);
+}
+
 double computeReprojErrors(
   const std::vector<CalibrationView> &views, const CameraModel &model,
   const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t,
   std::vector<double> &per_view_rms_out, double &max_err_out
 )
 {
-  return computeReprojErrorsImpl(views, model, R, t, per_view_rms_out, max_err_out);
+  const ReprojectionErrorResult result = computeReprojErrorsImpl(views, model, R, t);
+  per_view_rms_out = result.per_view_rms_px;
+  max_err_out = result.max_reprojection_error_px;
+  return result.rms_reprojection_error_px;
 }
 
 std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals(
@@ -1149,7 +1258,10 @@ double computeReprojErrors64(
   std::vector<double> &per_view_rms_out, double &max_err_out
 )
 {
-  return computeReprojErrorsImpl(views, model, R, t, per_view_rms_out, max_err_out);
+  const ReprojectionErrorResult result = computeReprojErrorsImpl(views, model, R, t);
+  per_view_rms_out = result.per_view_rms_px;
+  max_err_out = result.max_reprojection_error_px;
+  return result.rms_reprojection_error_px;
 }
 
 std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals64(
