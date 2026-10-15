@@ -147,6 +147,7 @@ struct PnpResult {             // [[nodiscard]]
   CameraModel camera_model;
   std::vector<Eigen::Vector3d> rvecs, tvecs;        // Rodrigues + translation per view
   std::size_t valid_count, total_count;
+  std::vector<std::size_t> per_view_valid_counts;
 };
 struct PnpSummary {
   int num_successful_steps, num_unsuccessful_steps;
@@ -162,6 +163,17 @@ Three cost paths: `ANALYTICAL` (default — manual Jacobians via
 path** taken automatically for pose-only solves (everything except
 extrinsics fixed). Note the box bounds apply only to the Ceres paths; the
 GN fast path runs unconstrained.
+
+`PnpResult::success` and `PnpSummary::solution_usable` include validation of
+the returned model and poses. Every view must contain at least three
+projectable correspondences, and at least half its input points must be
+projectable. A large healthy view cannot hide an unusable one. These counts
+describe projection validity, not an inlier classification or an accuracy
+threshold; applications still decide whether the residuals are acceptable.
+`converged` separately describes the optimizer's termination: it can be true
+at a constant invalid-projection penalty even though `solution_usable` is
+false. Ceres can return a usable best effort at its iteration limit; the GN
+path requires convergence. With zero projectable points, `rmse` is infinity.
 
 ## `calib::calibrate` — single-pass intrinsics calibration
 

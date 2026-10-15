@@ -42,6 +42,8 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
+#include <utility>
 #include <vector>
 
 using namespace camxiom;
@@ -386,4 +388,163 @@ TEST(PnpSolverSummary, LastSummaryResetsOnValidationFailure)
   EXPECT_EQ(solver.lastSummary().num_successful_steps, 0);
   EXPECT_EQ(solver.lastSummary().num_unsuccessful_steps, 0);
   EXPECT_DOUBLE_EQ(solver.lastSummary().final_cost, 0.0);
+}
+
+TEST(PnpSolverValidity, AutoDiffStationaryPenaltyIsNotAUsablePose)
+{
+  const CameraModel model = makePinholeModel();
+  const ObjectPoints points = makeCheckerboard3D(2, 3, 0.1);
+  ImagePoints pixels;
+  for (const auto &p : points)
+  {
+    pixels.push_back(projectPinhole(model, Eigen::Matrix3d::Identity(), {0, 0, 3}, p));
+  }
+  PnpInitialGuess guess{model, {Eigen::Vector3d::Zero()}, {Eigen::Vector3d(0, 0, -3)}};
+  PnpSolverOptions options;
+  options.cost_type = PnpCostType::AUTO_DIFF;
+  options.huber_loss_delta = 0.0;
+  PnpSolver solver;
+  PnpResult result;
+  EXPECT_FALSE(solver.solve(
+    points, pixels, guess, result, options,
+    PnpFlag::FIX_INTRINSICS | PnpFlag::FIX_DISTORTION | PnpFlag::FIX_PROJECTION_PARAMS
+  ));
+  // The constant invalid-projection penalty satisfies the optimizer's
+  // gradient tolerance, but supplies no geometric evidence for a pose.
+  EXPECT_TRUE(solver.lastSummary().converged);
+  EXPECT_FALSE(solver.lastSummary().solution_usable);
+  EXPECT_EQ(result.valid_count, 0U);
+  EXPECT_EQ(result.total_count, points.size());
+  EXPECT_EQ(result.per_view_valid_counts, std::vector<std::size_t>{0});
+  EXPECT_EQ(result.rmse, std::numeric_limits<double>::infinity());
+}
+
+TEST(PnpSolverValidity, EveryBackendChecksEachViewsProjectableCorrespondences)
+{
+  CameraModel model = makePinholeModel();
+  model.distortion.type = DistortionModelType::RATIONAL8;
+  model.distortion.space = DistortionSpace::PLANE;
+  model.distortion.count = 8;
+  model.distortion.coeffs[5] = -1.0f;
+  model.distortion.is_rational = true;
+  ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
+  const ObjectPoints good{{0, 0, 1},   {0.1, 0, 1}, {0, 0.1, 1},
+                          {0.2, 0, 1}, {0, 0.2, 1}, {0.2, 0.2, 1}};
+
+  // Pole points have a constant penalty while valid points have exactly zero
+  // residual. This exercises validity checks independently of convergence.
+  for (int backend = 0; backend < 3; ++backend)
+  {
+    SCOPED_TRACE(backend);  // GN, analytical Ceres, autodiff Ceres
+    CameraModel view_model = model;
+    // Analytical/GN penalties are constant for positive-depth domain errors;
+    // autodiff's behind-camera penalty is constant. Keep each solve stationary
+    // so these tests isolate result validation from recovery behavior.
+    if (backend == 2) view_model.distortion = DistortionModel{};
+    const CameraModel64 model64 = toCameraModel64(view_model);
+    const Eigen::Vector3d pole =
+      backend == 2 ? Eigen::Vector3d(0, 0, -1) : Eigen::Vector3d(1, 0, 1);
+    ASSERT_FALSE(rayToPixel64(model64, pole).ok());
+    PnpSolverOptions options;
+    options.huber_loss_delta = 0.0;
+    options.cost_type = backend == 2 ? PnpCostType::AUTO_DIFF : PnpCostType::ANALYTICAL;
+    PnpFlag flags =
+      PnpFlag::FIX_INTRINSICS | PnpFlag::FIX_DISTORTION | PnpFlag::FIX_PROJECTION_PARAMS;
+    if (backend != 0) flags |= PnpFlag::FIX_EXTRINSICS;
+    for (const auto &counts :
+         std::vector<std::pair<int, int>>{{0, 3}, {2, 3}, {3, 7}, {3, 6}, {6, 6}})
+    {
+      SCOPED_TRACE(::testing::Message() << counts.first << "/" << counts.second);
+      ObjectPoints partial(good.begin(), good.begin() + counts.first);
+      partial.resize(counts.second, pole);
+      const ObjectPointSets objects{good, partial};
+      ImagePointSets images(2);
+      for (std::size_t v = 0; v < objects.size(); ++v)
+      {
+        for (const auto &p : objects[v])
+        {
+          const auto pixel = rayToPixel64(model64, p);
+          images[v].emplace_back(
+            pixel.ok() ? pixel.pixel.u : 0.0, pixel.ok() ? pixel.pixel.v : 0.0
+          );
+        }
+      }
+      PnpInitialGuess guess;
+      guess.camera_model = view_model;
+      guess.rvecs.assign(2, Eigen::Vector3d::Zero());
+      guess.tvecs.assign(2, Eigen::Vector3d::Zero());
+      PnpSolver solver;
+      PnpResult result;
+      const bool expected = counts.first >= 3 && counts.first * 2 >= counts.second;
+      EXPECT_EQ(solver.solve(objects, images, guess, result, options, flags), expected);
+      EXPECT_EQ(solver.lastSummary().solution_usable, expected);
+      EXPECT_EQ(result.valid_count, good.size() + counts.first);
+      EXPECT_EQ(result.total_count, good.size() + counts.second);
+      EXPECT_EQ(
+        result.per_view_valid_counts,
+        (std::vector<std::size_t>{good.size(), static_cast<std::size_t>(counts.first)})
+      );
+    }
+  }
+}
+
+TEST(PnpSolverValidity, CeresBestEffortRemainsDistinctFromConvergence)
+{
+  const CameraModel model = makePinholeModel();
+  const ObjectPoints points = makeCheckerboard3D(5, 6, 0.1);
+  ImagePoints pixels;
+  for (const auto &p : points)
+  {
+    pixels.push_back(projectPinhole(model, rotMatX(0.3), {0.1, -0.2, 1.0}, p));
+  }
+  PnpInitialGuess guess{model, {Eigen::Vector3d::Zero()}, {Eigen::Vector3d(0, 0, 2)}};
+  PnpSolverOptions options;
+  options.cost_type = PnpCostType::AUTO_DIFF;
+  options.solver_options.max_num_iterations = 1;
+  PnpSolver solver;
+  PnpResult result;
+  EXPECT_TRUE(solver.solve(
+    points, pixels, guess, result, options,
+    PnpFlag::FIX_INTRINSICS | PnpFlag::FIX_DISTORTION | PnpFlag::FIX_PROJECTION_PARAMS
+  ));
+  EXPECT_TRUE(solver.lastSummary().solution_usable);
+  EXPECT_FALSE(solver.lastSummary().converged);
+  EXPECT_EQ(result.valid_count, points.size());
+}
+
+TEST(PnpSolverValidity, ProjectableRearFisheyePointsRemainUsable)
+{
+  CameraModel model = makePinholeModel();
+  model.projection.type = ProjectionModelType::FISHEYE_THETA;
+  model.projection.theta_max = 2.0f;
+  model.distortion.type = DistortionModelType::EQUIDISTANT;
+  model.distortion.space = DistortionSpace::ANGLE;
+  ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
+  // All bearings lie behind z=0, within this fisheye's angular domain.
+  const ObjectPoints points{{1, -0.2, -0.1},   {1, 0, -0.2},   {1, 0.2, -0.1},
+                            {1.2, -0.2, -0.2}, {1.2, 0, -0.1}, {1.2, 0.2, -0.2}};
+  ImagePoints pixels;
+  for (const auto &point : points)
+  {
+    const auto pixel = rayToPixel64(toCameraModel64(model), point);
+    ASSERT_TRUE(pixel.ok());
+    pixels.emplace_back(pixel.pixel.u, pixel.pixel.v);
+  }
+  for (int backend = 0; backend < 3; ++backend)
+  {
+    SCOPED_TRACE(backend);  // GN, analytical Ceres, autodiff Ceres
+    PnpInitialGuess guess{model, {Eigen::Vector3d::Zero()}, {Eigen::Vector3d::Zero()}};
+    PnpSolverOptions options;
+    options.cost_type = backend == 2 ? PnpCostType::AUTO_DIFF : PnpCostType::ANALYTICAL;
+    PnpFlag flags =
+      PnpFlag::FIX_INTRINSICS | PnpFlag::FIX_DISTORTION | PnpFlag::FIX_PROJECTION_PARAMS;
+    if (backend != 0) flags |= PnpFlag::FIX_EXTRINSICS;
+    PnpSolver solver;
+    PnpResult result;
+    EXPECT_TRUE(solver.solve(points, pixels, guess, result, options, flags));
+    EXPECT_TRUE(solver.lastSummary().solution_usable);
+    EXPECT_EQ(result.valid_count, points.size());
+    EXPECT_EQ(result.per_view_valid_counts, std::vector<std::size_t>{points.size()});
+    EXPECT_LT(result.rmse, 1e-6);
+  }
 }

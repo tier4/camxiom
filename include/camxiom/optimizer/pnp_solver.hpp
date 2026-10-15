@@ -116,6 +116,10 @@ struct PnpInitialGuess
 
 struct [[nodiscard]] PnpResult
 {
+  /// A usable solution requires a valid model, finite poses/error, and at
+  /// least three projectable points and half the observations in EVERY view.
+  /// Ceres may return a usable best effort without convergence; consult
+  /// lastSummary().converged separately. The GN path requires convergence.
   bool success{false};
   double rmse{std::numeric_limits<double>::infinity()};
   camxiom::CameraModel camera_model{};
@@ -123,6 +127,8 @@ struct [[nodiscard]] PnpResult
   std::vector<Eigen::Vector3d> tvecs{};
   std::size_t valid_count{0};
   std::size_t total_count{0};
+  /// Projectable correspondences under the returned model and poses.
+  std::vector<std::size_t> per_view_valid_counts{};
 
   constexpr bool ok() const { return success; }
   explicit operator bool() const { return ok(); }
@@ -138,6 +144,8 @@ struct PnpSummary
   int num_successful_steps{0};
   int num_unsuccessful_steps{0};
   double final_cost{0.0};
+  /// Includes camxiom's model/pose/per-view validity checks; equals success
+  /// in the PnpResult, even if the backend stopped at a stationary penalty.
   bool solution_usable{false};
   /// True only when the optimizer met its tolerances (function / parameter /
   /// gradient). A run that stopped at max_num_iterations can still be
