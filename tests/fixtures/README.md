@@ -19,6 +19,13 @@ appear in this order (with the view blocks at the end):
 model: <pinhole|fisheye_theta|omnidirectional|double_sphere|eucm>
 image_size: <w> <h>
 
+# optional: pinhole distortion family to fit from zero coefficients
+pinhole_distortion: <none|radtan5|rational8>
+# optional: acceptance threshold for training and held-out reprojection RMS
+max_rms_px: <positive float>
+# optional: reserve the last N views for evaluation, leaving >= 3 training views
+held_out_views: <non-negative integer>
+
 # optional: present only when you want the test to assert recovery
 expected_fx: <float>
 expected_fy: <float>
@@ -41,7 +48,7 @@ Constraints enforced by the parser:
 - Unknown model strings are rejected with a descriptive error.
 - Non-numeric tokens in numeric fields are rejected.
 
-## Short worked example (2 views, 6 points each — minimum valid fixture)
+## Short worked example (2 views, 6 points each — add a third view before use)
 
 Model names match the output of `camxiom::toString(ProjectionModelType)` (lowercase).
 Both lowercase and uppercase are accepted by the parser.
@@ -102,8 +109,40 @@ The test `Ms2IntegrationFixture/RealCorrespondenceRegression` searches for
    (`tests/fixtures/` inside the camxiom source tree) is used.
 
 Files are processed in lexicographic order (deterministic). If no `*.fixture`
-file is found the test is **skipped** (not failed); the skip message prints
-the directory that was searched.
+file is found the test **fails**, so removing the bundled data cannot silently
+disable recorded-data coverage. Every fit must retain all correspondence
+projections and have finite RMS. When `held_out_views` is set, those last
+views do not enter the camera fit; only their poses are estimated under the
+recovered camera. Global and per-view held-out RMS must meet `max_rms_px`.
+
+## Bundled c2_120 recorded correspondences
+
+`c2_120.fixture` is taken from the corner export of the intrinsic camera
+calibrator in tier4/CalibrationToolkit,
+`calibrators/intrinsic_camera_calibrator/tests/c2_120/detected_corners.csv`
+(branch `refactor/intrinsic_camera_calibrator/architecture-overhaul`). The
+CSV holds 847 samples of 48 detected chessboard corners each, from recorded
+images; the images are not bundled. The data is recorded, not synthesised
+by camxiom.
+
+- Source CSV SHA-256:
+  `c743965461d7a58b44a9ab1d5c7b3026674e66ba4d60f1e44ce06c5ac8395754`.
+- Select 24 sample indices deterministically as `floor(i * 846 / 23)`,
+  `i=0..23`; the exact indices are also recorded in the fixture header.
+- Preserve the CSV's numeric strings in the order
+  `object_x object_y object_z image_u image_v`. Image paths are omitted.
+- Image size and reference intrinsics come from the adjacent
+  `camera_info_gt.yaml`: 2880x1860, pinhole with Rational8 distortion.
+  These are reference calibration values, not independently measured exact
+  ground truth. The seed uses default intrinsics and zero distortion; it
+  never reads the reference values used for assertions.
+- Fit the first 20 selected views and evaluate the last four separately.
+  The 0.5 px RMS bound applies to the training fit, the held-out aggregate,
+  and every held-out view. The existing 5% focal / 10 px principal-point
+  checks also apply against the reference calibration.
+
+This fixture covers one recorded pinhole/Rational8 camera. Recorded fisheye,
+Mei, Double Sphere and EUCM data still need to be added.
 
 ## Provisional regression tolerances
 
@@ -122,7 +161,8 @@ test) once you have real fixtures and can characterise the noise floor.
 
 - All five projection models are supported: `PINHOLE`, `FISHEYE_THETA`,
   `OMNIDIRECTIONAL`, `DOUBLE_SPHERE`, `EUCM`.
-- The calibration seed is always `getDefaultSeed(model, w, h)`. For pinhole
+- The calibration seed starts from `getDefaultSeed(model, w, h)`, with the
+  optional `pinhole_distortion` family and zero coefficients. For pinhole
   this is a cold start (fx = h/2); for fisheye models projection/distortion
   params are locked at their seed values (D29/D30).
 - The expected_* fields are optional. Omit them if you only want a smoke test
