@@ -29,6 +29,12 @@ using namespace camxiom::calib;
 
 namespace
 {
+// A 2 px prior pulls the noise-free pinhole fit about 16-18 px towards a
+// reference 20 px away; 5 px leaves margin while still failing if the prior
+// never reached the solve.
+constexpr double kPriorSigmaPx = 2.0;
+constexpr double kPriorShiftPx = 5.0;
+
 CameraModel64 precisionModel()
 {
   CameraInfo info;
@@ -156,6 +162,46 @@ TEST(CalibPrecision, FailureIsAtomicAndDiagnosticsHandleMissingPoses)
   EXPECT_TRUE(errors.empty());
   EXPECT_EQ(max_error, kInf);
   EXPECT_TRUE(computePerPointResiduals64(precisionViews(model), model, {}, {}).empty());
+}
+
+TEST(CalibPrecision, PrincipalPointPriorMatchesFloatPath)
+{
+  // The prior and its diagnostics run through the shared calibration core, so
+  // the double entry must reject the same settings and land where the float
+  // entry lands when both start from the same (float-representable) seed.
+  const auto truth = precisionModel();
+  const auto views = precisionViews(truth);
+  const auto flags = PnpFlag::FIX_DISTORTION | PnpFlag::FIX_PROJECTION_PARAMS;
+  const CameraModel seed = fromCameraModel64(truth);
+  const CameraModel64 seed64 = toCameraModel64(seed);
+
+  auto options = precisionOptions();
+  options.apply_principal_point_prior = true;
+  options.principal_point_prior_reference_x = truth.intrinsics.cx + 20.0;
+  options.principal_point_prior_reference_y = truth.intrinsics.cy - 20.0;
+  options.principal_point_prior_sigma_px = 0.0;
+  EXPECT_EQ(calibrate64(views, seed64, flags, options).status, StatusCode::INVALID_INPUT);
+
+  const auto free64 = calibrate64(views, seed64, flags, precisionOptions());
+  ASSERT_EQ(free64.status, StatusCode::OK);
+
+  options.principal_point_prior_sigma_px = kPriorSigmaPx;
+  const auto with = calibrate(views, seed, flags, options);
+  const auto with64 = calibrate64(views, seed64, flags, options);
+  ASSERT_EQ(with.status, StatusCode::OK);
+  ASSERT_EQ(with64.status, StatusCode::OK);
+
+  // The prior moved the double solution towards the reference ...
+  EXPECT_GT(with64.camera_model.intrinsics.cx - free64.camera_model.intrinsics.cx, kPriorShiftPx);
+  EXPECT_LT(with64.camera_model.intrinsics.cy - free64.camera_model.intrinsics.cy, -kPriorShiftPx);
+  // ... to the float solution up to the float write-back.
+  EXPECT_NEAR(with64.camera_model.intrinsics.cx, with.camera_model.intrinsics.cx, 1e-3);
+  EXPECT_NEAR(with64.camera_model.intrinsics.cy, with.camera_model.intrinsics.cy, 1e-3);
+
+  ASSERT_TRUE(with64.uncertainty_available);
+  ASSERT_EQ(with64.uncertainty_labels, with.uncertainty_labels);
+  for (std::size_t i = 0; i < with64.parameter_std.size(); ++i)
+    EXPECT_NEAR(with64.parameter_std[i], with.parameter_std[i], 1e-3 * with.parameter_std[i]);
 }
 
 TEST(CalibPrecision, ConversionPreservesDoubleSourceAndDestination)
