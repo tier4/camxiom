@@ -45,24 +45,10 @@ bundling its implementation, its tests, and its build wiring
 its own. Never batch unrelated modules, or a feature plus an unrelated
 document, into one commit. When in doubt, split.
 
-### 4. Body and trailer
+### 4. Body
 
 Wrapped prose, about 72 columns. Numbered steps are fine for
-algorithms. End every commit with the trailer used across this repo:
-
-```
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
-
-### 5. When to commit
-
-Commit only when explicitly asked to. Never auto-commit.
-
-## Reference commits
-
-`c9df471`, `5471a0d`, `eb3aa28`, and `a11cad4` satisfy all five rules
-and are the canonical examples. Run `git log` before starting new work
-and match that style.
+algorithms.
 
 ## Rewriting a non-compliant commit
 
