@@ -31,11 +31,13 @@ namespace camxiom::calib
 
 === include/camxiom/calib/intrinsics.hpp ===
 camxiom::calib | [[nodiscard]] CalibrationResult calibrate( const std::vector<CalibrationView> &views, const CameraModel &initial_model, PnpFlag lock_flags, const CalibrationOptions &options )
+camxiom::calib | [[nodiscard]] ReprojectionErrorResult computeReprojErrors( const std::vector<CalibrationView> &views, const CameraModel &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t )
 camxiom::calib | [[nodiscard]] double computeReprojErrors( const std::vector<CalibrationView> &views, const CameraModel &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t, std::vector<double> &per_view_rms_out, double &max_err_out )
 camxiom::calib | [[nodiscard]] std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals( const std::vector<CalibrationView> &views, const CameraModel &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t )
 camxiom::calib | struct CalibrationOptions
 camxiom::calib | struct CalibrationResult
 camxiom::calib | struct CalibrationView
+camxiom::calib | struct ReprojectionErrorResult
 camxiom::calib | using optimizer::PnpFlag
 camxiom::calib::CalibrationOptions | bool apply_initial_value_bounds
 camxiom::calib::CalibrationOptions | bool apply_principal_point_bounds
@@ -56,6 +58,7 @@ camxiom::calib::CalibrationOptions | int image_height
 camxiom::calib::CalibrationOptions | int image_width
 camxiom::calib::CalibrationOptions | int max_iterations
 camxiom::calib::CalibrationResult | CameraModel camera_model
+camxiom::calib::CalibrationResult | StatusCode reprojection_status
 camxiom::calib::CalibrationResult | StatusCode status
 camxiom::calib::CalibrationResult | bool observability_available
 camxiom::calib::CalibrationResult | bool observability_ok
@@ -68,16 +71,28 @@ camxiom::calib::CalibrationResult | double normalized_condition_number
 camxiom::calib::CalibrationResult | double rms_reprojection_error_px
 camxiom::calib::CalibrationResult | explicit operator bool() const
 camxiom::calib::CalibrationResult | int iterations_used
+camxiom::calib::CalibrationResult | std::size_t total_count
+camxiom::calib::CalibrationResult | std::size_t valid_count
 camxiom::calib::CalibrationResult | std::vector<Eigen::Matrix3d> per_view_rotations
 camxiom::calib::CalibrationResult | std::vector<Eigen::Vector3d> per_view_translations
 camxiom::calib::CalibrationResult | std::vector<double> parameter_std
 camxiom::calib::CalibrationResult | std::vector<double> per_view_rms_px
+camxiom::calib::CalibrationResult | std::vector<std::size_t> per_view_valid_counts
 camxiom::calib::CalibrationResult | std::vector<std::string> parameters_at_or_near_bounds
 camxiom::calib::CalibrationResult | std::vector<std::string> uncertainty_labels
 camxiom::calib::CalibrationResult | std::vector<std::string> underdetermined_parameters
 camxiom::calib::CalibrationResult | std::vector<std::vector<Eigen::Vector2d>> per_point_residuals
 camxiom::calib::CalibrationView | std::vector<Eigen::Vector2d> image_points
 camxiom::calib::CalibrationView | std::vector<Eigen::Vector3d> world_points
+camxiom::calib::ReprojectionErrorResult | StatusCode status
+camxiom::calib::ReprojectionErrorResult | constexpr bool ok() const
+camxiom::calib::ReprojectionErrorResult | double max_reprojection_error_px
+camxiom::calib::ReprojectionErrorResult | double rms_reprojection_error_px
+camxiom::calib::ReprojectionErrorResult | explicit operator bool() const
+camxiom::calib::ReprojectionErrorResult | std::size_t total_count
+camxiom::calib::ReprojectionErrorResult | std::size_t valid_count
+camxiom::calib::ReprojectionErrorResult | std::vector<double> per_view_rms_px
+camxiom::calib::ReprojectionErrorResult | std::vector<std::size_t> per_view_valid_counts
 namespace camxiom::calib
 
 === include/camxiom/calib/mapping_compare.hpp ===

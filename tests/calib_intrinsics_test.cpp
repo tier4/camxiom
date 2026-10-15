@@ -341,6 +341,10 @@ TEST(CalibIntrinsics, NoNoiseRecoveryPinhole)
   const CalibrationResult res = calibrate(views, seed, PnpFlag::NONE, opts);
 
   ASSERT_EQ(res.status, StatusCode::OK) << "calibrate returned non-OK on noise-free pinhole";
+  EXPECT_EQ(res.reprojection_status, StatusCode::OK);
+  EXPECT_EQ(res.total_count, 5U * world_pts.size());
+  EXPECT_EQ(res.valid_count, res.total_count);
+  EXPECT_EQ(res.per_view_valid_counts, std::vector<std::size_t>(5, world_pts.size()));
 
   // RMS <= 1e-3 px: noise-free data, algorithm should reproduce exact projection.
   EXPECT_LT(res.rms_reprojection_error_px, 1e-3)
@@ -1090,10 +1094,9 @@ TEST(CalibIntrinsics, ComputeReprojErrorsNoiseFree)
   }
 }
 
-TEST(CalibIntrinsics, ComputeReprojErrorsDefensiveNoOp)
+TEST(CalibIntrinsics, ComputeReprojErrorsRejectsPoseCountMismatch)
 {
-  // If R.size() != views.size(), the function must be a no-op:
-  // returns 0.0, per_view_rms_out is cleared, max_err_out = 0.0.
+  // A malformed evaluation must never look like a perfect fit.
   const CameraModel seed = getDefaultSeed(ProjectionModelType::PINHOLE, 640, 480);
 
   const auto world_pts = makeCheckerboard3D(8, 6, 0.05);
@@ -1110,9 +1113,98 @@ TEST(CalibIntrinsics, ComputeReprojErrorsDefensiveNoOp)
   double max_err = 99.0;
   const double ret = computeReprojErrors(views, seed, short_R, short_t, per_view_rms, max_err);
 
-  EXPECT_EQ(ret, 0.0) << "Defensive no-op must return 0.0";
-  EXPECT_TRUE(per_view_rms.empty()) << "per_view_rms must be cleared in no-op";
-  EXPECT_EQ(max_err, 0.0) << "max_err must be 0.0 in no-op";
+  EXPECT_EQ(ret, std::numeric_limits<double>::infinity());
+  EXPECT_TRUE(per_view_rms.empty());
+  EXPECT_EQ(max_err, std::numeric_limits<double>::infinity());
+  EXPECT_EQ(computeReprojErrors(views, seed, short_R, short_t).status, StatusCode::INVALID_INPUT);
+}
+
+TEST(CalibIntrinsics, ReprojectionWithoutValidPointsCannotLookPerfect)
+{
+  const CameraModel model = getDefaultSeed(ProjectionModelType::PINHOLE, 640, 480);
+  CalibrationView view;
+  view.world_points = {{0, 0, -1}, {0.1, 0, -1}, {0, 0.1, -1}};
+  view.image_points.assign(3, Eigen::Vector2d(320, 240));
+  const auto errors =
+    computeReprojErrors({view}, model, {Eigen::Matrix3d::Identity()}, {Eigen::Vector3d::Zero()});
+  EXPECT_EQ(errors.status, StatusCode::DEGENERATE_CONFIG);
+  EXPECT_EQ(errors.valid_count, 0U);
+  EXPECT_EQ(errors.total_count, 3U);
+  EXPECT_EQ(errors.per_view_valid_counts, std::vector<std::size_t>{0});
+  EXPECT_EQ(errors.rms_reprojection_error_px, std::numeric_limits<double>::infinity());
+  EXPECT_EQ(errors.max_reprojection_error_px, std::numeric_limits<double>::infinity());
+  ASSERT_EQ(errors.per_view_rms_px.size(), 1U);
+  EXPECT_EQ(errors.per_view_rms_px[0], std::numeric_limits<double>::infinity());
+  std::vector<double> rms;
+  double max_error = 0;
+  EXPECT_EQ(
+    computeReprojErrors(
+      {view}, model, {Eigen::Matrix3d::Identity()}, {Eigen::Vector3d::Zero()}, rms, max_error
+    ),
+    std::numeric_limits<double>::infinity()
+  );
+  EXPECT_EQ(max_error, std::numeric_limits<double>::infinity());
+}
+
+TEST(CalibIntrinsics, PartialReprojectionReportsCoverageAndEmptyViews)
+{
+  const CameraModel model = getDefaultSeed(ProjectionModelType::PINHOLE, 640, 480);
+  const Eigen::Vector2d center(model.intrinsics.cx, model.intrinsics.cy);
+  CalibrationView partial;
+  partial.world_points = {{0, 0, 1}, {0, 0, -1}};
+  partial.image_points = {center + Eigen::Vector2d(3, 4), center};
+  CalibrationView invalid;
+  invalid.world_points = {{0, 0, -1}};
+  invalid.image_points = {center};
+  const auto errors = computeReprojErrors(
+    {partial, invalid}, model, std::vector<Eigen::Matrix3d>(2, Eigen::Matrix3d::Identity()),
+    std::vector<Eigen::Vector3d>(2, Eigen::Vector3d::Zero())
+  );
+  ASSERT_TRUE(errors.ok());
+  EXPECT_EQ(errors.total_count, 3U);
+  EXPECT_EQ(errors.valid_count, 1U);
+  EXPECT_EQ(errors.per_view_valid_counts, (std::vector<std::size_t>{1, 0}));
+  EXPECT_DOUBLE_EQ(errors.rms_reprojection_error_px, 5.0);
+  EXPECT_DOUBLE_EQ(errors.max_reprojection_error_px, 5.0);
+  EXPECT_DOUBLE_EQ(errors.per_view_rms_px[0], 5.0);
+  EXPECT_EQ(errors.per_view_rms_px[1], std::numeric_limits<double>::infinity());
+}
+
+TEST(CalibIntrinsics, ReprojectionRejectsMalformedAndNonFiniteInputs)
+{
+  const CameraModel model = getDefaultSeed(ProjectionModelType::PINHOLE, 640, 480);
+  const std::vector<Eigen::Matrix3d> rotations{Eigen::Matrix3d::Identity()};
+  const std::vector<Eigen::Vector3d> translations{Eigen::Vector3d::Zero()};
+  CalibrationView view;
+  view.world_points = {{0, 0, 1}};
+  EXPECT_EQ(
+    computeReprojErrors({view}, model, rotations, translations).status, StatusCode::INVALID_INPUT
+  );
+  EXPECT_TRUE(
+    camxiom::calib::computePerPointResiduals({view}, model, rotations, translations).empty()
+  );
+  EXPECT_EQ(computeReprojErrors({}, model, {}, {}).status, StatusCode::INVALID_INPUT);
+  view.image_points = {{std::numeric_limits<double>::quiet_NaN(), 240}};
+  EXPECT_EQ(
+    computeReprojErrors({view}, model, rotations, translations).status, StatusCode::INVALID_INPUT
+  );
+  view.image_points = {{320, 240}};
+  auto bad_rotations = rotations;
+  bad_rotations[0](0, 0) = std::numeric_limits<double>::infinity();
+  EXPECT_EQ(
+    computeReprojErrors({view}, model, bad_rotations, translations).status,
+    StatusCode::INVALID_INPUT
+  );
+  CameraModel invalid_model = model;
+  invalid_model.intrinsics.fx = 0;
+  const auto invalid = computeReprojErrors({view}, invalid_model, rotations, translations);
+  EXPECT_EQ(invalid.status, StatusCode::INVALID_MODEL);
+  EXPECT_EQ(invalid.rms_reprojection_error_px, std::numeric_limits<double>::infinity());
+  EXPECT_TRUE(invalid.per_view_rms_px.empty());
+  view.image_points[0].x() = std::numeric_limits<double>::max();
+  const auto overflow = computeReprojErrors({view}, model, rotations, translations);
+  EXPECT_EQ(overflow.status, StatusCode::NUMERIC_ERROR);
+  EXPECT_EQ(overflow.rms_reprojection_error_px, std::numeric_limits<double>::infinity());
 }
 
 // ===========================================================================

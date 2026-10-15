@@ -20,6 +20,8 @@
 
 #include <Eigen/Core>
 
+#include <cstddef>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -34,6 +36,25 @@ struct CalibrationView
 {
   std::vector<Eigen::Vector3d> world_points;
   std::vector<Eigen::Vector2d> image_points;
+};
+
+/// Reprojection statistics over projectable correspondences only. OK means
+/// at least one finite residual was evaluated, not that the pose/model is
+/// accurate or every view is usable. Inspect the counts as well as the errors.
+/// A view with no valid points has infinite RMS. With no valid points at all,
+/// status is DEGENERATE_CONFIG and both global errors are infinity.
+struct ReprojectionErrorResult
+{
+  StatusCode status{StatusCode::INVALID_INPUT};
+  double rms_reprojection_error_px{std::numeric_limits<double>::infinity()};
+  double max_reprojection_error_px{std::numeric_limits<double>::infinity()};
+  std::size_t valid_count{0};
+  std::size_t total_count{0};
+  std::vector<std::size_t> per_view_valid_counts;
+  std::vector<double> per_view_rms_px;
+
+  constexpr bool ok() const { return status == StatusCode::OK; }
+  explicit operator bool() const { return ok(); }
 };
 
 /// Knobs forwarded to the single Ceres pass. This struct intentionally
@@ -242,6 +263,13 @@ struct CalibrationResult
   bool uncertainty_has_parameters_near_bounds{false};
   std::vector<std::string> parameters_at_or_near_bounds;
 
+  /// Evaluation state and projectable correspondence counts for the errors
+  /// above. Excluded correspondences = total_count - valid_count.
+  StatusCode reprojection_status{StatusCode::INVALID_INPUT};
+  std::size_t valid_count{0};
+  std::size_t total_count{0};
+  std::vector<std::size_t> per_view_valid_counts;
+
   /// Strict success: status == OK. Note that NON_CONVERGED is NOT ok() but
   /// still carries a best-effort model/poses (see the struct doc above);
   /// callers that want to consume best-effort results must test status
@@ -297,13 +325,19 @@ using optimizer::PnpFlag;
   const CalibrationOptions &options
 );
 
-/// Pure diagnostic helper: reprojection error of `model` with the given
-/// per-view poses against the observed corners. Only pixels whose
-/// rayToPixel64 status is OK contribute. Returns the global RMS in pixels;
-/// per_view_rms_out is resized to views.size() and max_err_out receives
-/// the largest single-point reprojection magnitude. With no valid points
-/// every quantity is 0.0. If R/t sizes do not match views.size() the
-/// function is a defensive no-op (clears per_view_rms_out, max=0, ret 0).
+/// Pure diagnostic helper with evaluation status and per-view valid counts.
+/// Empty input, mismatched sizes or non-finite observations/poses return
+/// INVALID_INPUT; an invalid camera returns INVALID_MODEL. These failures
+/// leave counts/vectors at their defaults and errors at infinity.
+[[nodiscard]] ReprojectionErrorResult computeReprojErrors(
+  const std::vector<CalibrationView> &views, const CameraModel &model,
+  const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t
+);
+
+/// Compatibility overload returning the global RMS. Errors are infinity when
+/// evaluation fails or no points project; per-view RMS is infinity for any
+/// view without valid points. Use the result overload to inspect coverage and
+/// distinguish invalid input from unprojectable observations.
 [[nodiscard]] double computeReprojErrors(
   const std::vector<CalibrationView> &views, const CameraModel &model,
   const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t,
