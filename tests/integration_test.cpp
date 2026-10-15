@@ -60,6 +60,7 @@
 
 #include "camxiom/calib/intrinsics.hpp"
 #include "camxiom/default_seed.hpp"
+#include "camxiom/init/dlt_pnp.hpp"
 #include "camxiom/init/pinhole_zhang.hpp"
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/model.hpp"
@@ -1820,6 +1821,9 @@ namespace
 struct ParsedFixture
 {
   ProjectionModelType model{ProjectionModelType::UNKNOWN};
+  DistortionModelType pinhole_distortion{DistortionModelType::NONE};
+  double max_rms_px{std::numeric_limits<double>::infinity()};
+  int held_out_views{0};
   int w{0};
   int h{0};
   bool has_fx{false};
@@ -1934,6 +1938,37 @@ bool parseFixture(std::istream &in, ParsedFixture &out, std::string &err)
         return false;
       }
       have_img_size = true;
+      continue;
+    }
+
+    // Optional pinhole distortion family, initialized with zero coefficients.
+    if (token == "pinhole_distortion:")
+    {
+      std::string name;
+      if (!(ls >> name) || (name != "none" && name != "radtan5" && name != "rational8"))
+      {
+        err = "line " + std::to_string(lineno) + ": expected none, radtan5 or rational8";
+        return false;
+      }
+      out.pinhole_distortion = parseDistortionModelType(name);
+      continue;
+    }
+    if (token == "max_rms_px:")
+    {
+      if (!(ls >> out.max_rms_px) || !std::isfinite(out.max_rms_px) || out.max_rms_px <= 0.0)
+      {
+        err = "line " + std::to_string(lineno) + ": max_rms_px must be finite and positive";
+        return false;
+      }
+      continue;
+    }
+    if (token == "held_out_views:")
+    {
+      if (!(ls >> out.held_out_views) || out.held_out_views < 0)
+      {
+        err = "line " + std::to_string(lineno) + ": held_out_views must be non-negative";
+        return false;
+      }
       continue;
     }
 
@@ -2089,6 +2124,16 @@ bool parseFixture(std::istream &in, ParsedFixture &out, std::string &err)
   if (static_cast<int>(out.views.size()) < 3)
   {
     err = "fixture has only " + std::to_string(out.views.size()) + " view(s); minimum is 3";
+    return false;
+  }
+  if (out.held_out_views > static_cast<int>(out.views.size()) - 3)
+  {
+    err = "held_out_views must leave at least three training views";
+    return false;
+  }
+  if (out.pinhole_distortion != DistortionModelType::NONE && out.model != ProjectionModelType::PINHOLE)
+  {
+    err = "pinhole_distortion requires model: pinhole";
     return false;
   }
   return true;
@@ -2330,7 +2375,8 @@ TEST(Ms2IntegrationFixture, ParserRoundTripSynthetic)
 // ===========================================================================
 // Test 2 — RealCorrespondenceRegression
 //
-// Skips unless the user supplies *.fixture files.  Fixture discovery:
+// Requires the bundled recorded fixture (or an external fixture directory).
+// Fixture discovery:
 //   1. CAMXIOM_TEST_FIXTURE_DIR env var (if set and non-empty).
 //   2. Default: <source-dir>/fixtures/ (i.e. tests/fixtures/).
 //
@@ -2349,16 +2395,8 @@ TEST(Ms2IntegrationFixture, RealCorrespondenceRegression)
   const std::string fixture_dir = discoverFixtureDir();
   const std::vector<std::string> files = listFixtureFiles(fixture_dir);
 
-  if (files.empty())
-  {
-    GTEST_SKIP() << "No real-correspondence fixture found. "
-                 << "To enable this regression, drop a <name>.fixture file "
-                 << "(format: see " << fixture_dir << "/README.md) "
-                 << "into " << fixture_dir
-                 << " or set CAMXIOM_TEST_FIXTURE_DIR to the directory containing "
-                 << "*.fixture files. "
-                 << "Searched: " << fixture_dir;
-  }
+  ASSERT_FALSE(files.empty()) << "No recorded-correspondence fixture found in " << fixture_dir
+                              << "; restore tests/fixtures or set CAMXIOM_TEST_FIXTURE_DIR";
 
   for (const auto &fpath : files)
   {
@@ -2381,17 +2419,70 @@ TEST(Ms2IntegrationFixture, RealCorrespondenceRegression)
     }
 
     // Build seed and calibrate
-    const CameraModel seed = getDefaultSeed(parsed.model, parsed.w, parsed.h);
+    CameraModel seed = getDefaultSeed(parsed.model, parsed.w, parsed.h);
+    if (parsed.pinhole_distortion != DistortionModelType::NONE)
+    {
+      ASSERT_EQ(parsed.model, ProjectionModelType::PINHOLE);
+      seed.distortion.type = parsed.pinhole_distortion;
+      seed.distortion.space = DistortionSpace::PLANE;
+      seed.distortion.count = parsed.pinhole_distortion == DistortionModelType::RATIONAL8 ? 8U : 5U;
+      seed.distortion.is_rational = parsed.pinhole_distortion == DistortionModelType::RATIONAL8;
+    }
     ASSERT_EQ(validateCameraModel(seed), StatusCode::OK)
       << "getDefaultSeed returned invalid model for fixture: " << fpath
       << " model=" << toString(parsed.model);
 
+    const auto split = parsed.views.end() - parsed.held_out_views;
+    const std::vector<CalibrationView> training(parsed.views.begin(), split);
     const CalibrationResult res =
-      calibrate(parsed.views, seed, lockFor(parsed.model), makeDefaultOptions(parsed.w, parsed.h));
+      calibrate(training, seed, lockFor(parsed.model), makeDefaultOptions(parsed.w, parsed.h));
 
     ASSERT_EQ(res.status, StatusCode::OK)
       << "calibrate failed for fixture '" << fpath << "': rms=" << res.rms_reprojection_error_px
       << " status=" << static_cast<int>(res.status);
+
+    EXPECT_EQ(res.reprojection_status, StatusCode::OK);
+    EXPECT_EQ(res.valid_count, res.total_count);
+    EXPECT_TRUE(std::isfinite(res.rms_reprojection_error_px));
+    EXPECT_LE(res.rms_reprojection_error_px, parsed.max_rms_px);
+    RecordProperty("recorded_rms_px", std::to_string(res.rms_reprojection_error_px));
+
+    // Held-out views never participate in fitting camera parameters. Only
+    // their poses are estimated, using the recovered model unchanged.
+    const std::vector<CalibrationView> held_out(split, parsed.views.end());
+    if (!held_out.empty())
+    {
+      std::vector<Eigen::Matrix3d> rotations;
+      std::vector<Eigen::Vector3d> translations;
+      for (const auto &view : held_out)
+      {
+        const Eigen::Index n = static_cast<Eigen::Index>(view.world_points.size());
+        Eigen::Matrix3Xd world(3, n);
+        Eigen::Matrix2Xd pixels(2, n);
+        for (Eigen::Index j = 0; j < n; ++j)
+        {
+          world.col(j) = view.world_points[static_cast<std::size_t>(j)];
+          pixels.col(j) = view.image_points[static_cast<std::size_t>(j)];
+        }
+        Eigen::Matrix3d rotation;
+        Eigen::Vector3d translation;
+        ASSERT_EQ(
+          camxiom::init::estimatePoseRefined(
+            res.camera_model, world, pixels, rotation, translation
+          ),
+          StatusCode::OK
+        );
+        rotations.push_back(rotation);
+        translations.push_back(translation);
+      }
+      const auto errors =
+        camxiom::calib::computeReprojErrors(held_out, res.camera_model, rotations, translations);
+      ASSERT_TRUE(errors.ok());
+      EXPECT_EQ(errors.valid_count, errors.total_count);
+      EXPECT_LE(errors.rms_reprojection_error_px, parsed.max_rms_px);
+      for (double rms : errors.per_view_rms_px) EXPECT_LE(rms, parsed.max_rms_px);
+      RecordProperty("recorded_holdout_rms_px", std::to_string(errors.rms_reprojection_error_px));
+    }
 
     // Check expected_* regression bounds (provisional scaffold tolerances).
     // Comment: real noise characteristics are unknown until the user supplies

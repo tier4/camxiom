@@ -962,10 +962,16 @@ CalibrationResult calibrate(
   result.iterations_used =
     static_cast<int>(summary.num_successful_steps + summary.num_unsuccessful_steps);
 
-  result.rms_reprojection_error_px = computeReprojErrors(
-    views, result.camera_model, result.per_view_rotations, result.per_view_translations,
-    result.per_view_rms_px, result.max_reprojection_error_px
+  const ReprojectionErrorResult errors = computeReprojErrors(
+    views, result.camera_model, result.per_view_rotations, result.per_view_translations
   );
+  result.reprojection_status = errors.status;
+  result.rms_reprojection_error_px = errors.rms_reprojection_error_px;
+  result.max_reprojection_error_px = errors.max_reprojection_error_px;
+  result.per_view_rms_px = errors.per_view_rms_px;
+  result.valid_count = errors.valid_count;
+  result.total_count = errors.total_count;
+  result.per_view_valid_counts = errors.per_view_valid_counts;
 
   if (options.compute_per_point_residuals)
   {
@@ -978,7 +984,11 @@ CalibrationResult calibrate(
   {
     result.status = StatusCode::NUMERIC_ERROR;
   }
-  else if (!pnp.success || !summary.converged)
+  else if (errors.status == StatusCode::NUMERIC_ERROR)
+  {
+    result.status = StatusCode::NUMERIC_ERROR;
+  }
+  else if (!pnp.success || !summary.converged || !errors.ok())
   {
     // Best-effort: keep the model/poses/diagnostics; the app may still
     // use them (e.g. as a warm start). Only the status flags the issue.
@@ -1024,28 +1034,45 @@ CalibrationResult calibrate(
   return result;
 }
 
-double computeReprojErrors(
+ReprojectionErrorResult computeReprojErrors(
   const std::vector<CalibrationView> &views, const CameraModel &model,
-  const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t,
-  std::vector<double> &per_view_rms_out, double &max_err_out
+  const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t
 )
 {
-  // Defensive: calibrate() always passes consistent sizes, but guard
-  // against external misuse.
-  if (R.size() != views.size() || t.size() != views.size())
+  ReprojectionErrorResult result;
+  if (views.empty() || R.size() != views.size() || t.size() != views.size())
   {
-    per_view_rms_out.clear();
-    max_err_out = 0.0;
-    return 0.0;
+    return result;
+  }
+  // Validate every view before accumulating or indexing observations. These
+  // helpers are public and may be called independently of calibrate().
+  for (std::size_t i = 0; i < views.size(); ++i)
+  {
+    const auto &view = views[i];
+    if (view.world_points.size() != view.image_points.size() || !R[i].allFinite() || !t[i].allFinite())
+    {
+      return result;
+    }
+    for (std::size_t j = 0; j < view.world_points.size(); ++j)
+    {
+      if (!view.world_points[j].allFinite() || !view.image_points[j].allFinite())
+      {
+        return result;
+      }
+    }
+  }
+  if (camxiom::validateCameraModel(model) != StatusCode::OK)
+  {
+    result.status = StatusCode::INVALID_MODEL;
+    return result;
   }
 
   const camxiom::CameraModel64 m64 = camxiom::toCameraModel64(model);
-
-  per_view_rms_out.assign(views.size(), 0.0);
-  max_err_out = 0.0;
+  result.per_view_rms_px.assign(views.size(), std::numeric_limits<double>::infinity());
+  result.per_view_valid_counts.assign(views.size(), 0);
 
   double total_sum_sq = 0.0;
-  std::size_t total_valid = 0;
+  double max_error = 0.0;
 
   for (std::size_t i = 0; i < views.size(); ++i)
   {
@@ -1054,9 +1081,10 @@ double computeReprojErrors(
     const Eigen::Vector3d &ti = t[i];
 
     double view_sum_sq = 0.0;
-    std::size_t view_valid = 0;
+    std::size_t &view_valid = result.per_view_valid_counts[i];
 
     const std::size_t n = view.world_points.size();
+    result.total_count += n;
     for (std::size_t j = 0; j < n; ++j)
     {
       const Eigen::Vector3d P_cam = Ri * view.world_points[j] + ti;
@@ -1071,33 +1099,55 @@ double computeReprojErrors(
       const double res_sq = du * du + dv * dv;
 
       view_sum_sq += res_sq;
+      if (!std::isfinite(view_sum_sq))
+      {
+        ReprojectionErrorResult failed;
+        failed.status = StatusCode::NUMERIC_ERROR;
+        return failed;
+      }
       ++view_valid;
 
       const double res = std::sqrt(res_sq);
-      if (res > max_err_out)
-      {
-        max_err_out = res;
-      }
+      max_error = std::max(max_error, res);
     }
 
     if (view_valid > 0)
     {
-      per_view_rms_out[i] = std::sqrt(view_sum_sq / static_cast<double>(view_valid));
-    }
-    else
-    {
-      per_view_rms_out[i] = 0.0;
+      result.per_view_rms_px[i] = std::sqrt(view_sum_sq / static_cast<double>(view_valid));
     }
 
     total_sum_sq += view_sum_sq;
-    total_valid += view_valid;
+    result.valid_count += view_valid;
   }
 
-  if (total_valid == 0)
+  if (!std::isfinite(total_sum_sq))
   {
-    return 0.0;
+    ReprojectionErrorResult failed;
+    failed.status = StatusCode::NUMERIC_ERROR;
+    return failed;
   }
-  return std::sqrt(total_sum_sq / static_cast<double>(total_valid));
+  if (result.valid_count == 0)
+  {
+    result.status = StatusCode::DEGENERATE_CONFIG;
+    return result;
+  }
+  result.status = StatusCode::OK;
+  result.rms_reprojection_error_px =
+    std::sqrt(total_sum_sq / static_cast<double>(result.valid_count));
+  result.max_reprojection_error_px = max_error;
+  return result;
+}
+
+double computeReprojErrors(
+  const std::vector<CalibrationView> &views, const CameraModel &model,
+  const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t,
+  std::vector<double> &per_view_rms_out, double &max_err_out
+)
+{
+  const ReprojectionErrorResult result = computeReprojErrors(views, model, R, t);
+  per_view_rms_out = result.per_view_rms_px;
+  max_err_out = result.max_reprojection_error_px;
+  return result.rms_reprojection_error_px;
 }
 
 std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals(
@@ -1105,10 +1155,17 @@ std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals(
   const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t
 )
 {
-  // Defensive: mirror computeReprojErrors' no-op on inconsistent sizes.
+  // Validate correspondence sizes as well as pose counts before indexing.
   if (R.size() != views.size() || t.size() != views.size())
   {
     return {};
+  }
+  for (const auto &view : views)
+  {
+    if (view.world_points.size() != view.image_points.size())
+    {
+      return {};
+    }
   }
 
   const camxiom::CameraModel64 m64 = camxiom::toCameraModel64(model);

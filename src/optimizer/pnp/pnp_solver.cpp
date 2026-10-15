@@ -516,19 +516,13 @@ bool PnpSolver::Impl::solve(
     );
     writeBack(camera_model, rvecs, tvecs);
 
-    result_out.valid_count = gn_valid_count;
-
     // Build a summary for lastSummary() compatibility with actual iteration count
     solver_summary_ = ceres::Solver::Summary();
     solver_summary_.final_cost = rmse * rmse * 0.5;
-    // GN success requires convergence, finite RMSE, and sufficient valid points
-    const double valid_ratio =
-      (total_points > 0) ? static_cast<double>(gn_valid_count) / static_cast<double>(total_points)
-                         : 0.0;
-    constexpr double kMinValidRatio = 0.5;
-    const bool gn_success = gn_all_converged && std::isfinite(rmse) && gn_valid_count > 0 &&
-                            valid_ratio >= kMinValidRatio;
-    solver_summary_.termination_type = gn_success ? ceres::CONVERGENCE : ceres::FAILURE;
+    // Record termination separately from the shared result-validity checks
+    // below, just as Ceres does for a stationary invalid-projection penalty.
+    solver_summary_.termination_type =
+      gn_all_converged ? ceres::CONVERGENCE : ceres::NO_CONVERGENCE;
     for (int it = 0; it < gn_total_iterations; ++it)
     {
       ceres::IterationSummary iter_sum;
@@ -560,37 +554,42 @@ bool PnpSolver::Impl::solve(
   // cost, where theta_max IS still frozen at the seed value).
   const bool model_valid = camxiom::validateCameraModel(camera_model) == camxiom::StatusCode::OK;
 
-  if (!use_gn)
+  // Check the RETURNED model/poses on both backends. A global valid ratio
+  // alone can hide a view with no observations behind many healthy views.
+  bool views_usable = model_valid;
+  result_out.valid_count = 0;
+  result_out.per_view_valid_counts.assign(view_count, 0);
+  if (model_valid)
   {
-    // Count how many correspondences the *recovered* model and poses can
-    // actually project, mirroring the GN path. The old fixed
-    // valid_count = total_points made the field useless as a validity
-    // indicator whenever unprojectable (penalised) points survived the
-    // solve.
-    std::size_t ceres_valid = 0;
-    if (model_valid)
+    const camxiom::CameraModel64 model64 = camxiom::toCameraModel64(camera_model);
+    for (std::size_t i = 0; i < view_count; ++i)
     {
-      const camxiom::CameraModel64 model64 = camxiom::toCameraModel64(camera_model);
-      for (std::size_t i = 0; i < object_points.size(); ++i)
+      if (!rvecs[i].allFinite() || !tvecs[i].allFinite())
       {
-        Eigen::Matrix3d R;
+        views_usable = false;
+        continue;
+      }
+      double aa[3] = {rvecs[i].x(), rvecs[i].y(), rvecs[i].z()};
+      double rm[9];
+      ceres::AngleAxisToRotationMatrix(aa, rm);
+      const Eigen::Matrix3d R = Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::ColMajor>>(rm);
+      std::size_t &valid = result_out.per_view_valid_counts[i];
+      for (const auto &p_obj : object_points[i])
+      {
+        if (camxiom::rayToPixel64(model64, R * p_obj + tvecs[i]).ok())
         {
-          double aa[3] = {rvecs[i].x(), rvecs[i].y(), rvecs[i].z()};
-          double rm[9];
-          ceres::AngleAxisToRotationMatrix(aa, rm);
-          R = Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::ColMajor>>(rm);
-        }
-        for (const auto &p_obj : object_points[i])
-        {
-          const Eigen::Vector3d p_cam = R * p_obj + tvecs[i];
-          if (camxiom::rayToPixel64(model64, p_cam).status == camxiom::StatusCode::OK)
-          {
-            ++ceres_valid;
-          }
+          ++valid;
         }
       }
+      result_out.valid_count += valid;
+      // Preserve the GN path's half-valid safeguard, applying it per view
+      // and on Ceres as well. Three points are the solver's input minimum.
+      views_usable = views_usable && valid >= 3 && valid >= object_points[i].size() - valid;
     }
-    result_out.valid_count = ceres_valid;
+  }
+  if (result_out.valid_count == 0)
+  {
+    rmse = std::numeric_limits<double>::infinity();
   }
   if (!model_valid && print_summary_)
   {
@@ -602,9 +601,9 @@ bool PnpSolver::Impl::solve(
               << std::endl;
   }
 
-  const bool success =
-    model_valid && (use_gn ? (solver_summary_.termination_type == ceres::CONVERGENCE)
-                           : (solver_summary_.IsSolutionUsable() && std::isfinite(rmse)));
+  const bool success = views_usable && std::isfinite(rmse) &&
+                       (use_gn ? (solver_summary_.termination_type == ceres::CONVERGENCE)
+                               : solver_summary_.IsSolutionUsable());
 
   // Mirror the Ceres summary into the backend-agnostic snapshot exposed by
   // lastSummary(). The GN path leaves num_*_steps at 0 (it reports progress
@@ -612,9 +611,9 @@ bool PnpSolver::Impl::solve(
   last_summary_.num_successful_steps = solver_summary_.num_successful_steps;
   last_summary_.num_unsuccessful_steps = solver_summary_.num_unsuccessful_steps;
   last_summary_.final_cost = solver_summary_.final_cost;
-  last_summary_.solution_usable = solver_summary_.IsSolutionUsable();
+  last_summary_.solution_usable = success;
   // Both paths set termination_type: Ceres natively, the GN fast path
-  // synthesizes CONVERGENCE/FAILURE from its own convergence flag above.
+  // synthesizes CONVERGENCE/NO_CONVERGENCE from its convergence flag above.
   last_summary_.converged = solver_summary_.termination_type == ceres::CONVERGENCE;
 
   result_out.success = success;
@@ -902,7 +901,10 @@ double PnpSolver::Impl::optimize(
   // no prior exists, and keeps rmse a pure reprojection statistic when it does.
   eval.residual_blocks = reprojection_block_ids;
   double half_l2_cost = 0.0;
-  problem_->Evaluate(eval, &half_l2_cost, nullptr, nullptr, nullptr);
+  if (!problem_->Evaluate(eval, &half_l2_cost, nullptr, nullptr, nullptr))
+  {
+    return std::numeric_limits<double>::infinity();
+  }
   const double rmse_2d = std::sqrt((2.0 * half_l2_cost) / static_cast<double>(total_points));
   return rmse_2d;
 }
