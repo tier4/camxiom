@@ -16,13 +16,10 @@
 #include "camxiom/model.hpp"
 #include "camxiom/projection64.hpp"
 #include "detail/projection_models.hpp"
+#include "detail/simd_dispatch.hpp"
 #include "projection64/internal.hpp"  // validateCameraModelQuery64
 
 #include <limits>
-
-#if defined(__AVX2__)
-#include <immintrin.h>
-#endif
 
 #if defined(__aarch64__)
 #include "batch/batch_parallel.hpp"
@@ -42,7 +39,7 @@ namespace
 using PixelFn64 = PixelResult64 (*)(const CameraModel64 &, const Eigen::Vector3d &);
 using RayFn64 = RayResult64 (*)(const CameraModel64 &, const Pixel2d &, const SolverOptions64 &);
 
-#if defined(__AVX2__)
+#ifdef CAMXIOM_HAS_AVX2
 bool isPinholeUndistorted64(const CameraModel64 &model)
 {
   return model.projection.type == ProjectionModelType::PINHOLE &&
@@ -52,18 +49,21 @@ bool isPinholeUndistorted64(const CameraModel64 &model)
          !model.distortion.has_tilt;
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256d absAvxD(const __m256d values)
 {
   const __m256i sign_mask = _mm256_set1_epi64x(0x7FFFFFFFFFFFFFFFLL);
   return _mm256_and_pd(values, _mm256_castsi256_pd(sign_mask));
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256d finiteMaskAvxD(const __m256d values)
 {
   const __m256d max_value = _mm256_set1_pd((std::numeric_limits<double>::max)());
   return _mm256_cmp_pd(absAvxD(values), max_value, _CMP_LE_OQ);
 }
 
+CAMXIOM_TARGET_AVX2
 inline int rayToPixelPinholeUndistortedAvx4(
   const CameraModel64 &model, const double *rays_xyz, double *u_out, double *v_out
 )
@@ -105,6 +105,7 @@ inline int rayToPixelPinholeUndistortedAvx4(
   return _mm256_movemask_pd(valid_mask);
 }
 
+CAMXIOM_TARGET_AVX2
 inline int pixelToRayPinholeUndistortedAvx4(
   const CameraModel64 &model, const double *u_in, const double *v_in, double *dx_out,
   double *dy_out, double *dz_out
@@ -420,8 +421,8 @@ int rayToPixelBatch64(
     return 0;
   }
 
-#if defined(__AVX2__)
-  if (isPinholeUndistorted64(model))
+#ifdef CAMXIOM_HAS_AVX2
+  if (detail::cpuHasAvx2() && isPinholeUndistorted64(model))
   {
     const int simd_count = count & ~3;
     int valid_count = 0;
@@ -699,8 +700,8 @@ int pixelToRayBatch64(
     return 0;
   }
 
-#if defined(__AVX2__)
-  if (isPinholeUndistorted64(model))
+#ifdef CAMXIOM_HAS_AVX2
+  if (detail::cpuHasAvx2() && isPinholeUndistorted64(model))
   {
     const int simd_count = count & ~3;
     int valid_count = 0;

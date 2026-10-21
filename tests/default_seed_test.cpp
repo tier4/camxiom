@@ -411,3 +411,15 @@ TEST(DefaultSeed, InvalidInputUnknownModelValidDims)
   EXPECT_EQ(m.projection.type, ProjectionModelType::UNKNOWN);
   EXPECT_EQ(validateCameraModel(m), StatusCode::INVALID_MODEL);
 }
+
+TEST(DefaultSeed, WideAngleModelsDoNotInheritThePinholeCap)
+{
+  for (const auto type :
+       {camxiom::ProjectionModelType::OMNIDIRECTIONAL, camxiom::ProjectionModelType::DOUBLE_SPHERE,
+        camxiom::ProjectionModelType::EUCM})
+  {
+    const auto model = camxiom::getDefaultSeed(type, 640, 480);
+    EXPECT_EQ(model.projection.theta_max, camxiom::constants::kPiF);
+    EXPECT_EQ(camxiom::validateCameraModel(model), camxiom::StatusCode::OK);
+  }
+}

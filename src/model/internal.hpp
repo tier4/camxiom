@@ -126,11 +126,9 @@ inline float estimateSafeThetaMaxForPolynomialFisheye(const DistortionModel &mod
 /// This is a MID-SOLVE helper for the analytical batch cost, where theta_max
 /// stays frozen at the seed value while the coefficients move each Evaluate
 /// (theta_max is not a Ceres parameter). It must not be mistaken for the
-/// final-model derivation: PnpSolver::writeBack() unconditionally reassigns
-/// theta_max from the fitted coefficients via the public updateThetaMax()
-/// (an overwrite, not a shrink — a deliberately narrow caller cap does NOT
-/// survive a coefficient-fitting solve), which is why a post-writeBack
-/// validation never needs this rescue.
+/// final-model derivation: PnpSolver::writeBack() recomputes the safe cap via
+/// the public updateThetaMax() and takes its minimum with the input cap, so
+/// a deliberately narrow caller cap survives a coefficient-fitting solve.
 template <typename T>
 bool shrinkThetaMaxToPolynomialMonotoneRange(CameraModelT<T> &model)
 {

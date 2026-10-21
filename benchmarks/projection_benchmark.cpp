@@ -23,7 +23,7 @@
 // and uses the public projection API (float `rayToPixel`/`pixelToRay` and the
 // double `*64` counterparts). No GTest, no Ceres.
 //
-// Build (isolated, optimised) — see CLAUDE.md / docs/TEMPLATE_UNIFICATION_PLAN.md:
+// Build (isolated, optimised):
 //   cmake -S . -B build-bench -DCMAKE_BUILD_TYPE=Release \
 //         -DCAMXIOM_BUILD_BENCHMARKS=ON -DCAMXIOM_WITH_CERES=OFF \
 //         -DBUILD_TESTING=OFF -DCMAKE_DISABLE_FIND_PACKAGE_ament_cmake=TRUE

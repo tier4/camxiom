@@ -33,6 +33,7 @@ namespace camxiom
 /// projection-specific parameters take their canonical default values:
 ///
 ///   - common to all models: cx = w/2, cy = h/2, skew = 0
+///   - wide-angle families: theta_max = pi; projection-specific validity applies
 ///   - PINHOLE          : fx = fy = h/2; no projection params; no distortion
 ///   - FISHEYE_THETA    : fx = fy = h/pi; theta_max = pi;
 ///                        KB4 angle distortion, k1..k4 = 0

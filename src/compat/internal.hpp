@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <type_traits>
 
 namespace camxiom
 {
@@ -140,8 +141,9 @@ inline int expectedDistortionCount(const EucmCompatProfile profile)
   }
 }
 
+template <typename T>
 inline void fillProjectionFromIntrinsics(
-  const IntrinsicsModel &intrinsics, std::array<double, 9> &camera_matrix
+  const IntrinsicsModelT<T> &intrinsics, std::array<double, 9> &camera_matrix
 )
 {
   camera_matrix = {
@@ -156,8 +158,9 @@ inline void fillProjectionFromIntrinsics(
     1.0};
 }
 
+template <typename T>
 inline void fillProjectionMatrix3x4(
-  const IntrinsicsModel &intrinsics, std::array<double, 12> &projection
+  const IntrinsicsModelT<T> &intrinsics, std::array<double, 12> &projection
 )
 {
   projection = {
@@ -244,8 +247,16 @@ inline std::string fisheyeDistortionModelString(const DistortionModelType model_
   return "equidistant";
 }
 
+template <typename T>
+StatusCode validateCompatModel(const CameraModelT<T> &model)
+{
+  if constexpr (std::is_same_v<T, float>) return validateCameraModel(model);
+  else return validateCameraModel64(model);
+}
+
+template <typename T>
 inline StatusCode makeAndValidateProjectionModel(
-  const CameraInfo &camera_info, const ProjectionModelType projection_type, CameraModel &model_out
+  const CameraInfo &camera_info, const ProjectionModelType projection_type, CameraModelT<T> &model_out
 )
 {
   if (!isFiniteArray9(camera_info.k) || !isFiniteVector(camera_info.d))
@@ -253,8 +264,9 @@ inline StatusCode makeAndValidateProjectionModel(
     return StatusCode::INVALID_INPUT;
   }
 
-  model_out = makeCameraModel(camera_info);
-  const StatusCode validation_status = validateCameraModel(model_out);
+  if constexpr (std::is_same_v<T, float>) model_out = makeCameraModel(camera_info);
+  else model_out = makeCameraModel64(camera_info);
+  const StatusCode validation_status = validateCompatModel(model_out);
   if (validation_status != StatusCode::OK)
   {
     return validation_status;
@@ -266,9 +278,10 @@ inline StatusCode makeAndValidateProjectionModel(
   return StatusCode::OK;
 }
 
-inline StatusCode validatePinholeModelForExport(const CameraModel &model)
+template <typename T>
+inline StatusCode validatePinholeModelForExport(const CameraModelT<T> &model)
 {
-  const StatusCode validation_status = validateCameraModel(model);
+  const StatusCode validation_status = validateCompatModel(model);
   if (validation_status != StatusCode::OK)
   {
     return validation_status;
@@ -284,9 +297,10 @@ inline StatusCode validatePinholeModelForExport(const CameraModel &model)
   return StatusCode::OK;
 }
 
-inline StatusCode validateFisheyeModelForExport(const CameraModel &model)
+template <typename T>
+inline StatusCode validateFisheyeModelForExport(const CameraModelT<T> &model)
 {
-  const StatusCode validation_status = validateCameraModel(model);
+  const StatusCode validation_status = validateCompatModel(model);
   if (validation_status != StatusCode::OK)
   {
     return validation_status;
@@ -302,9 +316,10 @@ inline StatusCode validateFisheyeModelForExport(const CameraModel &model)
   return StatusCode::OK;
 }
 
-inline StatusCode validateOmniModelForExport(const CameraModel &model)
+template <typename T>
+inline StatusCode validateOmniModelForExport(const CameraModelT<T> &model)
 {
-  const StatusCode validation_status = validateCameraModel(model);
+  const StatusCode validation_status = validateCompatModel(model);
   if (validation_status != StatusCode::OK)
   {
     return validation_status;
@@ -320,9 +335,10 @@ inline StatusCode validateOmniModelForExport(const CameraModel &model)
   return StatusCode::OK;
 }
 
-inline StatusCode validateDoubleSphereModelForExport(const CameraModel &model)
+template <typename T>
+inline StatusCode validateDoubleSphereModelForExport(const CameraModelT<T> &model)
 {
-  const StatusCode validation_status = validateCameraModel(model);
+  const StatusCode validation_status = validateCompatModel(model);
   if (validation_status != StatusCode::OK)
   {
     return validation_status;
@@ -338,9 +354,10 @@ inline StatusCode validateDoubleSphereModelForExport(const CameraModel &model)
   return StatusCode::OK;
 }
 
-inline StatusCode validateEucmModelForExport(const CameraModel &model)
+template <typename T>
+inline StatusCode validateEucmModelForExport(const CameraModelT<T> &model)
 {
-  const StatusCode validation_status = validateCameraModel(model);
+  const StatusCode validation_status = validateCompatModel(model);
   if (validation_status != StatusCode::OK)
   {
     return validation_status;

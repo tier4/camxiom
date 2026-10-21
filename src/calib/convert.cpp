@@ -19,6 +19,7 @@
 #include "camxiom/optimizer/pnp_solver.hpp"
 #include "camxiom/projection64.hpp"
 #include "camxiom/types64.hpp"
+#include "model/precision.hpp"
 #include "optimizer/pnp/pnp_parameter_bounds.hpp"
 
 #include <Eigen/Core>
@@ -31,12 +32,15 @@
 namespace camxiom::calib
 {
 
-ModelConversionResult convertCameraModel(
-  const CameraModel &src_model, const int image_width, const int image_height,
-  const CameraModel &dst_seed, const ModelConversionOptions &options
+namespace
+{
+template <typename Result, typename T>
+Result convertCameraModelImpl(
+  const CameraModelT<T> &src_model, const int image_width, const int image_height,
+  const CameraModelT<T> &dst_seed, const ModelConversionOptions &options
 )
 {
-  ModelConversionResult result;
+  Result result;
 
   if (image_width <= 0 || image_height <= 0 || options.grid_cols < 2 ||
       options.grid_rows < 2 || options.max_iterations <= 0)
@@ -54,7 +58,7 @@ ModelConversionResult convertCameraModel(
     result.status = StatusCode::INVALID_INPUT;
     return result;
   }
-  if (validateCameraModel(src_model) != StatusCode::OK || validateCameraModel(dst_seed) != StatusCode::OK)
+  if (camxiom::detail::validateModel(src_model) != StatusCode::OK || camxiom::detail::validateModel(dst_seed) != StatusCode::OK)
   {
     result.status = StatusCode::INVALID_MODEL;
     return result;
@@ -64,7 +68,7 @@ ModelConversionResult convertCameraModel(
   // Synthetic correspondences: source pixel grid -> unit rays. Unit rays
   // double as 3D points at distance 1 for the pose-fixed fit below.
   // ------------------------------------------------------------------
-  const CameraModel64 src64 = toCameraModel64(src_model);
+  const CameraModel64 src64 = camxiom::detail::asModel64(src_model);
 
   optimizer::ObjectPoints rays;
   optimizer::ImagePoints pixels;
@@ -100,7 +104,9 @@ ModelConversionResult convertCameraModel(
   // distortion / projection parameters of the destination family free.
   // Ordinary least squares (huber off): synthetic data has no outliers.
   // ------------------------------------------------------------------
-  optimizer::PnpInitialGuess guess;
+  using Guess = std::conditional_t<
+    std::is_same_v<T, double>, optimizer::PnpInitialGuess64, optimizer::PnpInitialGuess>;
+  Guess guess;
   guess.camera_model = dst_seed;
   guess.rvecs = {Eigen::Vector3d::Zero()};
   guess.tvecs = {Eigen::Vector3d::Zero()};
@@ -126,7 +132,9 @@ ModelConversionResult convertCameraModel(
   );
 
   optimizer::PnpSolver solver;
-  optimizer::PnpResult pnp;
+  using PnpResultType =
+    std::conditional_t<std::is_same_v<T, double>, optimizer::PnpResult64, optimizer::PnpResult>;
+  PnpResultType pnp;
   const bool solved =
     solver.solve(rays, pixels, guess, pnp, solver_opts, optimizer::PnpFlag::FIX_EXTRINSICS);
 
@@ -137,7 +145,7 @@ ModelConversionResult convertCameraModel(
   // ------------------------------------------------------------------
   // Fit quality on the same grid, through the fitted model.
   // ------------------------------------------------------------------
-  const CameraModel64 fit64 = toCameraModel64(result.camera_model);
+  const CameraModel64 fit64 = camxiom::detail::asModel64(result.camera_model);
   double sum_sq = 0.0;
   double max_err = 0.0;
   int representable = 0;
@@ -172,6 +180,7 @@ ModelConversionResult convertCameraModel(
   // independently measured rms is at numerical precision: 1e-3 px is far
   // below any physical calibration residual yet safely above the
   // float-storage rounding noise of the returned CameraModel (~1e-4 px).
+  // The double API uses 1e-9 px because it has no float storage rounding.
   // (rms is +inf when representable == 0, so the escape cannot misfire.)
   //
   // The escape additionally requires a clear margin between sample count and
@@ -180,7 +189,7 @@ ModelConversionResult convertCameraModel(
   // components) could over-fit the grid to machine precision while being
   // wrong off-grid. Two points per free parameter = four residuals per
   // unknown; the default 24x18 grid satisfies this for every family.
-  constexpr double kNumericallyExactRmsPx = 1e-3;
+  constexpr double kNumericallyExactRmsPx = std::is_same_v<T, double> ? 1e-9 : 1e-3;
   const int free_param_count = 4 +
                                optimizer::detail::projectionParamCount(dst_seed.projection.type) +
                                static_cast<int>(dst_seed.distortion.count);
@@ -190,6 +199,28 @@ ModelConversionResult convertCameraModel(
   result.status =
     (solved && fit_converged && representable >= 8) ? StatusCode::OK : StatusCode::NON_CONVERGED;
   return result;
+}
+
+}  // namespace
+
+ModelConversionResult convertCameraModel(
+  const CameraModel &src_model, const int image_width, const int image_height,
+  const CameraModel &dst_seed, const ModelConversionOptions &options
+)
+{
+  return convertCameraModelImpl<ModelConversionResult>(
+    src_model, image_width, image_height, dst_seed, options
+  );
+}
+
+ModelConversionResult64 convertCameraModel64(
+  const CameraModel64 &src_model, const int image_width, const int image_height,
+  const CameraModel64 &dst_seed, const ModelConversionOptions &options
+)
+{
+  return convertCameraModelImpl<ModelConversionResult64>(
+    src_model, image_width, image_height, dst_seed, options
+  );
 }
 
 }  // namespace camxiom::calib

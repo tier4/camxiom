@@ -15,7 +15,7 @@
 #ifndef CAMXIOM__OPTIMIZER__PNP_COST_ANALYTICAL_BATCH_HPP
 #define CAMXIOM__OPTIMIZER__PNP_COST_ANALYTICAL_BATCH_HPP
 
-#include "camxiom/types.hpp"
+#include "camxiom/types64.hpp"
 
 #include <Eigen/Core>
 
@@ -39,7 +39,7 @@ namespace camxiom::optimizer
 ///   [5] projection_params (3)  — [xi, alpha, beta]
 ceres::CostFunction *createAnalyticalBatchCost(
   const std::vector<Eigen::Vector3d> &object_points,
-  const std::vector<Eigen::Vector2d> &image_points, const camxiom::CameraModel &camera_model,
+  const std::vector<Eigen::Vector2d> &image_points, const camxiom::CameraModel64 &camera_model,
   int effective_dist_count
 );
 

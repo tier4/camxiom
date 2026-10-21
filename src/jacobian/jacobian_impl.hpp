@@ -36,7 +36,7 @@
 #include "camxiom/types.hpp"
 #include "detail/ds_forward.hpp"
 #include "detail/internal.hpp"           // validateCameraModelQuery
-#include "detail/projection_common.hpp"  // hasThetaMaxCap / withinThetaMax
+#include "detail/projection_common.hpp"  // DeriveAtUseT / withinThetaMaxCos
 #include "distortion/angle_impl.hpp"
 #include "distortion/plane_impl.hpp"
 #include "projection64/internal.hpp"  // validateCameraModelQuery64
@@ -314,8 +314,8 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobian(
     return invalidJacobian<T>(StatusCode::OUT_OF_FOV);
   }
   // theta_max contract, matching the scalar forward.
-  if (detail_impl::hasThetaMaxCap(model.projection.theta_max) &&
-      !detail_impl::withinThetaMax(model.projection.theta_max, Z, r))
+  const detail_impl::DeriveAtUseT<T> constants{model.projection};
+  if (constants.hasThetaCap() && !detail_impl::withinThetaMaxCos(constants.cosThetaMax(), Z, r))
   {
     return invalidJacobian<T>(StatusCode::OUT_OF_FOV);
   }
@@ -412,15 +412,16 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobian(
   T xi_d1_z = T(0);
   T d2 = T(0);
   T denom = T(0);
-  const StatusCode fwd =
-    detail::computeDsForward<T>(xi, alpha, X, Y, Z, kEpsilon, d1, r_sq, xi_d1_z, d2, denom);
+  const detail_impl::DeriveAtUseT<T> constants{model.projection};
+  const StatusCode fwd = detail::computeDsForward<T>(
+    xi, alpha, X, Y, Z, kEpsilon, constants, d1, r_sq, xi_d1_z, d2, denom
+  );
   if (fwd != StatusCode::OK)
   {
     return invalidJacobian<T>(fwd);
   }
   // theta_max contract, matching the scalar forward.
-  if (detail_impl::hasThetaMaxCap(model.projection.theta_max) &&
-      !detail_impl::withinThetaMax(model.projection.theta_max, Z, d1))
+  if (constants.hasThetaCap() && !detail_impl::withinThetaMaxCos(constants.cosThetaMax(), Z, d1))
   {
     return invalidJacobian<T>(StatusCode::OUT_OF_FOV);
   }
@@ -547,9 +548,9 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobian(
     }
   }
   // theta_max contract; d above is beta-weighted, so use the true norm.
-  if (detail_impl::hasThetaMaxCap(model.projection.theta_max) &&
-      !detail_impl::withinThetaMax(model.projection.theta_max, Z,
-                                   std::sqrt(X * X + Y * Y + Z * Z)))
+  const detail_impl::DeriveAtUseT<T> constants{model.projection};
+  if (constants.hasThetaCap() &&
+      !detail_impl::withinThetaMaxCos(constants.cosThetaMax(), Z, std::sqrt(X * X + Y * Y + Z * Z)))
   {
     return invalidJacobian<T>(StatusCode::OUT_OF_FOV);
   }

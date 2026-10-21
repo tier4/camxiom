@@ -147,6 +147,7 @@ struct PnpResult {             // [[nodiscard]]
   CameraModel camera_model;
   std::vector<Eigen::Vector3d> rvecs, tvecs;        // Rodrigues + translation per view
   std::size_t valid_count, total_count;
+  std::vector<std::size_t> per_view_valid_counts;
 };
 struct PnpSummary {
   int num_successful_steps, num_unsuccessful_steps;
@@ -162,6 +163,17 @@ Three cost paths: `ANALYTICAL` (default — manual Jacobians via
 path** taken automatically for pose-only solves (everything except
 extrinsics fixed). Note the box bounds apply only to the Ceres paths; the
 GN fast path runs unconstrained.
+
+`PnpResult::success` and `PnpSummary::solution_usable` include validation of
+the returned model and poses. Every view must contain at least three
+projectable correspondences, and at least half its input points must be
+projectable. A large healthy view cannot hide an unusable one. These counts
+describe projection validity, not an inlier classification or an accuracy
+threshold; applications still decide whether the residuals are acceptable.
+`converged` separately describes the optimizer's termination: it can be true
+at a constant invalid-projection penalty even though `solution_usable` is
+false. Ceres can return a usable best effort at its iteration limit; the GN
+path requires convergence. With zero projectable points, `rmse` is infinity.
 
 ## `calib::calibrate` — single-pass intrinsics calibration
 
@@ -206,6 +218,13 @@ Core: `status`, `camera_model`, `per_view_rotations` / `_translations`,
 `rms_reprojection_error_px`, `max_reprojection_error_px`, `per_view_rms_px`,
 `per_point_residuals`, `iterations_used`.
 
+`reprojection_status`, `valid_count`, `total_count`, and
+`per_view_valid_counts` describe the evaluation behind those errors. When
+the final evaluation fails or no point projects, both errors are infinity.
+A per-view RMS is infinity if that view has no projectable points; global
+RMS uses only projectable points. Early failures return before this
+evaluation and leave the errors at 0, so check `status` first.
+
 Status contract: `ok()` is strict (`status == OK`). `NON_CONVERGED` still
 carries a best-effort model, poses, and diagnostics (useful as a warm
 restart). Early failures (validation, degenerate DLT) return atomically —
@@ -233,9 +252,20 @@ sits at/near a solver box bound (a proximity test on the final estimate).
 ### Diagnostics helpers (pure functions)
 
 ```cpp
+ReprojectionErrorResult computeReprojErrors(views, model, Rs, ts);
 double computeReprojErrors(views, model, Rs, ts, per_view_rms_out, max_err_out);
 std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals(views, model, Rs, ts);
 ```
+
+The result overload reports status, RMS, maximum error, total/valid point
+counts, and per-view RMS/valid counts. `OK` means a finite statistic was
+computed from at least one correspondence; inspect coverage as well as RMS
+before accepting a model. With no projectable points it reports
+`DEGENERATE_CONFIG` and infinite errors. Invalid inputs/models and numeric
+overflow also report failure with infinite errors. The existing six-argument
+overload remains available, but now returns infinity instead of zero for
+failed/empty evaluations. Callers relying on the old zero sentinel must
+check finiteness or use the status-bearing overload.
 
 ## See also
 
@@ -243,3 +273,38 @@ std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals(views, model,
   family.
 - [Design / numerical strategy](../design/numerical-strategy.md) — why
   identifiability locks exist, solver internals.
+
+### Double-precision PnP input and output
+
+`PnpSolver::solve` with `PnpInitialGuess64` and `PnpResult64` keeps the input
+model, the write-back after optimization and the returned model as
+`CameraModel64`. It supports single and multiple views and the analytical
+Jacobian, automatic-differentiation and pose-only fast paths. The existing
+`PnpInitialGuess` / `PnpResult` remain float.
+
+### Keeping calibration results in double precision
+
+`calib::calibrate64(views, initial_model64, flags, options)` returns a
+`CalibrationResult64`. Nothing is converted to float on the way: not the
+initial model, the principal-point prior, the hand-off to PnP, the result
+model, or the evaluation of reprojection error, covariance and
+observability. `computeReprojErrors64` and `computePerPointResiduals64`
+evaluate the same model directly. The status codes, the empty result on
+failure and the rules for returning a best-effort estimate are the same as in
+the float API.
+
+```cpp
+camxiom::CameraModel64 seed = camxiom::makeCameraModel64(camera_info);
+auto fit = camxiom::calib::calibrate64(views, seed, flags, options);
+if (fit.status == camxiom::StatusCode::OK) {
+  auto next = camxiom::calib::calibrate64(views, fit.camera_model, flags, options);
+}
+```
+
+Double precision guarantees how the numbers are represented. The accuracy
+reached on real data still depends on the observations and the model.
+
+The model returned by PnP keeps the input field-of-view limit. The limit
+shrinks only when the monotone range of the fisheye coefficients shrinks, so
+the range of rays that can be accepted never suddenly widens between the
+optimization and its result.

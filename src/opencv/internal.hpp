@@ -32,10 +32,8 @@
 
 namespace camxiom::opencv
 {
-namespace camgeom = ::camxiom;
-
-using camgeom::CameraModel;
-using camgeom::StatusCode;
+using camxiom::CameraModel;
+using camxiom::StatusCode;
 
 inline constexpr float kNaN = std::numeric_limits<float>::quiet_NaN();
 inline constexpr double kDivisionEpsilon = 1e-12;
@@ -253,9 +251,9 @@ inline bool parseProjectionMatrix(
   return true;
 }
 
-inline camgeom::PinholeCompatProfile choosePinholeProfile(const std::size_t d_size)
+inline camxiom::PinholeCompatProfile choosePinholeProfile(const std::size_t d_size)
 {
-  using camgeom::PinholeCompatProfile;
+  using camxiom::PinholeCompatProfile;
   switch (d_size)
   {
     case 0:
@@ -285,10 +283,10 @@ inline StatusCode buildPinholeModel(
     return StatusCode::INVALID_INPUT;
   }
   const std::vector<double> D = extractD(dist_coeffs);
-  camgeom::PinholeExternalModel ext;
+  camxiom::PinholeExternalModel ext;
   ext.K = K;
   ext.D = D;
-  return camgeom::importPinholeModel(ext, choosePinholeProfile(D.size()), model_out);
+  return camxiom::importPinholeModel(ext, choosePinholeProfile(D.size()), model_out);
 }
 
 inline StatusCode buildFisheyeModel(
@@ -301,11 +299,11 @@ inline StatusCode buildFisheyeModel(
     return StatusCode::INVALID_INPUT;
   }
   const std::vector<double> D = extractD(dist_coeffs);
-  camgeom::FisheyeExternalModel ext;
+  camxiom::FisheyeExternalModel ext;
   ext.K = K;
   ext.D = D;
-  return camgeom::importFisheyeModel(
-    ext, camgeom::FisheyeCompatProfile::OPENCV_FISHEYE_D4, model_out
+  return camxiom::importFisheyeModel(
+    ext, camxiom::FisheyeCompatProfile::OPENCV_FISHEYE_D4, model_out
   );
 }
 
@@ -331,7 +329,7 @@ inline StatusCode buildPinholeModelWithNewK(
   }
   else
   {
-    undistorted_out = camgeom::makeDistortionFree(distorted_out);
+    undistorted_out = camxiom::makeDistortionFree(distorted_out);
   }
   return StatusCode::OK;
 }
@@ -358,14 +356,14 @@ inline StatusCode buildFisheyeModelWithNewK(
   }
   else
   {
-    undistorted_out = camgeom::makeDistortionFree(distorted_out);
+    undistorted_out = camxiom::makeDistortionFree(distorted_out);
   }
   return StatusCode::OK;
 }
 
-inline camgeom::OmnidirectionalCompatProfile chooseOmniProfile(const std::size_t d_size)
+inline camxiom::OmnidirectionalCompatProfile chooseOmniProfile(const std::size_t d_size)
 {
-  using camgeom::OmnidirectionalCompatProfile;
+  using camxiom::OmnidirectionalCompatProfile;
   switch (d_size)
   {
     case 0:
@@ -391,11 +389,11 @@ inline StatusCode buildOmniModel(
     return StatusCode::INVALID_INPUT;
   }
   const std::vector<double> D = extractD(dist_coeffs);
-  camgeom::OmnidirectionalExternalModel ext;
+  camxiom::OmnidirectionalExternalModel ext;
   ext.K = K;
   ext.D = D;
   ext.xi = xi;
-  return camgeom::importOmnidirectionalModel(ext, chooseOmniProfile(D.size()), model_out);
+  return camxiom::importOmnidirectionalModel(ext, chooseOmniProfile(D.size()), model_out);
 }
 
 inline StatusCode buildOmniModelWithNewK(
@@ -420,7 +418,7 @@ inline StatusCode buildOmniModelWithNewK(
   }
   else
   {
-    undistorted_out = camgeom::makeDistortionFree(distorted_out);
+    undistorted_out = camxiom::makeDistortionFree(distorted_out);
   }
   return StatusCode::OK;
 }

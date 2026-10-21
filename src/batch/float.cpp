@@ -235,53 +235,61 @@ int rayToPixelBatch(
   }
 
 #ifdef CAMXIOM_HAS_AVX2
-  if (model.projection.type == ProjectionModelType::PINHOLE)
+  // The AVX2 kernels are compiled on every x86 build (see
+  // detail/simd_dispatch.hpp) and selected here only when the CPU running
+  // this process actually implements AVX2 + FMA.
+  if (detail::cpuHasAvx2())
   {
-    return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
-      return detail::rayToPixelBatchPinholeAvx2(
-        model, rays_xyz + 3 * begin, len, u_out + begin, v_out + begin,
-        detail::offsetStatuses(statuses_out, begin)
-      );
-    });
+    if (model.projection.type == ProjectionModelType::PINHOLE)
+    {
+      return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
+        return detail::rayToPixelBatchPinholeAvx2(
+          model, rays_xyz + 3 * begin, len, u_out + begin, v_out + begin,
+          detail::offsetStatuses(statuses_out, begin)
+        );
+      });
+    }
+    if (model.projection.type == ProjectionModelType::FISHEYE_THETA &&
+        supportsFisheyeSseDistortion(model.distortion.type))
+    {
+      return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
+        return detail::rayToPixelBatchFisheyeAvx2(
+          model, rays_xyz + 3 * begin, len, u_out + begin, v_out + begin,
+          detail::offsetStatuses(statuses_out, begin)
+        );
+      });
+    }
+    if (model.projection.type == ProjectionModelType::OMNIDIRECTIONAL)
+    {
+      return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
+        return detail::rayToPixelBatchOmniAvx2(
+          model, rays_xyz + 3 * begin, len, u_out + begin, v_out + begin,
+          detail::offsetStatuses(statuses_out, begin)
+        );
+      });
+    }
+    if (model.projection.type == ProjectionModelType::DOUBLE_SPHERE)
+    {
+      return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
+        return detail::rayToPixelBatchDsphAvx2(
+          model, rays_xyz + 3 * begin, len, u_out + begin, v_out + begin,
+          detail::offsetStatuses(statuses_out, begin)
+        );
+      });
+    }
+    if (model.projection.type == ProjectionModelType::EUCM)
+    {
+      return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
+        return detail::rayToPixelBatchEucmAvx2(
+          model, rays_xyz + 3 * begin, len, u_out + begin, v_out + begin,
+          detail::offsetStatuses(statuses_out, begin)
+        );
+      });
+    }
   }
-  if (model.projection.type == ProjectionModelType::FISHEYE_THETA &&
-      supportsFisheyeSseDistortion(model.distortion.type))
-  {
-    return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
-      return detail::rayToPixelBatchFisheyeAvx2(
-        model, rays_xyz + 3 * begin, len, u_out + begin, v_out + begin,
-        detail::offsetStatuses(statuses_out, begin)
-      );
-    });
-  }
-  if (model.projection.type == ProjectionModelType::OMNIDIRECTIONAL)
-  {
-    return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
-      return detail::rayToPixelBatchOmniAvx2(
-        model, rays_xyz + 3 * begin, len, u_out + begin, v_out + begin,
-        detail::offsetStatuses(statuses_out, begin)
-      );
-    });
-  }
-  if (model.projection.type == ProjectionModelType::DOUBLE_SPHERE)
-  {
-    return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
-      return detail::rayToPixelBatchDsphAvx2(
-        model, rays_xyz + 3 * begin, len, u_out + begin, v_out + begin,
-        detail::offsetStatuses(statuses_out, begin)
-      );
-    });
-  }
-  if (model.projection.type == ProjectionModelType::EUCM)
-  {
-    return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
-      return detail::rayToPixelBatchEucmAvx2(
-        model, rays_xyz + 3 * begin, len, u_out + begin, v_out + begin,
-        detail::offsetStatuses(statuses_out, begin)
-      );
-    });
-  }
-#elif defined(CAMXIOM_HAS_SSE2)
+#endif
+
+#ifdef CAMXIOM_HAS_SSE2
   if (model.projection.type == ProjectionModelType::PINHOLE)
   {
     return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
@@ -291,9 +299,6 @@ int rayToPixelBatch(
       );
     });
   }
-#endif
-
-#ifdef CAMXIOM_HAS_SSE2
   if (model.projection.type == ProjectionModelType::FISHEYE_THETA &&
       supportsFisheyeSseDistortion(model.distortion.type))
   {
@@ -531,52 +536,72 @@ int pixelToRayBatch(
   if (simd_inverse_profitable)
   {
 #ifdef CAMXIOM_HAS_AVX2
-    if (model.projection.type == ProjectionModelType::PINHOLE)
+    // Compiled on every x86 build (detail/simd_dispatch.hpp); entered only when
+    // the CPU running this process implements AVX2 + FMA.
+    //
+    // The KB4-family fisheye inverse is excluded: its 8-wide kernel measures
+    // 2x SLOWER than the 4-wide SSE2 one on the same input (37.9 -> 75.8 ns per
+    // pixel on a 5.5 GHz core, 2M pixels). Every lane of a group must converge
+    // before the shared Newton loop can exit, and widening the group makes a
+    // slow lane likelier, which more than eats the width. That is the same
+    // reason the aarch64 carve-out above exists. The AVX2 fisheye FORWARD
+    // kernel is unaffected and stays selected -- it is 1.7x faster than SSE2.
+    const bool avx2_inverse_profitable =
+      !(model.projection.type == ProjectionModelType::FISHEYE_THETA &&
+        (model.distortion.type == DistortionModelType::OPENCV_FISHEYE4 ||
+         model.distortion.type == DistortionModelType::KB4 ||
+         model.distortion.type == DistortionModelType::KB8));
+    if (detail::cpuHasAvx2() && avx2_inverse_profitable)
     {
-      return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
-        return detail::pixelToRayBatchPinholeAvx2(
-          model, u_in + begin, v_in + begin, len, dirs_xyz + 3 * begin,
-          detail::offsetStatuses(statuses_out, begin), solver_options
-        );
-      });
+      if (model.projection.type == ProjectionModelType::PINHOLE)
+      {
+        return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
+          return detail::pixelToRayBatchPinholeAvx2(
+            model, u_in + begin, v_in + begin, len, dirs_xyz + 3 * begin,
+            detail::offsetStatuses(statuses_out, begin), solver_options
+          );
+        });
+      }
+      if (model.projection.type == ProjectionModelType::FISHEYE_THETA)
+      {
+        return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
+          return detail::pixelToRayBatchFisheyeAvx2(
+            model, u_in + begin, v_in + begin, len, dirs_xyz + 3 * begin,
+            detail::offsetStatuses(statuses_out, begin), solver_options
+          );
+        });
+      }
+      if (model.projection.type == ProjectionModelType::OMNIDIRECTIONAL)
+      {
+        return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
+          return detail::pixelToRayBatchOmniAvx2(
+            model, u_in + begin, v_in + begin, len, dirs_xyz + 3 * begin,
+            detail::offsetStatuses(statuses_out, begin), solver_options
+          );
+        });
+      }
+      if (model.projection.type == ProjectionModelType::DOUBLE_SPHERE)
+      {
+        return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
+          return detail::pixelToRayBatchDsphAvx2(
+            model, u_in + begin, v_in + begin, len, dirs_xyz + 3 * begin,
+            detail::offsetStatuses(statuses_out, begin), solver_options
+          );
+        });
+      }
+      if (model.projection.type == ProjectionModelType::EUCM)
+      {
+        return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
+          return detail::pixelToRayBatchEucmAvx2(
+            model, u_in + begin, v_in + begin, len, dirs_xyz + 3 * begin,
+            detail::offsetStatuses(statuses_out, begin), solver_options
+          );
+        });
+      }
     }
-    if (model.projection.type == ProjectionModelType::FISHEYE_THETA)
-    {
-      return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
-        return detail::pixelToRayBatchFisheyeAvx2(
-          model, u_in + begin, v_in + begin, len, dirs_xyz + 3 * begin,
-          detail::offsetStatuses(statuses_out, begin), solver_options
-        );
-      });
-    }
-    if (model.projection.type == ProjectionModelType::OMNIDIRECTIONAL)
-    {
-      return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
-        return detail::pixelToRayBatchOmniAvx2(
-          model, u_in + begin, v_in + begin, len, dirs_xyz + 3 * begin,
-          detail::offsetStatuses(statuses_out, begin), solver_options
-        );
-      });
-    }
-    if (model.projection.type == ProjectionModelType::DOUBLE_SPHERE)
-    {
-      return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
-        return detail::pixelToRayBatchDsphAvx2(
-          model, u_in + begin, v_in + begin, len, dirs_xyz + 3 * begin,
-          detail::offsetStatuses(statuses_out, begin), solver_options
-        );
-      });
-    }
-    if (model.projection.type == ProjectionModelType::EUCM)
-    {
-      return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
-        return detail::pixelToRayBatchEucmAvx2(
-          model, u_in + begin, v_in + begin, len, dirs_xyz + 3 * begin,
-          detail::offsetStatuses(statuses_out, begin), solver_options
-        );
-      });
-    }
-#elif defined(CAMXIOM_HAS_SSE2)
+#endif
+
+#ifdef CAMXIOM_HAS_SSE2
     if (model.projection.type == ProjectionModelType::PINHOLE)
     {
       return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {

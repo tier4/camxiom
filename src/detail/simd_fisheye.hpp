@@ -16,26 +16,12 @@
 #define CAMXIOM__DETAIL__SIMD_FISHEYE_HPP
 
 #include "camxiom/internal/constants.hpp"
+#include "camxiom/internal/prepared_projection.hpp"
 #include "camxiom/types.hpp"
+#include "detail/simd_dispatch.hpp"
 
 #include <cmath>
 #include <limits>
-
-#if defined(__AVX2__)
-#define CAMXIOM_HAS_AVX2 1
-#include <immintrin.h>
-#endif
-
-#if defined(__SSE2__)
-#define CAMXIOM_HAS_SSE2 1
-#include <emmintrin.h>
-#include <xmmintrin.h>
-#elif defined(__aarch64__)
-// The 4-wide kernels below also run natively on AArch64 through a minimal
-// __m128 -> NEON mapping (see simd_neon_compat.hpp for scope and caveats).
-#define CAMXIOM_HAS_SSE2 1
-#include "detail/simd_neon_compat.hpp"
-#endif
 
 namespace camxiom::detail
 {
@@ -128,7 +114,10 @@ inline __m128 sqrtSse4(__m128 x) { return _mm_sqrt_ps(x); }
 /// Handles: polynomial angle distortion (OPENCV_FISHEYE4 / KB4 / EQUIDISTANT), intrinsics.
 /// Returns bitmask of valid points (0-15).
 inline int rayToPixelFisheyeSse4(
-  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
+  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
+  // Unused: this model reads no model-constant state. Present so the forward
+  // kernels share one signature for the function-pointer tables in simd_inverse.
+  const detail_impl::PreparedProjection &
 )
 {
   const __m128 xs = _mm_set_ps(rays_xyz[9], rays_xyz[6], rays_xyz[3], rays_xyz[0]);
@@ -219,23 +208,27 @@ inline int rayToPixelFisheyeSse4(
 
 #ifdef CAMXIOM_HAS_AVX2
 
+CAMXIOM_TARGET_AVX2
 inline __m256 selectAvx(const __m256 base, const __m256 value, const __m256 mask)
 {
   return _mm256_or_ps(_mm256_and_ps(mask, value), _mm256_andnot_ps(mask, base));
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256 absAvxFwd(const __m256 values)
 {
   const __m256 sign_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF));
   return _mm256_and_ps(values, sign_mask);
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256 finiteMaskAvxFwd(const __m256 values)
 {
   const __m256 max_value = _mm256_set1_ps((std::numeric_limits<float>::max)());
   return _mm256_cmp_ps(absAvxFwd(values), max_value, _CMP_LE_OQ);
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256 atanAvx8HighPrecision(__m256 x)
 {
   const __m256 one = _mm256_set1_ps(1.0f);
@@ -273,6 +266,7 @@ inline __m256 atanAvx8HighPrecision(__m256 x)
   return _mm256_xor_ps(result, sign);
 }
 
+CAMXIOM_TARGET_AVX2
 inline __m256 atan2Avx8HighPrecision(const __m256 y, const __m256 x)
 {
   const __m256 sign_mask = _mm256_set1_ps(-0.0f);
@@ -298,8 +292,12 @@ inline __m256 atan2Avx8HighPrecision(const __m256 y, const __m256 x)
   return angle;
 }
 
+CAMXIOM_TARGET_AVX2
 inline int rayToPixelFisheyeAvx8(
-  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
+  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
+  // Unused: this model reads no model-constant state. Present so the forward
+  // kernels share one signature for the function-pointer tables in simd_inverse.
+  const detail_impl::PreparedProjection &
 )
 {
   const __m256 xs = _mm256_set_ps(
@@ -390,7 +388,8 @@ inline int rayToPixelFisheyeAvx8(
 /// Handles: plane distortion (RadTan5/Rational8/ThinPrism), intrinsics.
 /// Returns bitmask of valid points (0-15).
 inline int rayToPixelOmniSse4(
-  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
+  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
+  const detail_impl::PreparedProjection &prepared
 )
 {
   const __m128 xs = _mm_set_ps(rays_xyz[9], rays_xyz[6], rays_xyz[3], rays_xyz[0]);
@@ -420,9 +419,9 @@ inline int rayToPixelOmniSse4(
 
   // theta_max contract (see the scalar impl); skipped at the wide-angle
   // default of pi.
-  if (model.projection.theta_max < constants::kPiF)
+  if (prepared.has_theta_cap)
   {
-    const __m128 cos_tm = _mm_set1_ps(std::cos(model.projection.theta_max));
+    const __m128 cos_tm = _mm_set1_ps(prepared.cos_theta_max);
     valid = _mm_and_ps(valid, _mm_cmpge_ps(zs, _mm_mul_ps(r, cos_tm)));
   }
   const int valid_mask = _mm_movemask_ps(valid);
@@ -522,6 +521,7 @@ int rayToPixelBatchFisheyeSse(
 );
 
 #ifdef CAMXIOM_HAS_AVX2
+CAMXIOM_TARGET_AVX2
 int rayToPixelBatchFisheyeAvx2(
   const CameraModel &model, const float *rays_xyz, int count, float *u_out, float *v_out,
   StatusCode *statuses_out
@@ -536,8 +536,10 @@ int rayToPixelBatchOmniSse(
 #ifdef CAMXIOM_HAS_AVX2
 
 /// Process 8 omnidirectional forward projections using AVX2.
+CAMXIOM_TARGET_AVX2
 inline int rayToPixelOmniAvx8(
-  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
+  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
+  const detail_impl::PreparedProjection &prepared
 )
 {
   const __m256 xs = _mm256_set_ps(
@@ -577,9 +579,9 @@ inline int rayToPixelOmniAvx8(
 
   // theta_max contract (see the scalar impl); skipped at the wide-angle
   // default of pi.
-  if (model.projection.theta_max < constants::kPiF)
+  if (prepared.has_theta_cap)
   {
-    const __m256 cos_tm = _mm256_set1_ps(std::cos(model.projection.theta_max));
+    const __m256 cos_tm = _mm256_set1_ps(prepared.cos_theta_max);
     valid = _mm256_and_ps(valid, _mm256_cmp_ps(zs, _mm256_mul_ps(r, cos_tm), _CMP_GE_OQ));
   }
   const int valid_mask = _mm256_movemask_ps(valid);
@@ -672,6 +674,7 @@ inline int rayToPixelOmniAvx8(
   return _mm256_movemask_ps(valid);
 }
 
+CAMXIOM_TARGET_AVX2
 int rayToPixelBatchOmniAvx2(
   const CameraModel &model, const float *rays_xyz, int count, float *u_out, float *v_out,
   StatusCode *statuses_out

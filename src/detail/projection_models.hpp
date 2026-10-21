@@ -35,6 +35,7 @@
 
 #include "camxiom/types.hpp"
 #include "camxiom/types64.hpp"
+#include "detail/projection_common.hpp"
 
 #include <Eigen/Core>
 
@@ -44,6 +45,14 @@ namespace camxiom
 // Declare the float + double per-model projection entry points for one model
 // namespace. Defined per model in src/<model>/projection.cpp (float) and
 // src/<model>/projection64.cpp (double).
+//
+// The `*Prepared` float overloads take the model together with its
+// model-constant state (detail_impl::PreparedModel) from the caller instead of
+// re-deriving the state. The plain overloads derive it themselves, so they stay
+// drop-in for callers that hold nothing but a CameraModel. Every model declares
+// both, including the ones that read nothing from the prepared state (pinhole,
+// fisheye), so ValidatedCameraModel binds one uniform signature across all
+// five.
 #define CAMXIOM_DECLARE_MODEL_PROJECTION(model_ns)                                              \
   namespace model_ns                                                                            \
   {                                                                                             \
@@ -51,6 +60,13 @@ namespace camxiom
   RayResult pixelToRay(                                                                         \
     const CameraModel &model, const Pixel2 &pixel,                                              \
     const SolverOptions &solver_options = SolverOptions{}                                       \
+  );                                                                                            \
+  PixelResult rayToPixelPrepared(                                                               \
+    const detail_impl::PreparedModel &prepared, const Eigen::Vector3f &ray_direction            \
+  );                                                                                            \
+  RayResult pixelToRayPrepared(                                                                 \
+    const detail_impl::PreparedModel &prepared, const Pixel2 &pixel,                            \
+    const SolverOptions &solver_options                                                         \
   );                                                                                            \
   PixelResult64 rayToPixel64(const CameraModel64 &model, const Eigen::Vector3d &ray_direction); \
   RayResult64 pixelToRay64(                                                                     \

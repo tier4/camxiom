@@ -15,25 +15,11 @@
 #ifndef CAMXIOM__DETAIL__SIMD_PINHOLE_HPP
 #define CAMXIOM__DETAIL__SIMD_PINHOLE_HPP
 
+#include "camxiom/internal/prepared_projection.hpp"
 #include "camxiom/types.hpp"
+#include "detail/simd_dispatch.hpp"
 
 #include <limits>
-
-#if defined(__SSE2__)
-#define CAMXIOM_HAS_SSE2 1
-#include <emmintrin.h>
-#include <xmmintrin.h>
-#elif defined(__aarch64__)
-// The 4-wide kernels below also run natively on AArch64 through a minimal
-// __m128 -> NEON mapping (see simd_neon_compat.hpp for scope and caveats).
-#define CAMXIOM_HAS_SSE2 1
-#include "detail/simd_neon_compat.hpp"
-#endif
-
-#if defined(__SSE4_1__)
-#define CAMXIOM_HAS_SSE41 1
-#include <smmintrin.h>
-#endif
 
 namespace camxiom::detail
 {
@@ -63,7 +49,10 @@ inline __m128 finiteMaskSse(const __m128 values)
 ///
 /// Returns bitmask of valid points (0-15).
 inline int rayToPixelPinholeSse4(
-  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out
+  const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
+  // Unused: this model reads no model-constant state. Present so the forward
+  // kernels share one signature for the function-pointer tables in simd_inverse.
+  const detail_impl::PreparedProjection &
 )
 {
   // Gather 4 rays from AoS layout.

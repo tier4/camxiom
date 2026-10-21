@@ -89,6 +89,7 @@ CameraModel getDefaultSeed(ProjectionModelType model_type, int image_width, int 
 
     case ProjectionModelType::OMNIDIRECTIONAL: {
       model.projection.type = ProjectionModelType::OMNIDIRECTIONAL;
+      model.projection.theta_max = constants::kPiF;
       model.projection.xi = 1.0f;
       setCommonIntrinsics(model, image_width, image_height);
       setIsotropicFocal(model, h / 2.0);
@@ -98,6 +99,7 @@ CameraModel getDefaultSeed(ProjectionModelType model_type, int image_width, int 
 
     case ProjectionModelType::DOUBLE_SPHERE: {
       model.projection.type = ProjectionModelType::DOUBLE_SPHERE;
+      model.projection.theta_max = constants::kPiF;
       model.projection.xi = -0.2f;
       model.projection.alpha = 0.5f;
       setCommonIntrinsics(model, image_width, image_height);
@@ -108,6 +110,7 @@ CameraModel getDefaultSeed(ProjectionModelType model_type, int image_width, int 
 
     case ProjectionModelType::EUCM: {
       model.projection.type = ProjectionModelType::EUCM;
+      model.projection.theta_max = constants::kPiF;
       model.projection.alpha = 0.5f;
       model.projection.beta = 1.0f;
       setCommonIntrinsics(model, image_width, image_height);

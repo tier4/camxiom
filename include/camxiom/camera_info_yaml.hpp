@@ -53,6 +53,22 @@ namespace camxiom
   const std::string &path, const CameraInfo &camera_info, const std::string &camera_name = "camera"
 );
 
+/// Numeric formatting for serialization. ROUND_TRIP emits enough significant
+/// digits to recover every finite double exactly, including subnormals and -0.
+enum class CameraInfoYamlPrecision : std::uint8_t { FIXED = 0U, ROUND_TRIP = 1U };
+
+/// Explicit-precision overloads. The original overloads keep FIXED formatting.
+/// The precision comes last and nothing is defaulted, so a call that the
+/// original overloads accept, such as `toCameraInfoYaml(info, {})`, never
+/// resolves here.
+[[nodiscard]] std::string toCameraInfoYaml(
+  const CameraInfo &camera_info, const std::string &camera_name, CameraInfoYamlPrecision precision
+);
+[[nodiscard]] StatusCode saveCameraInfoYaml(
+  const std::string &path, const CameraInfo &camera_info, const std::string &camera_name,
+  CameraInfoYamlPrecision precision
+);
+
 }  // namespace camxiom
 
 #endif  // CAMXIOM__CAMERA_INFO_YAML_HPP

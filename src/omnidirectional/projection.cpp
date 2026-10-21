@@ -26,14 +26,33 @@ namespace camxiom::omnidirectional
 
 PixelResult rayToPixel(const CameraModel &model, const Eigen::Vector3f &ray_direction)
 {
-  return impl::rayToPixel<float>(model, ray_direction);
+  return impl::rayToPixel<float>(
+    model, ray_direction, detail_impl::DeriveAtUseT<float>{model.projection}
+  );
 }
 
 RayResult pixelToRay(
   const CameraModel &model, const Pixel2 &pixel, const SolverOptions &solver_options
 )
 {
-  return impl::pixelToRay<float>(model, pixel, solver_options);
+  return impl::pixelToRay<float>(
+    model, pixel, solver_options, detail_impl::DeriveAtUseT<float>{model.projection}
+  );
+}
+
+PixelResult rayToPixelPrepared(
+  const detail_impl::PreparedModel &prepared, const Eigen::Vector3f &ray_direction
+)
+{
+  return impl::rayToPixel<float>(prepared.model, ray_direction, prepared.projection);
+}
+
+RayResult pixelToRayPrepared(
+  const detail_impl::PreparedModel &prepared, const Pixel2 &pixel,
+  const SolverOptions &solver_options
+)
+{
+  return impl::pixelToRay<float>(prepared.model, pixel, solver_options, prepared.projection);
 }
 
 }  // namespace camxiom::omnidirectional

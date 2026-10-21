@@ -25,12 +25,8 @@
 #include <iostream>
 #include <limits>
 
-namespace camgeom_opencv = camxiom::opencv;
-
 namespace camxiom::opencv
 {
-namespace camgeom = ::camxiom;
-
 bool solvePnP(
   const CameraModel &model, const std::vector<cv::Point3f> &object_points,
   const std::vector<cv::Point2f> &image_points, cv::Vec3d &rvec_out, cv::Vec3d &tvec_out,
@@ -48,8 +44,8 @@ bool solvePnP(
   if (undist_ok < 0 || normalized.size() != image_points.size())
   {
     std::cerr << "[camxiom::opencv::solvePnP] undistortPoints failed"
-              << " projection=" << camgeom::toString(model.projection.type)
-              << " distortion=" << camgeom::toString(model.distortion.type)
+              << " projection=" << camxiom::toString(model.projection.type)
+              << " distortion=" << camxiom::toString(model.distortion.type)
               << " points=" << image_points.size() << " undist_ok=" << undist_ok
               << " normalized_size=" << normalized.size() << std::endl;
     return false;
@@ -73,8 +69,8 @@ bool solvePnP(
   if (filtered_object_points.size() < 4)
   {
     std::cerr << "[camxiom::opencv::solvePnP] insufficient finite normalized points after filtering"
-              << " projection=" << camgeom::toString(model.projection.type)
-              << " distortion=" << camgeom::toString(model.distortion.type)
+              << " projection=" << camxiom::toString(model.projection.type)
+              << " distortion=" << camxiom::toString(model.distortion.type)
               << " points=" << object_points.size()
               << " finite_points=" << filtered_object_points.size() << std::endl;
     return false;
@@ -100,8 +96,8 @@ bool solvePnP(
   if (!solved)
   {
     std::cerr << "[camxiom::opencv::solvePnP] cv::solvePnP failed"
-              << " projection=" << camgeom::toString(model.projection.type)
-              << " distortion=" << camgeom::toString(model.distortion.type)
+              << " projection=" << camxiom::toString(model.projection.type)
+              << " distortion=" << camxiom::toString(model.distortion.type)
               << " points=" << object_points.size()
               << " solve_points=" << filtered_object_points.size() << " method=" << config.method
               << std::endl;

@@ -27,6 +27,9 @@ int rayToPixelBatchFisheyeSse(
   StatusCode *statuses_out
 )
 {
+  // Model-constant state (FOV-cap cosine, double-sphere bijectivity bound)
+  // derived once for the whole batch instead of once per SIMD block.
+  const detail_impl::PreparedProjection prepared = detail_impl::prepareProjection(model.projection);
   const int simd_count = count & ~3;
   int valid_count = 0;
 
@@ -34,7 +37,7 @@ int rayToPixelBatchFisheyeSse(
   {
     float u4[4];
     float v4[4];
-    const int mask = rayToPixelFisheyeSse4(model, rays_xyz + i * 3, u4, v4);
+    const int mask = rayToPixelFisheyeSse4(model, rays_xyz + i * 3, u4, v4, prepared);
 
     for (int j = 0; j < 4; ++j)
     {
@@ -95,11 +98,15 @@ int rayToPixelBatchFisheyeSse(
 
 #ifdef CAMXIOM_HAS_AVX2
 
+CAMXIOM_TARGET_AVX2
 int rayToPixelBatchFisheyeAvx2(
   const CameraModel &model, const float *rays_xyz, const int count, float *u_out, float *v_out,
   StatusCode *statuses_out
 )
 {
+  // Model-constant state (FOV-cap cosine, double-sphere bijectivity bound)
+  // derived once for the whole batch instead of once per SIMD block.
+  const detail_impl::PreparedProjection prepared = detail_impl::prepareProjection(model.projection);
   const int avx_count = count & ~7;
   const int sse_start = avx_count;
   const int sse_count = (count - avx_count) & ~3;
@@ -109,7 +116,7 @@ int rayToPixelBatchFisheyeAvx2(
   {
     float u8[8];
     float v8[8];
-    const int mask = rayToPixelFisheyeAvx8(model, rays_xyz + i * 3, u8, v8);
+    const int mask = rayToPixelFisheyeAvx8(model, rays_xyz + i * 3, u8, v8, prepared);
     for (int j = 0; j < 8; ++j)
     {
       const int index = i + j;
@@ -147,7 +154,7 @@ int rayToPixelBatchFisheyeAvx2(
   {
     float u4[4];
     float v4[4];
-    const int mask = rayToPixelFisheyeSse4(model, rays_xyz + i * 3, u4, v4);
+    const int mask = rayToPixelFisheyeSse4(model, rays_xyz + i * 3, u4, v4, prepared);
     for (int j = 0; j < 4; ++j)
     {
       const int index = i + j;
@@ -208,6 +215,9 @@ int rayToPixelBatchOmniSse(
   StatusCode *statuses_out
 )
 {
+  // Model-constant state (FOV-cap cosine, double-sphere bijectivity bound)
+  // derived once for the whole batch instead of once per SIMD block.
+  const detail_impl::PreparedProjection prepared = detail_impl::prepareProjection(model.projection);
   if (model.distortion.has_tilt)
   {
     int valid_count = 0;
@@ -237,7 +247,7 @@ int rayToPixelBatchOmniSse(
   {
     float u4[4];
     float v4[4];
-    const int mask = rayToPixelOmniSse4(model, rays_xyz + i * 3, u4, v4);
+    const int mask = rayToPixelOmniSse4(model, rays_xyz + i * 3, u4, v4, prepared);
 
     for (int j = 0; j < 4; ++j)
     {
@@ -295,11 +305,15 @@ int rayToPixelBatchOmniSse(
 
 #ifdef CAMXIOM_HAS_AVX2
 
+CAMXIOM_TARGET_AVX2
 int rayToPixelBatchOmniAvx2(
   const CameraModel &model, const float *rays_xyz, const int count, float *u_out, float *v_out,
   StatusCode *statuses_out
 )
 {
+  // Model-constant state (FOV-cap cosine, double-sphere bijectivity bound)
+  // derived once for the whole batch instead of once per SIMD block.
+  const detail_impl::PreparedProjection prepared = detail_impl::prepareProjection(model.projection);
   if (model.distortion.has_tilt)
   {
     int valid_count = 0;
@@ -325,7 +339,7 @@ int rayToPixelBatchOmniAvx2(
   {
     float u8[8];
     float v8[8];
-    const int mask = rayToPixelOmniAvx8(model, rays_xyz + i * 3, u8, v8);
+    const int mask = rayToPixelOmniAvx8(model, rays_xyz + i * 3, u8, v8, prepared);
     for (int j = 0; j < 8; ++j)
     {
       const int index = i + j;
@@ -354,7 +368,7 @@ int rayToPixelBatchOmniAvx2(
   {
     float u4[4];
     float v4[4];
-    const int mask = rayToPixelOmniSse4(model, rays_xyz + i * 3, u4, v4);
+    const int mask = rayToPixelOmniSse4(model, rays_xyz + i * 3, u4, v4, prepared);
     for (int j = 0; j < 4; ++j)
     {
       const int index = i + j;

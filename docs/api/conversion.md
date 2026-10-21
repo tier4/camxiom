@@ -73,3 +73,14 @@ if (conv.ok() && conv.rms_fit_error_px < 0.5 &&
   // the conversion is lossy for this camera — decide explicitly what to do
 }
 ```
+
+### Double-precision model conversion
+
+`convertCameraModel64` takes `CameraModel64` for the source model and the
+initial guess and returns `ModelConversionResult64`. Ray generation from the
+source, the optimization and the error evaluation of the result never go
+through a float model. Status codes, point counts and errors mean the same as
+above. When the iteration limit is reached, the RMS below which the result
+still counts as numerically exact is `1e-9 px` for the double version,
+against `1e-3 px` for the float version. The usual solver convergence checks
+apply as before.

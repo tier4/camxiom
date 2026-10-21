@@ -16,6 +16,7 @@
 #define CAMXIOM__CALIB__CONVERT_HPP
 
 #include "camxiom/types.hpp"
+#include "camxiom/types64.hpp"
 
 #include <limits>
 
@@ -60,6 +61,19 @@ struct [[nodiscard]] ModelConversionResult
   explicit operator bool() const { return ok(); }
 };
 
+/// Double-precision counterpart with the same status and fit-quality contracts.
+struct [[nodiscard]] ModelConversionResult64
+{
+  StatusCode status{StatusCode::INVALID_INPUT};
+  CameraModel64 camera_model{};
+  double rms_fit_error_px{std::numeric_limits<double>::infinity()};
+  double max_fit_error_px{std::numeric_limits<double>::infinity()};
+  int used_point_count{0};
+  int representable_point_count{0};
+  constexpr bool ok() const { return status == StatusCode::OK; }
+  explicit operator bool() const { return ok(); }
+};
+
 /// Fit a camera model of a (typically different) family so it reproduces
 /// `src_model`'s pixel<->ray geometry: e.g. KB4 fisheye -> pinhole+radtan5,
 /// pinhole -> double sphere, MEI -> EUCM.
@@ -85,6 +99,12 @@ struct [[nodiscard]] ModelConversionResult
 ///         (fewer than 8 usable grid correspondences).
 [[nodiscard]] ModelConversionResult convertCameraModel(
   const CameraModel &src_model, int image_width, int image_height, const CameraModel &dst_seed,
+  const ModelConversionOptions &options = ModelConversionOptions{}
+);
+
+/// Fit and evaluate directly in double precision.
+[[nodiscard]] ModelConversionResult64 convertCameraModel64(
+  const CameraModel64 &src_model, int image_width, int image_height, const CameraModel64 &dst_seed,
   const ModelConversionOptions &options = ModelConversionOptions{}
 );
 

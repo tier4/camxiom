@@ -18,6 +18,7 @@
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/optimizer/pnp_flag.hpp"
 #include "camxiom/types.hpp"
+#include "camxiom/types64.hpp"
 
 #include <Eigen/Core>
 
@@ -63,6 +64,22 @@ struct PnpBound
   }
 };
 
+/// Soft Gaussian prior on the principal point: two extra residuals
+/// r = ((cx - reference_x)/sigma_px, (cy - reference_y)/sigma_px) appended to
+/// the reprojection objective (MAP estimate). This is a MECHANISM: the caller
+/// decides when a prior is warranted (e.g. narrow-FOV lenses where cx/cy is
+/// near-unobservable) and how tight sigma_px should be. Ignored when
+/// FIX_PRINCIPAL_POINTS is set, and irrelevant on the pose-only Gauss-Newton
+/// fast path (intrinsics are fixed there). Never a hard constraint; the box
+/// bounds above remain the backstop. PnpResult::rmse stays reprojection-only.
+struct PnpPrincipalPointPrior
+{
+  bool enabled{false};
+  double reference_x{0.0};
+  double reference_y{0.0};
+  double sigma_px{0.0};
+};
+
 enum class PnpCostType : std::uint8_t { AUTO_DIFF = 0, ANALYTICAL = 1 };
 
 /// Backend-agnostic optimizer controls.
@@ -88,6 +105,7 @@ struct PnpSolverOptions
   PnpBound upper_bound{PnpBound::createUpperBound()};
   PnpBound lower_bound{PnpBound::createLowerBound()};
   PnpCostType cost_type{PnpCostType::ANALYTICAL};
+  PnpPrincipalPointPrior principal_point_prior{};
 };
 
 struct PnpInitialGuess
@@ -99,6 +117,10 @@ struct PnpInitialGuess
 
 struct [[nodiscard]] PnpResult
 {
+  /// A usable solution requires a valid model, finite poses/error, and at
+  /// least three projectable points and half the observations in EVERY view.
+  /// Ceres may return a usable best effort without convergence; consult
+  /// lastSummary().converged separately. The GN path requires convergence.
   bool success{false};
   double rmse{std::numeric_limits<double>::infinity()};
   camxiom::CameraModel camera_model{};
@@ -106,6 +128,31 @@ struct [[nodiscard]] PnpResult
   std::vector<Eigen::Vector3d> tvecs{};
   std::size_t valid_count{0};
   std::size_t total_count{0};
+  /// Projectable correspondences under the returned model and poses.
+  std::vector<std::size_t> per_view_valid_counts{};
+
+  constexpr bool ok() const { return success; }
+  explicit operator bool() const { return ok(); }
+};
+
+/// Double-precision inputs and outputs, with no float model intermediary.
+struct PnpInitialGuess64
+{
+  camxiom::CameraModel64 camera_model{};
+  std::vector<Eigen::Vector3d> rvecs{};
+  std::vector<Eigen::Vector3d> tvecs{};
+};
+
+struct [[nodiscard]] PnpResult64
+{
+  bool success{false};
+  double rmse{std::numeric_limits<double>::infinity()};
+  camxiom::CameraModel64 camera_model{};
+  std::vector<Eigen::Vector3d> rvecs{};
+  std::vector<Eigen::Vector3d> tvecs{};
+  std::size_t valid_count{0};
+  std::size_t total_count{0};
+  std::vector<std::size_t> per_view_valid_counts{};
 
   constexpr bool ok() const { return success; }
   explicit operator bool() const { return ok(); }
@@ -121,6 +168,8 @@ struct PnpSummary
   int num_successful_steps{0};
   int num_unsuccessful_steps{0};
   double final_cost{0.0};
+  /// Includes camxiom's model/pose/per-view validity checks; equals success
+  /// in the PnpResult, even if the backend stopped at a stationary penalty.
   bool solution_usable{false};
   /// True only when the optimizer met its tolerances (function / parameter /
   /// gradient). A run that stopped at max_num_iterations can still be
@@ -173,6 +222,31 @@ public:
   )
   {
     PnpResult result;
+    solve(object_points, image_points, initial_guess, result, options, flags);
+    return result;
+  }
+
+  /// Solve with provided initial guess.
+  bool solve(
+    const ObjectPointSets &object_points, const ImagePointSets &image_points,
+    const PnpInitialGuess64 &initial_guess, PnpResult64 &result_out,
+    const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE
+  );
+
+  /// Solve single-view convenience overload.
+  bool solve(
+    const ObjectPoints &object_points, const ImagePoints &image_points,
+    const PnpInitialGuess64 &initial_guess, PnpResult64 &result_out,
+    const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE
+  );
+
+  PnpResult64 solve(
+    const ObjectPointSets &object_points, const ImagePointSets &image_points,
+    const PnpInitialGuess64 &initial_guess, const PnpSolverOptions &options = PnpSolverOptions(),
+    PnpFlag flags = PnpFlag::NONE
+  )
+  {
+    PnpResult64 result;
     solve(object_points, image_points, initial_guess, result, options, flags);
     return result;
   }

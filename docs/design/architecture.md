@@ -65,6 +65,16 @@ Two boundary decisions worth spelling out:
   templates instantiated exactly twice; the float and double APIs cannot
   drift apart by construction. Batch SIMD is the one deliberate exception
   (per-precision kernels — different optimization targets).
+- **Runtime SIMD selection.** The SSE2 kernels are the x86-64 baseline; the
+  AVX2 kernels are compiled into every x86 build via a per-function
+  `target("avx2,fma")` attribute and chosen at run time by `cpuHasAvx2()`
+  (`src/detail/simd_dispatch.hpp`). One binary is therefore both fast on a
+  modern CPU and correct on an old one, without the consumer passing
+  `-mavx2`. Consequence: the same binary can produce slightly different
+  batch results on two machines, because the AVX2 kernels use FMA and the
+  SSE2 kernels do not — the same spread that already existed between a
+  baseline build and an `-mavx2` build. Set `CAMXIOM_DISABLE_AVX2=1` to pin a
+  process to SSE2.
 
 ## Header layout
 
@@ -119,8 +129,14 @@ configure-time check keeps `project(VERSION)`, `version.hpp`, and
 - A **public-API snapshot test** (Python, stdlib-only) diffs the public
   symbol surface of `include/camxiom/**` against a golden file, so
   accidental API changes fail CI.
-- CI builds SSE2-baseline, AVX2, and ASan+UBSan variants on x86-64;
-  scalar ↔ SIMD parity tests run the real vector kernels; the NEON path is
+- CI builds SSE2-baseline (AVX2 disabled at test time), AVX2-runtime,
+  AVX2-native (`-mavx2 -mfma`) and ASan+UBSan variants on x86-64; scalar ↔
+  SIMD parity tests run the real vector kernels in each; the NEON path is
   validated natively on aarch64.
+- An **AVX2 containment test** (Python, stdlib-only) disassembles the built
+  archive and fails if the AVX2 kernels are missing, or if AVX2 instructions
+  escape the `target`-attributed functions into code that runs
+  unconditionally — the latter would fault only on a CPU without AVX2, which
+  no CI runner has.
 - Benchmarks (`CAMXIOM_BUILD_BENCHMARKS=ON`) baseline the projection hot
   path and the calibrate-diagnostics overhead.

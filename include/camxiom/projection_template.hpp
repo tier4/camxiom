@@ -18,8 +18,8 @@
 /// @file projection_template.hpp
 /// @brief Templated forward-projection functions usable with any scalar type T.
 ///
-/// These functions are pure math templates with NO library dependencies beyond
-/// <cmath> and the camxiom types header.  They work with:
+/// These functions are pure math templates with no dependencies beyond the
+/// standard library and the camxiom types header.  They work with:
 ///   - T = float / double          (normal evaluation)
 ///   - T = ceres::Jet<double, N>   (automatic differentiation)
 ///
@@ -45,29 +45,111 @@
 ///   }
 /// @endcode
 
+#include "camxiom/internal/constants.hpp"
 #include "camxiom/types.hpp"
 
 #include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <type_traits>
 
 namespace camxiom::projection_template
 {
+
+namespace detail
+{
+// Domain predicates depend on the scalar value, never on an AutoDiff tangent.
+// This keeps the header independent of Ceres while supporting its Jet type.
+template <typename T>
+auto scalarValue(const T &value)
+{
+  if constexpr (std::is_arithmetic_v<T>)
+    return value;
+  else
+    return scalarValue(value.a);
+}
+
+template <typename T>
+constexpr double epsilon()
+{
+  using Scalar = decltype(scalarValue(T{}));
+  return std::is_same_v<Scalar, float> ? 1e-8 : 1e-15;
+}
+
+template <typename T>
+#if defined(__GNUC__) || defined(__clang__)
+[[gnu::cold]]
+#endif
+bool reject(T &u, T &v)
+{
+  u = T(0);
+  v = T(0);
+  return false;
+}
+
+template <typename T>
+bool finish(T &u, T &v)
+{
+  if (!(std::isfinite(scalarValue(u)) & std::isfinite(scalarValue(v)))) return reject(u, v);
+  return true;
+}
+
+// For an IEC 559 binary32/64 value, positive finite encodings are ordered
+// integers. The unsigned range (floor, +inf) rejects NaNs, both infinities,
+// signed zero and negatives in one comparison. floor is nonnegative and
+// finite (zero for depth, epsilon for squared norms). memcpy is alias-safe;
+// other scalar representations retain the standard floating-point predicate.
+template <typename Scalar>
+bool positiveFiniteAbove(Scalar value, Scalar floor)
+{
+  if constexpr (std::numeric_limits<Scalar>::is_iec559 && ((std::is_same_v<Scalar, float> && sizeof(Scalar) == 4) || (std::is_same_v<Scalar, double> && sizeof(Scalar) == 8)))
+  {
+    using Bits = std::conditional_t<sizeof(Scalar) == 4, std::uint32_t, std::uint64_t>;
+    Bits bits, lower, upper;
+    const Scalar inf = std::numeric_limits<Scalar>::infinity();
+    std::memcpy(&bits, &value, sizeof(bits));
+    std::memcpy(&lower, &floor, sizeof(lower));
+    std::memcpy(&upper, &inf, sizeof(upper));
+    return bits - lower - 1 < upper - lower - 1;
+  }
+  else
+    return std::isfinite(value) && value > floor;
+}
+
+template <typename T>
+bool withinTheta(ProjectionModelType type, const T &x, const T &y, const T &z, double cap)
+{
+  if (type == ProjectionModelType::PINHOLE) return true;
+  if (!std::isfinite(cap) || cap <= 0 || cap > static_cast<double>(constants::kPiF)) return false;
+  const auto sx = scalarValue(x), sy = scalarValue(y), sz = scalarValue(z);
+  // The fisheye kernel checks the cap against the angle it computes for
+  // projection, so it does not need a second atan2 here.
+  if (type == ProjectionModelType::FISHEYE_THETA) return true;
+  if (cap >= constants::kPi) return true;
+  return sz >= std::sqrt(sx * sx + sy * sy + sz * sz) * std::cos(cap);
+}
+}  // namespace detail
 
 // ============================================================================
 // Pinhole + plane distortion models
 // ============================================================================
 
 template <typename T>
-[[nodiscard]] bool projectRadtan5(
+#if defined(__GNUC__) || defined(__clang__)
+[[gnu::always_inline]]
+#endif
+[[nodiscard]] inline bool
+projectRadtan5(
   const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out,
   T &v_out
 )
 {
-  const T eps = T(1e-12);
-  if (z_cam <= eps)
+  if (!detail::positiveFiniteAbove(
+        detail::scalarValue(z_cam), decltype(detail::scalarValue(z_cam))(0)
+      ))
   {
-    u_out = T(0);
-    v_out = T(0);
-    return false;
+    return detail::reject(u_out, v_out);
   }
 
   const T &fx = intrinsics[0];
@@ -98,7 +180,7 @@ template <typename T>
 
   u_out = fx * xpd + cx;
   v_out = fy * ypd + cy;
-  return true;
+  return detail::finish(u_out, v_out);
 }
 
 template <typename T>
@@ -107,12 +189,11 @@ template <typename T>
   T &v_out
 )
 {
-  const T eps = T(1e-12);
-  if (z_cam <= eps)
+  if (!detail::positiveFiniteAbove(
+        detail::scalarValue(z_cam), decltype(detail::scalarValue(z_cam))(0)
+      ))
   {
-    u_out = T(0);
-    v_out = T(0);
-    return false;
+    return detail::reject(u_out, v_out);
   }
 
   const T &fx = intrinsics[0];
@@ -137,6 +218,8 @@ template <typename T>
 
   const T num = T(1.0) + k1 * r2 + k2 * r4 + k3 * r6;
   const T den = T(1.0) + k4 * r2 + k5 * r4 + k6 * r6;
+  if (!std::isfinite(detail::scalarValue(den)) || std::abs(detail::scalarValue(den)) <= detail::epsilon<T>())
+    return detail::reject(u_out, v_out);
   const T cdist = num / den;
 
   const T a1 = T(2.0) * xn * yn;
@@ -148,7 +231,7 @@ template <typename T>
 
   u_out = fx * xpd + cx;
   v_out = fy * ypd + cy;
-  return true;
+  return detail::finish(u_out, v_out);
 }
 
 template <typename T>
@@ -157,12 +240,11 @@ template <typename T>
   T &v_out
 )
 {
-  const T eps = T(1e-12);
-  if (z_cam <= eps)
+  if (!detail::positiveFiniteAbove(
+        detail::scalarValue(z_cam), decltype(detail::scalarValue(z_cam))(0)
+      ))
   {
-    u_out = T(0);
-    v_out = T(0);
-    return false;
+    return detail::reject(u_out, v_out);
   }
 
   const T &fx = intrinsics[0];
@@ -191,6 +273,8 @@ template <typename T>
 
   const T num = T(1.0) + k1 * r2 + k2 * r4 + k3 * r6;
   const T den = T(1.0) + k4 * r2 + k5 * r4 + k6 * r6;
+  if (!std::isfinite(detail::scalarValue(den)) || std::abs(detail::scalarValue(den)) <= detail::epsilon<T>())
+    return detail::reject(u_out, v_out);
   const T cdist = num / den;
 
   const T a1 = T(2.0) * xn * yn;
@@ -202,7 +286,7 @@ template <typename T>
 
   u_out = fx * xpd + cx;
   v_out = fy * ypd + cy;
-  return true;
+  return detail::finish(u_out, v_out);
 }
 
 template <typename T>
@@ -211,15 +295,14 @@ template <typename T>
   T &v_out
 )
 {
+  if (!std::isfinite(detail::scalarValue(z_cam))) return detail::reject(u_out, v_out);
   using std::cos;
   using std::sin;
 
-  const T eps_z = T(1e-12);
-  if (z_cam <= eps_z)
+  const T eps_z = T(0);
+  if (!(z_cam > eps_z))
   {
-    u_out = T(0);
-    v_out = T(0);
-    return false;
+    return detail::reject(u_out, v_out);
   }
 
   const T &fx = intrinsics[0];
@@ -250,6 +333,8 @@ template <typename T>
 
   const T num = T(1.0) + k1 * r2 + k2 * r4 + k3 * r6;
   const T den = T(1.0) + k4 * r2 + k5 * r4 + k6 * r6;
+  if (!std::isfinite(detail::scalarValue(den)) || std::abs(detail::scalarValue(den)) <= detail::epsilon<T>())
+    return detail::reject(u_out, v_out);
   const T cdist = num / den;
 
   const T a1 = T(2.0) * xn * yn;
@@ -265,12 +350,11 @@ template <typename T>
   const T s_ty = sin(tau_y);
 
   const T r22 = c_ty * c_tx;
-  const T eps = T(1e-12);
-  if (r22 * r22 < eps * eps)
+  if (std::abs(detail::scalarValue(r22)) <= (std::is_same_v<decltype(detail::scalarValue(r22)), float> ? 1e-8 : 1e-12))
   {
     u_out = fx * xpd_no_tilt + cx;
     v_out = fy * ypd_no_tilt + cy;
-    return true;
+    return detail::finish(u_out, v_out);
   }
 
   const T r02 = -s_ty * c_tx;
@@ -294,18 +378,127 @@ template <typename T>
 
   const T mx = t00 * xpd_no_tilt + t01 * ypd_no_tilt + t02;
   const T my = t10 * xpd_no_tilt + t11 * ypd_no_tilt + t12;
+  if (!std::isfinite(detail::scalarValue(mz)) || std::abs(detail::scalarValue(mz)) <= detail::epsilon<T>())
+    return detail::reject(u_out, v_out);
   const T inv_mz = T(1.0) / mz;
   const T x_tilt = mx * inv_mz;
   const T y_tilt = my * inv_mz;
 
   u_out = fx * x_tilt + cx;
   v_out = fy * y_tilt + cy;
-  return true;
+  return detail::finish(u_out, v_out);
 }
 
 // ============================================================================
 // Fisheye (theta-based) models
 // ============================================================================
+
+namespace detail
+{
+template <typename T, bool CheckTheta>
+#if defined(__GNUC__) || defined(__clang__)
+[[gnu::always_inline]]
+#endif
+inline bool
+fisheyeCoordinates(const T &x, const T &y, const T &z, double cap, T &xy_norm, T &theta)
+{
+  using std::atan2;
+  using std::sqrt;
+  const auto sx = scalarValue(x), sy = scalarValue(y), sz = scalarValue(z);
+  const auto xy_sq = sx * sx + sy * sy;
+  const auto norm_sq = xy_sq + sz * sz;
+  if (!positiveFiniteAbove(norm_sq, decltype(norm_sq)(epsilon<T>())) || (sz < 0 && std::sqrt(xy_sq) <= epsilon<T>()))
+    return false;
+  constexpr double kSafeEpsSq = 1e-24;
+  xy_norm = sqrt(x * x + y * y + T(kSafeEpsSq));
+  if constexpr (CheckTheta)
+  {
+    using Value = decltype(scalarValue(T{}));
+    // An entire front hemisphere fits without an angular boundary test.
+    // Use the rounded half-pi of the evaluation scalar, since float atan2
+    // can return a value just above the double half-pi. Other scalar formats
+    // retain the exact comparison below.
+    if constexpr (std::is_same_v<Value, float> || std::is_same_v<Value, double>)
+    {
+      if (sz >= 0 && cap >= static_cast<double>(Value(constants::kHalfPi)))
+      {
+        theta = atan2(xy_norm, z);
+        return true;
+      }
+    }
+    // Decide before atan2 so the raw coordinates do not stay live across
+    // its call on the normal path. Near the axis, preserve the unsmoothed
+    // boundary even though projection uses a smooth norm for AutoDiff.
+    using Scalar = decltype(sx * sx);
+    if (xy_sq + Scalar(kSafeEpsSq) == xy_sq)
+    {
+      theta = atan2(xy_norm, z);
+      return scalarValue(theta) <= cap;
+    }
+    if (!(std::atan2(std::sqrt(xy_sq), sz) <= cap)) return false;
+  }
+  theta = atan2(xy_norm, z);
+  return true;
+}
+
+template <DistortionModelType Type, bool CheckTheta, typename T>
+#if defined(__GNUC__) || defined(__clang__)
+[[gnu::always_inline]]
+#endif
+inline bool
+projectFisheye(
+  const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out,
+  T &v_out, double cap
+)
+{
+  using std::sin;
+  using std::tan;
+  T xy_norm, theta;
+  if (!fisheyeCoordinates<T, CheckTheta>(x_cam, y_cam, z_cam, cap, xy_norm, theta))
+    return reject(u_out, v_out);
+  T theta_d;
+  if constexpr (Type == DistortionModelType::OPENCV_FISHEYE4)
+  {
+    const T t2 = theta * theta;
+    const T t4 = t2 * t2;
+    const T t6 = t4 * t2;
+    const T t8 = t4 * t4;
+    theta_d = theta * (T(1.0) + dist[0] * t2 + dist[1] * t4 + dist[2] * t6 + dist[3] * t8);
+  }
+  else if constexpr (Type == DistortionModelType::KB4 || Type == DistortionModelType::KB8)
+  {
+    const T t2 = theta * theta;
+    const T t3 = t2 * theta;
+    const T t5 = t3 * t2;
+    const T t7 = t5 * t2;
+    const T t9 = t7 * t2;
+    theta_d = theta + dist[0] * t3 + dist[1] * t5 + dist[2] * t7 + dist[3] * t9;
+    if constexpr (Type == DistortionModelType::KB8)
+    {
+      const T t11 = t9 * t2;
+      const T t13 = t11 * t2;
+      const T t15 = t13 * t2;
+      const T t17 = t15 * t2;
+      theta_d = theta_d + dist[4] * t11 + dist[5] * t13 + dist[6] * t15 + dist[7] * t17;
+    }
+  }
+  else if constexpr (Type == DistortionModelType::EQUISOLID)
+    theta_d = T(2.0) * sin(theta * T(0.5));
+  else if constexpr (Type == DistortionModelType::STEREOGRAPHIC)
+    theta_d = T(2.0) * tan(theta * T(0.5));
+  else if constexpr (Type == DistortionModelType::ORTHOGRAPHIC)
+  {
+    if (z_cam < T(0)) return reject(u_out, v_out);
+    theta_d = sin(theta);
+  }
+  else
+    theta_d = theta;
+  const T scale = theta_d / xy_norm;
+  u_out = intrinsics[0] * (scale * x_cam) + intrinsics[2];
+  v_out = intrinsics[1] * (scale * y_cam) + intrinsics[3];
+  return finish(u_out, v_out);
+}
+}  // namespace detail
 
 template <typename T>
 [[nodiscard]] bool projectFisheye4(
@@ -313,35 +506,9 @@ template <typename T>
   T &v_out
 )
 {
-  using std::atan2;
-  using std::sqrt;
-
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
-  const T &k1 = dist[0];
-  const T &k2 = dist[1];
-  const T &k3 = dist[2];
-  const T &k4 = dist[3];
-
-  constexpr double kSafeEpsSq = 1e-24;
-  const T xy_norm = sqrt(x_cam * x_cam + y_cam * y_cam + T(kSafeEpsSq));
-  const T theta = atan2(xy_norm, z_cam);
-  const T t2 = theta * theta;
-  const T t4 = t2 * t2;
-  const T t6 = t4 * t2;
-  const T t8 = t4 * t4;
-  const T theta_d = theta * (T(1.0) + k1 * t2 + k2 * t4 + k3 * t6 + k4 * t8);
-
-  const T scale = theta_d / xy_norm;
-  const T xn = scale * x_cam;
-  const T yn = scale * y_cam;
-
-  u_out = fx * xn + cx;
-  v_out = fy * yn + cy;
-  return true;
+  return detail::projectFisheye<DistortionModelType::OPENCV_FISHEYE4, false>(
+    intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
+  );
 }
 
 template <typename T>
@@ -350,36 +517,9 @@ template <typename T>
   T &v_out
 )
 {
-  using std::atan2;
-  using std::sqrt;
-
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
-  const T &k1 = dist[0];
-  const T &k2 = dist[1];
-  const T &k3 = dist[2];
-  const T &k4 = dist[3];
-
-  constexpr double kSafeEpsSq = 1e-24;
-  const T xy_norm = sqrt(x_cam * x_cam + y_cam * y_cam + T(kSafeEpsSq));
-  const T theta = atan2(xy_norm, z_cam);
-  const T t2 = theta * theta;
-  const T t3 = t2 * theta;
-  const T t5 = t3 * t2;
-  const T t7 = t5 * t2;
-  const T t9 = t7 * t2;
-  const T theta_d = theta + k1 * t3 + k2 * t5 + k3 * t7 + k4 * t9;
-
-  const T scale = theta_d / xy_norm;
-  const T xn = scale * x_cam;
-  const T yn = scale * y_cam;
-
-  u_out = fx * xn + cx;
-  v_out = fy * yn + cy;
-  return true;
+  return detail::projectFisheye<DistortionModelType::KB4, false>(
+    intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
+  );
 }
 
 template <typename T>
@@ -388,36 +528,9 @@ template <typename T>
   T &v_out
 )
 {
-  using std::atan2;
-  using std::sqrt;
-
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
-  constexpr double kSafeEpsSq = 1e-24;
-  const T xy_norm = sqrt(x_cam * x_cam + y_cam * y_cam + T(kSafeEpsSq));
-  const T theta = atan2(xy_norm, z_cam);
-  const T t2 = theta * theta;
-  const T t3 = t2 * theta;
-  const T t5 = t3 * t2;
-  const T t7 = t5 * t2;
-  const T t9 = t7 * t2;
-  const T t11 = t9 * t2;
-  const T t13 = t11 * t2;
-  const T t15 = t13 * t2;
-  const T t17 = t15 * t2;
-  const T theta_d = theta + dist[0] * t3 + dist[1] * t5 + dist[2] * t7 + dist[3] * t9 +
-                    dist[4] * t11 + dist[5] * t13 + dist[6] * t15 + dist[7] * t17;
-
-  const T scale = theta_d / xy_norm;
-  const T xn = scale * x_cam;
-  const T yn = scale * y_cam;
-
-  u_out = fx * xn + cx;
-  v_out = fy * yn + cy;
-  return true;
+  return detail::projectFisheye<DistortionModelType::KB8, false>(
+    intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
+  );
 }
 
 template <typename T>
@@ -425,54 +538,19 @@ template <typename T>
   const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out
 )
 {
-  using std::atan2;
-  using std::sqrt;
-
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
-  constexpr double kSafeEpsSq = 1e-24;
-  const T xy_norm = sqrt(x_cam * x_cam + y_cam * y_cam + T(kSafeEpsSq));
-  const T theta = atan2(xy_norm, z_cam);
-
-  const T scale = theta / xy_norm;
-  const T xn = scale * x_cam;
-  const T yn = scale * y_cam;
-
-  u_out = fx * xn + cx;
-  v_out = fy * yn + cy;
-  return true;
+  return detail::projectFisheye<DistortionModelType::EQUIDISTANT, false>(
+    intrinsics, static_cast<const T *>(nullptr), x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
+  );
 }
-
-// Kannala's coefficient-free trigonometric fisheye variants. Same structure
-// as projectEquidistant with the per-model theta_d(theta) substituted,
-// matching the runtime definitions in src/distortion/angle_impl.hpp.
 
 template <typename T>
 [[nodiscard]] bool projectEquisolid(
   const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out
 )
 {
-  using std::atan2;
-  using std::sin;
-  using std::sqrt;
-
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
-  constexpr double kSafeEpsSq = 1e-24;
-  const T xy_norm = sqrt(x_cam * x_cam + y_cam * y_cam + T(kSafeEpsSq));
-  const T theta = atan2(xy_norm, z_cam);
-  const T theta_d = T(2.0) * sin(theta * T(0.5));
-
-  const T scale = theta_d / xy_norm;
-  u_out = fx * (scale * x_cam) + cx;
-  v_out = fy * (scale * y_cam) + cy;
-  return true;
+  return detail::projectFisheye<DistortionModelType::EQUISOLID, false>(
+    intrinsics, static_cast<const T *>(nullptr), x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
+  );
 }
 
 template <typename T>
@@ -480,24 +558,9 @@ template <typename T>
   const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out
 )
 {
-  using std::atan2;
-  using std::sqrt;
-  using std::tan;
-
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
-  constexpr double kSafeEpsSq = 1e-24;
-  const T xy_norm = sqrt(x_cam * x_cam + y_cam * y_cam + T(kSafeEpsSq));
-  const T theta = atan2(xy_norm, z_cam);
-  const T theta_d = T(2.0) * tan(theta * T(0.5));
-
-  const T scale = theta_d / xy_norm;
-  u_out = fx * (scale * x_cam) + cx;
-  v_out = fy * (scale * y_cam) + cy;
-  return true;
+  return detail::projectFisheye<DistortionModelType::STEREOGRAPHIC, false>(
+    intrinsics, static_cast<const T *>(nullptr), x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
+  );
 }
 
 template <typename T>
@@ -505,35 +568,43 @@ template <typename T>
   const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out
 )
 {
-  using std::atan2;
-  using std::sin;
-  using std::sqrt;
-
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
-  // theta_d = sin(theta) folds over past pi/2; reject the non-injective
-  // rear hemisphere like the runtime theta solve does.
-  const T eps = T(1e-12);
-  if (z_cam <= eps)
-  {
-    u_out = T(0.0);
-    v_out = T(0.0);
-    return false;
-  }
-
-  constexpr double kSafeEpsSq = 1e-24;
-  const T xy_norm = sqrt(x_cam * x_cam + y_cam * y_cam + T(kSafeEpsSq));
-  const T theta = atan2(xy_norm, z_cam);
-  const T theta_d = sin(theta);
-
-  const T scale = theta_d / xy_norm;
-  u_out = fx * (scale * x_cam) + cx;
-  v_out = fy * (scale * y_cam) + cy;
-  return true;
+  return detail::projectFisheye<DistortionModelType::ORTHOGRAPHIC, false>(
+    intrinsics, static_cast<const T *>(nullptr), x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
+  );
 }
+namespace detail
+{
+// Wide-angle projections share the same normalized-plane distortion models as
+// pinhole. Dispatch by the raw helpers' coefficient-count convention; the
+// checked generic entry point additionally validates the distortion enum.
+template <typename T>
+bool projectPlaneDistortion(
+  const T *intrinsics, const T *dist, int dist_count, const T &x, const T &y, T &u, T &v
+)
+{
+  switch (dist_count)
+  {
+    case 0:
+      u = intrinsics[0] * x + intrinsics[2];
+      v = intrinsics[1] * y + intrinsics[3];
+      return finish(u, v);
+    case 4: {
+      const T dist5[5] = {dist[0], dist[1], dist[2], dist[3], T(0)};
+      return projectRadtan5(intrinsics, dist5, x, y, T(1), u, v);
+    }
+    case 5:
+      return projectRadtan5(intrinsics, dist, x, y, T(1), u, v);
+    case 8:
+      return projectRational8(intrinsics, dist, x, y, T(1), u, v);
+    case 12:
+      return projectThinPrism12(intrinsics, dist, x, y, T(1), u, v);
+    case 14:
+      return projectTilted14(intrinsics, dist, x, y, T(1), u, v);
+    default:
+      return reject(u, v);
+  }
+}
+}  // namespace detail
 
 // ============================================================================
 // Omnidirectional (Mei) model
@@ -545,52 +616,29 @@ template <typename T>
   const T &z_cam, T &u_out, T &v_out
 )
 {
+  if (!std::isfinite(detail::scalarValue(z_cam))) return detail::reject(u_out, v_out);
   using std::sqrt;
 
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
   const T ray_norm = sqrt(x_cam * x_cam + y_cam * y_cam + z_cam * z_cam);
-  const T eps = T(1e-12);
+  const T eps = T(detail::epsilon<T>());
+  if (!std::isfinite(detail::scalarValue(ray_norm)) || !(ray_norm > eps))
+    return detail::reject(u_out, v_out);
   const T denom = z_cam + xi * ray_norm;
-  if (denom < eps)
+  if (!std::isfinite(detail::scalarValue(denom)) || !(denom > eps))
   {
-    u_out = T(0.0);
-    v_out = T(0.0);
-    return false;
+    return detail::reject(u_out, v_out);
   }
 
   // Injectivity limit (see the runtime omni forward): ray_norm + xi*z > 0;
   // binding for xi > 1 where denom > 0 holds for every direction.
-  if (ray_norm + xi * z_cam < eps)
+  if (!(ray_norm + xi * z_cam > eps))
   {
-    u_out = T(0.0);
-    v_out = T(0.0);
-    return false;
+    return detail::reject(u_out, v_out);
   }
 
-  T xn = x_cam / denom;
-  T yn = y_cam / denom;
-
-  if (dist_count >= 4)
-  {
-    const T r2 = xn * xn + yn * yn;
-    const T r4 = r2 * r2;
-    const T r6 = r4 * r2;
-    const T k3 = (dist_count >= 5) ? dist[4] : T(0.0);
-    const T cdist = T(1.0) + dist[0] * r2 + dist[1] * r4 + k3 * r6;
-    const T a1 = T(2.0) * xn * yn;
-    const T a2 = r2 + T(2.0) * xn * xn;
-    const T a3 = r2 + T(2.0) * yn * yn;
-    xn = xn * cdist + dist[2] * a1 + dist[3] * a2;
-    yn = yn * cdist + dist[2] * a3 + dist[3] * a1;
-  }
-
-  u_out = fx * xn + cx;
-  v_out = fy * yn + cy;
-  return true;
+  return detail::projectPlaneDistortion(
+    intrinsics, dist, dist_count, x_cam / denom, y_cam / denom, u_out, v_out
+  );
 }
 
 // ============================================================================
@@ -603,30 +651,23 @@ template <typename T>
   const T &y_cam, const T &z_cam, T &u_out, T &v_out
 )
 {
+  if (!std::isfinite(detail::scalarValue(z_cam))) return detail::reject(u_out, v_out);
   using std::sqrt;
 
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
   const T d1 = sqrt(x_cam * x_cam + y_cam * y_cam + z_cam * z_cam);
-  const T eps = T(1e-12);
-  if (d1 < eps)
+  const T eps = T(detail::epsilon<T>());
+  if (!std::isfinite(detail::scalarValue(d1)) || !(d1 > eps))
   {
-    u_out = T(0.0);
-    v_out = T(0.0);
-    return false;
+    return detail::reject(u_out, v_out);
   }
 
   const T xi_d1_z = xi * d1 + z_cam;
   const T d2 = sqrt(x_cam * x_cam + y_cam * y_cam + xi_d1_z * xi_d1_z);
+  if (!std::isfinite(detail::scalarValue(d2))) return detail::reject(u_out, v_out);
   const T denom = alpha * d2 + (T(1.0) - alpha) * xi_d1_z;
-  if (denom < eps)
+  if (!std::isfinite(detail::scalarValue(denom)) || !(denom > eps))
   {
-    u_out = T(0.0);
-    v_out = T(0.0);
-    return false;
+    return detail::reject(u_out, v_out);
   }
 
   // DS bijectivity (Usenko 2018 eq. 43-45): z > -w2 * d1, matching the
@@ -636,31 +677,12 @@ template <typename T>
   const T w2 = (w1 + xi) / sqrt(T(2.0) * w1 * xi + xi * xi + T(1.0));
   if (z_cam <= -w2 * d1)
   {
-    u_out = T(0.0);
-    v_out = T(0.0);
-    return false;
+    return detail::reject(u_out, v_out);
   }
 
-  T xn = x_cam / denom;
-  T yn = y_cam / denom;
-
-  if (dist_count >= 4)
-  {
-    const T r2 = xn * xn + yn * yn;
-    const T r4 = r2 * r2;
-    const T r6 = r4 * r2;
-    const T k3 = (dist_count >= 5) ? dist[4] : T(0.0);
-    const T cdist = T(1.0) + dist[0] * r2 + dist[1] * r4 + k3 * r6;
-    const T a1 = T(2.0) * xn * yn;
-    const T a2 = r2 + T(2.0) * xn * xn;
-    const T a3 = r2 + T(2.0) * yn * yn;
-    xn = xn * cdist + dist[2] * a1 + dist[3] * a2;
-    yn = yn * cdist + dist[2] * a3 + dist[3] * a1;
-  }
-
-  u_out = fx * xn + cx;
-  v_out = fy * yn + cy;
-  return true;
+  return detail::projectPlaneDistortion(
+    intrinsics, dist, dist_count, x_cam / denom, y_cam / denom, u_out, v_out
+  );
 }
 
 // ============================================================================
@@ -673,21 +695,16 @@ template <typename T>
   const T &y_cam, const T &z_cam, T &u_out, T &v_out
 )
 {
+  if (!std::isfinite(detail::scalarValue(z_cam))) return detail::reject(u_out, v_out);
   using std::sqrt;
 
-  const T &fx = intrinsics[0];
-  const T &fy = intrinsics[1];
-  const T &cx = intrinsics[2];
-  const T &cy = intrinsics[3];
-
   const T d = sqrt(beta * (x_cam * x_cam + y_cam * y_cam) + z_cam * z_cam);
-  const T eps = T(1e-12);
+  const T eps = T(detail::epsilon<T>());
+  if (!std::isfinite(detail::scalarValue(d)) || !(d > eps)) return detail::reject(u_out, v_out);
   const T denom = alpha * d + (T(1.0) - alpha) * z_cam;
-  if (denom < eps)
+  if (!std::isfinite(detail::scalarValue(denom)) || !(denom > eps))
   {
-    u_out = T(0.0);
-    v_out = T(0.0);
-    return false;
+    return detail::reject(u_out, v_out);
   }
 
   // EUCM FOV validity (unconditional; at alpha = 0 it degenerates to
@@ -696,232 +713,25 @@ template <typename T>
   const T w = (alpha <= T(0.5)) ? alpha / (T(1.0) - alpha) : (T(1.0) - alpha) / alpha;
   if (z_cam <= -w * d)
   {
-    u_out = T(0.0);
-    v_out = T(0.0);
-    return false;
+    return detail::reject(u_out, v_out);
   }
 
-  T xn = x_cam / denom;
-  T yn = y_cam / denom;
-
-  if (dist_count >= 4)
-  {
-    const T r2 = xn * xn + yn * yn;
-    const T r4 = r2 * r2;
-    const T r6 = r4 * r2;
-    const T k3 = (dist_count >= 5) ? dist[4] : T(0.0);
-    const T cdist = T(1.0) + dist[0] * r2 + dist[1] * r4 + k3 * r6;
-    const T a1 = T(2.0) * xn * yn;
-    const T a2 = r2 + T(2.0) * xn * xn;
-    const T a3 = r2 + T(2.0) * yn * yn;
-    xn = xn * cdist + dist[2] * a1 + dist[3] * a2;
-    yn = yn * cdist + dist[2] * a3 + dist[3] * a1;
-  }
-
-  u_out = fx * xn + cx;
-  v_out = fy * yn + cy;
-  return true;
+  return detail::projectPlaneDistortion(
+    intrinsics, dist, dist_count, x_cam / denom, y_cam / denom, u_out, v_out
+  );
 }
 
 // ============================================================================
 // Generic dispatch by model type
 // ============================================================================
 
-template <typename T>
-[[nodiscard]] bool projectGeneric(
-  const CameraModel &model, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out
-)
+namespace detail
 {
-  const T intrinsics[4] = {
-    T(model.intrinsics.fx), T(model.intrinsics.fy), T(model.intrinsics.cx), T(model.intrinsics.cy)};
-
-  switch (model.projection.type)
-  {
-    case ProjectionModelType::PINHOLE: {
-      switch (model.distortion.type)
-      {
-        case DistortionModelType::NONE: {
-          const T eps = T(1e-12);
-          if (z_cam <= eps)
-          {
-            u_out = T(0);
-            v_out = T(0);
-            return false;
-          }
-          const T xn = x_cam / z_cam;
-          const T yn = y_cam / z_cam;
-          u_out = intrinsics[0] * xn + intrinsics[2];
-          v_out = intrinsics[1] * yn + intrinsics[3];
-          return true;
-        }
-        case DistortionModelType::RADTAN4:
-        case DistortionModelType::RADTAN5: {
-          T dist[5];
-          for (int i = 0; i < 5; ++i)
-          {
-            dist[i] = (i < static_cast<int>(model.distortion.count))
-                        ? T(model.distortion.coeffs[static_cast<std::size_t>(i)])
-                        : T(0.0);
-          }
-          return projectRadtan5(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
-        }
-        case DistortionModelType::THIN_PRISM12: {
-          T dist[12];
-          for (int i = 0; i < 12; ++i)
-          {
-            dist[i] = (i < static_cast<int>(model.distortion.count))
-                        ? T(model.distortion.coeffs[static_cast<std::size_t>(i)])
-                        : T(0.0);
-          }
-          return projectThinPrism12(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
-        }
-        case DistortionModelType::TILTED14: {
-          T dist[14];
-          for (int i = 0; i < 14; ++i)
-          {
-            dist[i] = (i < static_cast<int>(model.distortion.count))
-                        ? T(model.distortion.coeffs[static_cast<std::size_t>(i)])
-                        : T(0.0);
-          }
-          return projectTilted14(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
-        }
-        case DistortionModelType::RATIONAL8: {
-          T dist[8];
-          for (int i = 0; i < 8; ++i)
-          {
-            dist[i] = (i < static_cast<int>(model.distortion.count))
-                        ? T(model.distortion.coeffs[static_cast<std::size_t>(i)])
-                        : T(0.0);
-          }
-          return projectRational8(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
-        }
-        case DistortionModelType::OPENCV_FISHEYE4:
-        case DistortionModelType::KB4:
-        case DistortionModelType::KB8:
-        case DistortionModelType::EQUIDISTANT:
-        case DistortionModelType::EQUISOLID:
-        case DistortionModelType::STEREOGRAPHIC:
-        case DistortionModelType::ORTHOGRAPHIC:
-        case DistortionModelType::OMNIDIRECTIONAL:
-        case DistortionModelType::UNKNOWN:
-          break;
-      }
-      // Unknown plane type on a pinhole model: fail rather than silently
-      // projecting distortion-free.
-      u_out = T(0.0);
-      v_out = T(0.0);
-      return false;
-    }
-
-    case ProjectionModelType::FISHEYE_THETA: {
-      switch (model.distortion.type)
-      {
-        case DistortionModelType::NONE:
-        case DistortionModelType::EQUIDISTANT:
-          return projectEquidistant(intrinsics, x_cam, y_cam, z_cam, u_out, v_out);
-        case DistortionModelType::OPENCV_FISHEYE4: {
-          T dist[4];
-          for (int i = 0; i < 4; ++i)
-          {
-            dist[i] = (i < static_cast<int>(model.distortion.count))
-                        ? T(model.distortion.coeffs[static_cast<std::size_t>(i)])
-                        : T(0.0);
-          }
-          return projectFisheye4(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
-        }
-        case DistortionModelType::KB4: {
-          T dist[4];
-          for (int i = 0; i < 4; ++i)
-          {
-            dist[i] = (i < static_cast<int>(model.distortion.count))
-                        ? T(model.distortion.coeffs[static_cast<std::size_t>(i)])
-                        : T(0.0);
-          }
-          return projectKB4(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
-        }
-        case DistortionModelType::KB8: {
-          T dist[8];
-          for (int i = 0; i < 8; ++i)
-          {
-            dist[i] = (i < static_cast<int>(model.distortion.count))
-                        ? T(model.distortion.coeffs[static_cast<std::size_t>(i)])
-                        : T(0.0);
-          }
-          return projectKB8(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
-        }
-        case DistortionModelType::EQUISOLID:
-          return projectEquisolid(intrinsics, x_cam, y_cam, z_cam, u_out, v_out);
-        case DistortionModelType::STEREOGRAPHIC:
-          return projectStereographic(intrinsics, x_cam, y_cam, z_cam, u_out, v_out);
-        case DistortionModelType::ORTHOGRAPHIC:
-          return projectOrthographic(intrinsics, x_cam, y_cam, z_cam, u_out, v_out);
-        case DistortionModelType::RADTAN4:
-        case DistortionModelType::RADTAN5:
-        case DistortionModelType::RATIONAL8:
-        case DistortionModelType::THIN_PRISM12:
-        case DistortionModelType::TILTED14:
-        case DistortionModelType::OMNIDIRECTIONAL:
-        case DistortionModelType::UNKNOWN:
-          break;
-      }
-      // Every ANGLE-space type a validated fisheye model can carry is
-      // handled above; silently projecting an unknown type as
-      // equidistant would bias the optimiser, so fail instead.
-      u_out = T(0.0);
-      v_out = T(0.0);
-      return false;
-    }
-
-    case ProjectionModelType::OMNIDIRECTIONAL: {
-      const T xi = T(model.projection.xi);
-      const int dc = static_cast<int>(model.distortion.count);
-      T dist[5];
-      for (int i = 0; i < 5; ++i)
-      {
-        dist[i] = (i < dc) ? T(model.distortion.coeffs[static_cast<std::size_t>(i)]) : T(0.0);
-      }
-      return projectOmnidirectional(intrinsics, xi, dist, dc, x_cam, y_cam, z_cam, u_out, v_out);
-    }
-
-    case ProjectionModelType::DOUBLE_SPHERE: {
-      const T xi = T(model.projection.xi);
-      const T alpha = T(model.projection.alpha);
-      const int dc = static_cast<int>(model.distortion.count);
-      T dist[5];
-      for (int i = 0; i < 5; ++i)
-      {
-        dist[i] = (i < dc) ? T(model.distortion.coeffs[static_cast<std::size_t>(i)]) : T(0.0);
-      }
-      return projectDoubleSphere(
-        intrinsics, xi, alpha, dist, dc, x_cam, y_cam, z_cam, u_out, v_out
-      );
-    }
-
-    case ProjectionModelType::EUCM: {
-      const T alpha = T(model.projection.alpha);
-      const T beta = T(model.projection.beta);
-      const int dc = static_cast<int>(model.distortion.count);
-      T dist[5];
-      for (int i = 0; i < 5; ++i)
-      {
-        dist[i] = (i < dc) ? T(model.distortion.coeffs[static_cast<std::size_t>(i)]) : T(0.0);
-      }
-      return projectEucm(intrinsics, alpha, beta, dist, dc, x_cam, y_cam, z_cam, u_out, v_out);
-    }
-
-    case ProjectionModelType::UNKNOWN:
-      break;
-  }
-  u_out = T(0.0);
-  v_out = T(0.0);
-  return false;
-}
-
 template <typename T>
-[[nodiscard]] bool projectGenericParametric(
+[[nodiscard]] bool dispatchParametric(
   ProjectionModelType proj_type, DistortionModelType dist_type, const T *intrinsics, const T *dist,
   int dist_count, const T &proj_xi, const T &proj_alpha, const T &proj_beta, const T &x_cam,
-  const T &y_cam, const T &z_cam, T &u_out, T &v_out
+  const T &y_cam, const T &z_cam, T &u_out, T &v_out, double theta_max
 )
 {
   switch (proj_type)
@@ -930,18 +740,15 @@ template <typename T>
       switch (dist_type)
       {
         case DistortionModelType::NONE: {
-          const T eps = T(1e-12);
-          if (z_cam <= eps)
+          if (!std::isfinite(scalarValue(z_cam)) || !(z_cam > T(0)))
           {
-            u_out = T(0);
-            v_out = T(0);
-            return false;
+            return detail::reject(u_out, v_out);
           }
           const T xn = x_cam / z_cam;
           const T yn = y_cam / z_cam;
           u_out = intrinsics[0] * xn + intrinsics[2];
           v_out = intrinsics[1] * yn + intrinsics[3];
-          return true;
+          return detail::finish(u_out, v_out);
         }
         case DistortionModelType::RATIONAL8:
           return projectRational8(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
@@ -950,6 +757,10 @@ template <typename T>
         case DistortionModelType::TILTED14:
           return projectTilted14(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
         case DistortionModelType::RADTAN4: {
+          // Runtime also accepts the legacy 5-entry RADTAN4 layout, where
+          // the fifth entry is evaluated as k3. Only pad a true 4-wide block.
+          if (dist_count == 5)
+            return projectRadtan5(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
           // The caller's dist parameter block really is 4 wide for RADTAN4
           // (e.g. the Ceres block in the AUTO_DIFF PnP cost): reading a
           // fifth coefficient would run off the block. Widen with k3 = 0.
@@ -971,9 +782,7 @@ template <typename T>
       }
       // Unknown plane type: fail rather than silently pretending it is
       // RADTAN5 with whatever happens to sit in the buffer.
-      u_out = T(0.0);
-      v_out = T(0.0);
-      return false;
+      return detail::reject(u_out, v_out);
     }
 
     case ProjectionModelType::FISHEYE_THETA: {
@@ -981,19 +790,33 @@ template <typename T>
       {
         case DistortionModelType::NONE:
         case DistortionModelType::EQUIDISTANT:
-          return projectEquidistant(intrinsics, x_cam, y_cam, z_cam, u_out, v_out);
+          return detail::projectFisheye<DistortionModelType::EQUIDISTANT, true>(
+            intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
+          );
         case DistortionModelType::OPENCV_FISHEYE4:
-          return projectFisheye4(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
+          return detail::projectFisheye<DistortionModelType::OPENCV_FISHEYE4, true>(
+            intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
+          );
         case DistortionModelType::KB4:
-          return projectKB4(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
+          return detail::projectFisheye<DistortionModelType::KB4, true>(
+            intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
+          );
         case DistortionModelType::KB8:
-          return projectKB8(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
+          return detail::projectFisheye<DistortionModelType::KB8, true>(
+            intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
+          );
         case DistortionModelType::EQUISOLID:
-          return projectEquisolid(intrinsics, x_cam, y_cam, z_cam, u_out, v_out);
+          return detail::projectFisheye<DistortionModelType::EQUISOLID, true>(
+            intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
+          );
         case DistortionModelType::STEREOGRAPHIC:
-          return projectStereographic(intrinsics, x_cam, y_cam, z_cam, u_out, v_out);
+          return detail::projectFisheye<DistortionModelType::STEREOGRAPHIC, true>(
+            intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
+          );
         case DistortionModelType::ORTHOGRAPHIC:
-          return projectOrthographic(intrinsics, x_cam, y_cam, z_cam, u_out, v_out);
+          return detail::projectFisheye<DistortionModelType::ORTHOGRAPHIC, true>(
+            intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
+          );
         case DistortionModelType::RADTAN4:
         case DistortionModelType::RADTAN5:
         case DistortionModelType::RATIONAL8:
@@ -1005,9 +828,7 @@ template <typename T>
       }
       // See the model-based dispatch: silently projecting an unknown
       // type as equidistant would bias the optimiser.
-      u_out = T(0.0);
-      v_out = T(0.0);
-      return false;
+      return detail::reject(u_out, v_out);
     }
 
     case ProjectionModelType::OMNIDIRECTIONAL: {
@@ -1031,9 +852,272 @@ template <typename T>
     case ProjectionModelType::UNKNOWN:
       break;
   }
-  u_out = T(0.0);
-  v_out = T(0.0);
-  return false;
+  return detail::reject(u_out, v_out);
+}
+
+}  // namespace detail
+
+namespace detail
+{
+// Model-only checks are independent of the ray and of AutoDiff derivatives.
+// Every active intrinsic/distortion coefficient participates in arithmetic:
+// NaN/Inf necessarily reaches an output or a checked intermediate (norm,
+// rational/tilt denominator), and finish() rejects it. Do not scan those
+// inputs again. Ignored ideal-fisheye padding still needs an explicit check.
+template <typename T>
+bool validParameters(
+  ProjectionModelType proj_type, DistortionModelType dist_type, const T *intrinsics, const T *dist,
+  int dist_count, const T &proj_xi, const T &proj_alpha, const T &proj_beta, double eps
+)
+{
+  if (std::abs(detail::scalarValue(intrinsics[0])) <= eps || std::abs(detail::scalarValue(intrinsics[1])) <= eps)
+    return false;
+  int required = 0;
+  switch (dist_type)
+  {
+    case DistortionModelType::RADTAN4:
+    case DistortionModelType::OPENCV_FISHEYE4:
+    case DistortionModelType::KB4:
+      required = 4;
+      break;
+    case DistortionModelType::RADTAN5:
+      required = 5;
+      break;
+    case DistortionModelType::RATIONAL8:
+    case DistortionModelType::KB8:
+      required = 8;
+      break;
+    case DistortionModelType::THIN_PRISM12:
+      required = 12;
+      break;
+    case DistortionModelType::TILTED14:
+      required = 14;
+      break;
+    case DistortionModelType::NONE:
+    case DistortionModelType::EQUIDISTANT:
+    case DistortionModelType::EQUISOLID:
+    case DistortionModelType::STEREOGRAPHIC:
+    case DistortionModelType::ORTHOGRAPHIC:
+      break;
+    case DistortionModelType::OMNIDIRECTIONAL:
+    case DistortionModelType::UNKNOWN:
+      return false;
+  }
+  if (dist_count != required)
+  {
+    const bool legacy_radtan4 = dist_type == DistortionModelType::RADTAN4 && dist_count == 5;
+    const bool padded_ideal = dist_type == DistortionModelType::EQUIDISTANT ||
+                              dist_type == DistortionModelType::EQUISOLID ||
+                              dist_type == DistortionModelType::STEREOGRAPHIC ||
+                              dist_type == DistortionModelType::ORTHOGRAPHIC;
+    if (!legacy_radtan4 && !padded_ideal) return false;
+    // Ideal mappings may carry zero padding, as accepted by the runtime
+    // validator. Non-zero values would disagree with fixed-width kernels.
+    if (padded_ideal)
+      for (int i = 0; i < dist_count; ++i)
+        if (detail::scalarValue(dist[i]) != 0) return false;
+  }
+  if (proj_type == ProjectionModelType::OMNIDIRECTIONAL || proj_type == ProjectionModelType::DOUBLE_SPHERE || proj_type == ProjectionModelType::EUCM)
+  {
+    switch (dist_type)
+    {
+      case DistortionModelType::NONE:
+      case DistortionModelType::RADTAN4:
+      case DistortionModelType::RADTAN5:
+      case DistortionModelType::RATIONAL8:
+      case DistortionModelType::THIN_PRISM12:
+      case DistortionModelType::TILTED14:
+        break;
+      default:
+        return false;
+    }
+  }
+  const auto xi = detail::scalarValue(proj_xi);
+  const auto alpha = detail::scalarValue(proj_alpha);
+  const auto beta = detail::scalarValue(proj_beta);
+  if ((proj_type == ProjectionModelType::OMNIDIRECTIONAL && !std::isfinite(xi)) || (proj_type == ProjectionModelType::DOUBLE_SPHERE && (!std::isfinite(xi) || xi <= -1 || xi >= 1 || !std::isfinite(alpha) || alpha < 0 || alpha > 1)) || (proj_type == ProjectionModelType::EUCM && (!std::isfinite(beta) || beta <= 0 || !std::isfinite(alpha) || alpha < 0 || alpha > 1)))
+    return false;
+  return true;
+}
+}  // namespace detail
+
+/// Checked parametric projection. theta_max is an explicit, non-optimised
+/// evaluation cap; callers may choose a cap distinct from observation selection.
+/// Rational denominators follow the runtime contract: either sign is allowed,
+/// but a zero/near-zero denominator is rejected. Stricter physical-branch
+/// selection remains the caller's policy.
+template <typename T>
+[[nodiscard]] bool projectGenericParametric(
+  ProjectionModelType proj_type, DistortionModelType dist_type, const T *intrinsics, const T *dist,
+  int dist_count, const T &proj_xi, const T &proj_alpha, const T &proj_beta, const T &x_cam,
+  const T &y_cam, const T &z_cam, T &u_out, T &v_out, double theta_max = constants::kPi
+)
+{
+  if (!intrinsics || dist_count < 0 || dist_count > 14 || (dist_count && !dist) || !detail::withinTheta(proj_type, x_cam, y_cam, z_cam, theta_max))
+    return detail::reject(u_out, v_out);
+  if (!detail::validParameters(
+        proj_type, dist_type, intrinsics, dist, dist_count, proj_xi, proj_alpha, proj_beta,
+        detail::epsilon<T>()
+      ))
+    return detail::reject(u_out, v_out);
+  return detail::dispatchParametric(
+    proj_type, dist_type, intrinsics, dist, dist_count, proj_xi, proj_alpha, proj_beta, x_cam,
+    y_cam, z_cam, u_out, v_out, theta_max
+  );
+}
+
+namespace detail
+{
+// Fixed-width copies avoid constructing 14 scalars (or Jets) for every model.
+// Keep this dispatch visible to the caller so loop-invariant model checks and
+// conversions can be hoisted without introducing a mutable model cache.
+template <DistortionModelType Type, typename T, typename Scalar>
+bool projectModel(
+  const CameraModelT<Scalar> &model, const T *intrinsics, const T &x, const T &y, const T &z, T &u,
+  T &v
+)
+{
+  constexpr bool ideal =
+    Type == DistortionModelType::EQUIDISTANT || Type == DistortionModelType::EQUISOLID ||
+    Type == DistortionModelType::STEREOGRAPHIC || Type == DistortionModelType::ORTHOGRAPHIC;
+  constexpr bool fish = ideal || Type == DistortionModelType::OPENCV_FISHEYE4 ||
+                        Type == DistortionModelType::KB4 || Type == DistortionModelType::KB8;
+  constexpr int count =
+    (Type == DistortionModelType::RADTAN4 || Type == DistortionModelType::RADTAN5)       ? 5
+    : (Type == DistortionModelType::OPENCV_FISHEYE4 || Type == DistortionModelType::KB4) ? 4
+    : (Type == DistortionModelType::KB8 || Type == DistortionModelType::RATIONAL8)       ? 8
+    : Type == DistortionModelType::THIN_PRISM12                                          ? 12
+    : Type == DistortionModelType::TILTED14                                              ? 14
+                                                                                         : 0;
+  const int size = model.distortion.count;
+  if constexpr (ideal)
+  {
+    for (int i = 0; i < size; ++i)
+      if (scalarValue(T(model.distortion.coeffs[i])) != 0) return reject(u, v);
+  }
+  else if constexpr (Type == DistortionModelType::RADTAN4)
+  {
+    if (size != 4 && size != 5) return reject(u, v);
+  }
+  else if (size != count)
+    return reject(u, v);
+  T dist[count ? count : 1];
+  for (int i = 0; i < count; ++i) dist[i] = i < size ? T(model.distortion.coeffs[i]) : T(0);
+  if constexpr (fish)
+  {
+    if (model.projection.type != ProjectionModelType::FISHEYE_THETA) return reject(u, v);
+    return projectFisheye<Type, true>(intrinsics, dist, x, y, z, u, v, model.projection.theta_max);
+  }
+  else if constexpr (Type == DistortionModelType::NONE)
+  {
+    if (model.projection.type == ProjectionModelType::FISHEYE_THETA)
+      return projectFisheye<DistortionModelType::EQUIDISTANT, true>(
+        intrinsics, dist, x, y, z, u, v, model.projection.theta_max
+      );
+    if (!std::isfinite(scalarValue(z)) || !(z > T(0))) return reject(u, v);
+    u = intrinsics[0] * (x / z) + intrinsics[2];
+    v = intrinsics[1] * (y / z) + intrinsics[3];
+    return finish(u, v);
+  }
+  else
+  {
+    if (model.projection.type != ProjectionModelType::PINHOLE) return reject(u, v);
+    if constexpr (Type == DistortionModelType::RADTAN4 || Type == DistortionModelType::RADTAN5)
+      return projectRadtan5(intrinsics, dist, x, y, z, u, v);
+    else if constexpr (Type == DistortionModelType::RATIONAL8)
+      return projectRational8(intrinsics, dist, x, y, z, u, v);
+    else if constexpr (Type == DistortionModelType::THIN_PRISM12)
+      return projectThinPrism12(intrinsics, dist, x, y, z, u, v);
+    else
+      return projectTilted14(intrinsics, dist, x, y, z, u, v);
+  }
+}
+}  // namespace detail
+
+template <typename T, typename Scalar>
+#if defined(__GNUC__) || defined(__clang__)
+[[gnu::always_inline]]
+#endif
+[[nodiscard]] inline bool
+projectGeneric(
+  const CameraModelT<Scalar> &model, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out,
+  T &v_out
+)
+{
+  if (model.distortion.count > 14 ||
+      !detail::withinTheta(model.projection.type, x_cam, y_cam, z_cam, model.projection.theta_max))
+    return detail::reject(u_out, v_out);
+  const T intrinsics[4] = {
+    T(model.intrinsics.fx), T(model.intrinsics.fy), T(model.intrinsics.cx), T(model.intrinsics.cy)};
+  if (std::abs(detail::scalarValue(intrinsics[0])) <= detail::epsilon<T>() || std::abs(detail::scalarValue(intrinsics[1])) <= detail::epsilon<T>())
+    return detail::reject(u_out, v_out);
+  if (model.projection.type == ProjectionModelType::PINHOLE || model.projection.type == ProjectionModelType::FISHEYE_THETA)
+  {
+    switch (model.distortion.type)
+    {
+      case DistortionModelType::NONE:
+        return detail::projectModel<DistortionModelType::NONE>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      case DistortionModelType::RADTAN4:
+        return detail::projectModel<DistortionModelType::RADTAN4>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      case DistortionModelType::RADTAN5:
+        return detail::projectModel<DistortionModelType::RADTAN5>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      case DistortionModelType::RATIONAL8:
+        return detail::projectModel<DistortionModelType::RATIONAL8>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      case DistortionModelType::THIN_PRISM12:
+        return detail::projectModel<DistortionModelType::THIN_PRISM12>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      case DistortionModelType::TILTED14:
+        return detail::projectModel<DistortionModelType::TILTED14>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      case DistortionModelType::OPENCV_FISHEYE4:
+        return detail::projectModel<DistortionModelType::OPENCV_FISHEYE4>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      case DistortionModelType::KB4:
+        return detail::projectModel<DistortionModelType::KB4>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      case DistortionModelType::KB8:
+        return detail::projectModel<DistortionModelType::KB8>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      case DistortionModelType::EQUIDISTANT:
+        return detail::projectModel<DistortionModelType::EQUIDISTANT>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      case DistortionModelType::EQUISOLID:
+        return detail::projectModel<DistortionModelType::EQUISOLID>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      case DistortionModelType::STEREOGRAPHIC:
+        return detail::projectModel<DistortionModelType::STEREOGRAPHIC>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      case DistortionModelType::ORTHOGRAPHIC:
+        return detail::projectModel<DistortionModelType::ORTHOGRAPHIC>(
+          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
+        );
+      default:
+        return detail::reject(u_out, v_out);
+    }
+  }
+  T dist[14];
+  for (int i = 0; i < model.distortion.count; ++i) dist[i] = T(model.distortion.coeffs[i]);
+  return projectGenericParametric(
+    model.projection.type, model.distortion.type, intrinsics, dist, model.distortion.count,
+    T(model.projection.xi), T(model.projection.alpha), T(model.projection.beta), x_cam, y_cam,
+    z_cam, u_out, v_out, model.projection.theta_max
+  );
 }
 
 }  // namespace camxiom::projection_template

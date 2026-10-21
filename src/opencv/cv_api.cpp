@@ -21,8 +21,6 @@
 
 #include <vector>
 
-namespace camgeom_opencv = camxiom::opencv;
-
 namespace camxiom::opencv
 {
 
@@ -55,7 +53,7 @@ int pinhole::projectPoints(
   {
     return -1;
   }
-  return camgeom_opencv::projectPoints(model, pts, r, t, image_points);
+  return camxiom::opencv::projectPoints(model, pts, r, t, image_points);
 }
 
 int pinhole::projectPoints(
@@ -68,7 +66,7 @@ int pinhole::projectPoints(
   {
     return -1;
   }
-  return camgeom_opencv::projectPoints(model, object_points, rvec, tvec, image_points);
+  return camxiom::opencv::projectPoints(model, object_points, rvec, tvec, image_points);
 }
 
 int pinhole::undistortPoints(
@@ -86,7 +84,7 @@ int pinhole::undistortPoints(
   {
     return -1;
   }
-  return camgeom_opencv::undistortPoints(model, src, dst_points, R, P);
+  return camxiom::opencv::undistortPoints(model, src, dst_points, R, P);
 }
 
 int pinhole::undistortPoints(
@@ -99,7 +97,7 @@ int pinhole::undistortPoints(
   {
     return -1;
   }
-  return camgeom_opencv::undistortPoints(model, src_points, dst_points, R, P);
+  return camxiom::opencv::undistortPoints(model, src_points, dst_points, R, P);
 }
 
 int pinhole::distortPoints(
@@ -117,7 +115,7 @@ int pinhole::distortPoints(
   {
     return -1;
   }
-  return camgeom_opencv::distortPoints(model, src, dst_points);
+  return camxiom::opencv::distortPoints(model, src, dst_points);
 }
 
 int pinhole::distortPoints(
@@ -130,7 +128,7 @@ int pinhole::distortPoints(
   {
     return -1;
   }
-  return camgeom_opencv::distortPoints(model, src_points, dst_points);
+  return camxiom::opencv::distortPoints(model, src_points, dst_points);
 }
 
 bool pinhole::undistortImage(
@@ -144,7 +142,7 @@ bool pinhole::undistortImage(
   {
     return false;
   }
-  return camgeom_opencv::remapImage(
+  return camxiom::opencv::remapImage(
     src, dst, distorted, undistorted, interpolation, solver_options
   );
 }
@@ -160,7 +158,7 @@ bool pinhole::distortImage(
   {
     return false;
   }
-  return camgeom_opencv::distortImage(
+  return camxiom::opencv::distortImage(
     src, dst, undistorted, distorted, interpolation, solver_options
   );
 }
@@ -194,7 +192,7 @@ int fisheye::projectPoints(
   {
     return -1;
   }
-  return camgeom_opencv::projectPoints(model, pts, r, t, image_points);
+  return camxiom::opencv::projectPoints(model, pts, r, t, image_points);
 }
 
 int fisheye::projectPoints(
@@ -207,7 +205,7 @@ int fisheye::projectPoints(
   {
     return -1;
   }
-  return camgeom_opencv::projectPoints(model, object_points, rvec, tvec, image_points);
+  return camxiom::opencv::projectPoints(model, object_points, rvec, tvec, image_points);
 }
 
 int fisheye::undistortPoints(
@@ -225,7 +223,7 @@ int fisheye::undistortPoints(
   {
     return -1;
   }
-  return camgeom_opencv::undistortPoints(model, src, dst_points, R, P);
+  return camxiom::opencv::undistortPoints(model, src, dst_points, R, P);
 }
 
 int fisheye::undistortPoints(
@@ -238,7 +236,7 @@ int fisheye::undistortPoints(
   {
     return -1;
   }
-  return camgeom_opencv::undistortPoints(model, src_points, dst_points, R, P);
+  return camxiom::opencv::undistortPoints(model, src_points, dst_points, R, P);
 }
 
 int fisheye::distortPoints(
@@ -256,7 +254,7 @@ int fisheye::distortPoints(
   {
     return -1;
   }
-  return camgeom_opencv::distortPoints(model, src, dst_points);
+  return camxiom::opencv::distortPoints(model, src, dst_points);
 }
 
 int fisheye::distortPoints(
@@ -269,7 +267,7 @@ int fisheye::distortPoints(
   {
     return -1;
   }
-  return camgeom_opencv::distortPoints(model, src_points, dst_points);
+  return camxiom::opencv::distortPoints(model, src_points, dst_points);
 }
 
 bool fisheye::undistortImage(
@@ -283,7 +281,7 @@ bool fisheye::undistortImage(
   {
     return false;
   }
-  return camgeom_opencv::remapImage(
+  return camxiom::opencv::remapImage(
     src, dst, distorted, undistorted, interpolation, solver_options
   );
 }
@@ -299,7 +297,7 @@ bool fisheye::distortImage(
   {
     return false;
   }
-  return camgeom_opencv::distortImage(
+  return camxiom::opencv::distortImage(
     src, dst, undistorted, distorted, interpolation, solver_options
   );
 }
@@ -334,7 +332,7 @@ int omnidirectional::projectPoints(
   {
     return -1;
   }
-  return camgeom_opencv::projectPoints(model, pts, r, t, image_points);
+  return camxiom::opencv::projectPoints(model, pts, r, t, image_points);
 }
 
 int omnidirectional::projectPoints(
@@ -348,7 +346,7 @@ int omnidirectional::projectPoints(
   {
     return -1;
   }
-  return camgeom_opencv::projectPoints(model, object_points, rvec, tvec, image_points);
+  return camxiom::opencv::projectPoints(model, object_points, rvec, tvec, image_points);
 }
 
 int omnidirectional::undistortPoints(
@@ -366,7 +364,7 @@ int omnidirectional::undistortPoints(
   {
     return -1;
   }
-  return camgeom_opencv::undistortPoints(model, src, dst_points, R, P);
+  return camxiom::opencv::undistortPoints(model, src, dst_points, R, P);
 }
 
 int omnidirectional::undistortPoints(
@@ -380,7 +378,7 @@ int omnidirectional::undistortPoints(
   {
     return -1;
   }
-  return camgeom_opencv::undistortPoints(model, src_points, dst_points, R, P);
+  return camxiom::opencv::undistortPoints(model, src_points, dst_points, R, P);
 }
 
 int omnidirectional::distortPoints(
@@ -398,7 +396,7 @@ int omnidirectional::distortPoints(
   {
     return -1;
   }
-  return camgeom_opencv::distortPoints(model, src, dst_points);
+  return camxiom::opencv::distortPoints(model, src, dst_points);
 }
 
 int omnidirectional::distortPoints(
@@ -411,7 +409,7 @@ int omnidirectional::distortPoints(
   {
     return -1;
   }
-  return camgeom_opencv::distortPoints(model, src_points, dst_points);
+  return camxiom::opencv::distortPoints(model, src_points, dst_points);
 }
 
 bool omnidirectional::undistortImage(
@@ -426,7 +424,7 @@ bool omnidirectional::undistortImage(
   {
     return false;
   }
-  return camgeom_opencv::remapImage(
+  return camxiom::opencv::remapImage(
     src, dst, distorted, undistorted, interpolation, solver_options
   );
 }
@@ -443,7 +441,7 @@ bool omnidirectional::distortImage(
   {
     return false;
   }
-  return camgeom_opencv::distortImage(
+  return camxiom::opencv::distortImage(
     src, dst, undistorted, distorted, interpolation, solver_options
   );
 }

@@ -19,9 +19,10 @@
 namespace camxiom
 {
 
-StatusCode importFisheyeModel(
+template <typename T>
+StatusCode importFisheyeModelImpl(
   const FisheyeExternalModel &external_model, const FisheyeCompatProfile profile,
-  CameraModel &model_out
+  CameraModelT<T> &model_out
 )
 {
   if (!isFiniteArray9(external_model.K) || !isFiniteVector(external_model.D))
@@ -78,14 +79,15 @@ StatusCode importFisheyeModel(
                                    ? DistortionSpace::NONE
                                    : DistortionSpace::ANGLE;
     model_out.distortion.count = 0U;
-    return validateCameraModel(model_out);
+    return validateCompatModel(model_out);
   }
 
   return makeAndValidateProjectionModel(camera_info, ProjectionModelType::FISHEYE_THETA, model_out);
 }
 
-StatusCode exportFisheyeModel(
-  const CameraModel &model, const FisheyeCompatProfile profile,
+template <typename T>
+StatusCode exportFisheyeModelImpl(
+  const CameraModelT<T> &model, const FisheyeCompatProfile profile,
   FisheyeExternalModel &external_model_out
 )
 {
@@ -122,6 +124,30 @@ StatusCode exportFisheyeModel(
     external_model_out.D[index] = static_cast<double>(model.distortion.coeffs[index]);
   }
   return StatusCode::OK;
+}
+
+StatusCode importFisheyeModel(
+  const FisheyeExternalModel &external_model, FisheyeCompatProfile profile, CameraModel &model_out)
+{
+  return importFisheyeModelImpl(external_model, profile, model_out);
+}
+
+StatusCode exportFisheyeModel(
+  const CameraModel &model, FisheyeCompatProfile profile, FisheyeExternalModel &external_model_out)
+{
+  return exportFisheyeModelImpl(model, profile, external_model_out);
+}
+
+StatusCode importFisheyeModel64(
+  const FisheyeExternalModel &external_model, FisheyeCompatProfile profile, CameraModel64 &model_out)
+{
+  return importFisheyeModelImpl(external_model, profile, model_out);
+}
+
+StatusCode exportFisheyeModel64(
+  const CameraModel64 &model, FisheyeCompatProfile profile, FisheyeExternalModel &external_model_out)
+{
+  return exportFisheyeModelImpl(model, profile, external_model_out);
 }
 
 }  // namespace camxiom

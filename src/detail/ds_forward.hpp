@@ -22,6 +22,22 @@
 namespace camxiom::detail
 {
 
+/// -w2 of the Double Sphere bijectivity region (Usenko et al. 2018,
+/// eq. 43-45), negated so callers compare `z <= neg_w2 * d1` directly.
+///
+/// It depends only on xi and alpha. Callers that already hold a fixed model
+/// (ValidatedCameraModel, the batch / SIMD layers) evaluate it once through
+/// detail_impl::prepareProjection and carry the result. The generic
+/// single-point API cannot cache it and derives it at the bijectivity test
+/// through detail_impl::DeriveAtUseT.
+template <typename T>
+inline T dsNegW2(const T xi, const T alpha)
+{
+  const T w1 = (alpha <= static_cast<T>(0.5)) ? alpha / (static_cast<T>(1) - alpha)
+                                              : (static_cast<T>(1) - alpha) / alpha;
+  return -((w1 + xi) / std::sqrt(static_cast<T>(2) * w1 * xi + xi * xi + static_cast<T>(1)));
+}
+
 /// Compute Double Sphere forward projection intermediates.
 /// Validity is the bijectivity region of Usenko et al. 2018 (eq. 43-45),
 /// z > -w2 * d1, plus a denom > eps numerical guard. denom > 0 alone is NOT
@@ -29,13 +45,16 @@ namespace camxiom::detail
 ///
 /// Template parameter T: float or double.
 /// eps: numerical epsilon appropriate for the precision (e.g. 1e-8f or 1e-15).
+/// constants: detail_impl::PreparedProjectionT or DeriveAtUseT. Only its
+///   dsNegW2() is read, at the bijectivity test, so a DeriveAtUseT derives the
+///   bound there rather than ahead of the per-point math.
 ///
 /// On success, d1_out, r_sq_out, xi_d1_z_out, d2_out, denom_out are all set.
 /// Returns StatusCode::OK on success.
-template <typename T>
+template <typename T, typename Constants>
 inline StatusCode computeDsForward(
-  const T xi, const T alpha, const T x, const T y, const T z, const T eps, T &d1_out, T &r_sq_out,
-  T &xi_d1_z_out, T &d2_out, T &denom_out
+  const T xi, const T alpha, const T x, const T y, const T z, const T eps,
+  const Constants &constants, T &d1_out, T &r_sq_out, T &xi_d1_z_out, T &d2_out, T &denom_out
 )
 {
   const T r_sq = x * x + y * y;
@@ -65,10 +84,7 @@ inline StatusCode computeDsForward(
   // alpha > 0.5 the denominator is positive for *every* direction (|xi*d1+z|
   // <= d2 makes denom >= (2*alpha-1)*d2), so the check above alone lets rays
   // behind the camera alias onto valid-looking pixels.
-  const T w1 = (alpha <= static_cast<T>(0.5)) ? alpha / (static_cast<T>(1) - alpha)
-                                              : (static_cast<T>(1) - alpha) / alpha;
-  const T w2 = (w1 + xi) / std::sqrt(static_cast<T>(2) * w1 * xi + xi * xi + static_cast<T>(1));
-  if (z <= -w2 * d1_out)
+  if (z <= constants.dsNegW2() * d1_out)
   {
     return StatusCode::OUT_OF_FOV;
   }

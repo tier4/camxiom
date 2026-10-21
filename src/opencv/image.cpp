@@ -27,8 +27,6 @@
 
 namespace camxiom::opencv
 {
-namespace camgeom = ::camxiom;
-
 namespace
 {
 
@@ -89,16 +87,16 @@ RemapResult buildRemapMapCV(
   {
     map1 = cv::Mat{};
     map2 = cv::Mat{};
-    return RemapResult{camgeom::StatusCode::INVALID_INPUT, 0, 0};
+    return RemapResult{camxiom::StatusCode::INVALID_INPUT, 0, 0};
   }
 
   std::vector<float> map_x_raw(static_cast<std::size_t>(total));
   std::vector<float> map_y_raw(static_cast<std::size_t>(total));
 
-  const RemapResult result = camgeom::buildRemapMap(
+  const RemapResult result = camxiom::buildRemapMap(
     src_model, dst_model, width, height, map_x_raw.data(), map_y_raw.data(), solver_options
   );
-  if (result.status != camgeom::StatusCode::OK)
+  if (result.status != camxiom::StatusCode::OK)
   {
     map1 = cv::Mat{};
     map2 = cv::Mat{};
@@ -118,16 +116,16 @@ RemapResult buildUndistortRemapMapCV(
   {
     map1 = cv::Mat{};
     map2 = cv::Mat{};
-    return RemapResult{camgeom::StatusCode::INVALID_INPUT, 0, 0};
+    return RemapResult{camxiom::StatusCode::INVALID_INPUT, 0, 0};
   }
 
   std::vector<float> map_x_raw(static_cast<std::size_t>(total));
   std::vector<float> map_y_raw(static_cast<std::size_t>(total));
 
-  const RemapResult result = camgeom::buildUndistortRemapMap(
+  const RemapResult result = camxiom::buildUndistortRemapMap(
     src_model, width, height, map_x_raw.data(), map_y_raw.data(), solver_options
   );
-  if (result.status != camgeom::StatusCode::OK)
+  if (result.status != camxiom::StatusCode::OK)
   {
     map1 = cv::Mat{};
     map2 = cv::Mat{};
@@ -149,9 +147,9 @@ RemapResult RemapCache::build(
   clear();
   const RemapResult result =
     buildRemapMapCV(src_model, dst_model, width, height, map1_, map2_, solver_options);
-  width_ = (result.status == camgeom::StatusCode::OK) ? width : 0;
-  height_ = (result.status == camgeom::StatusCode::OK) ? height : 0;
-  valid_ = (result.status == camgeom::StatusCode::OK) && (result.valid_count > 0);
+  width_ = (result.status == camxiom::StatusCode::OK) ? width : 0;
+  height_ = (result.status == camxiom::StatusCode::OK) ? height : 0;
+  valid_ = (result.status == camxiom::StatusCode::OK) && (result.valid_count > 0);
   return result;
 }
 
@@ -163,9 +161,9 @@ RemapResult RemapCache::buildUndistort(
   clear();
   const RemapResult result =
     buildUndistortRemapMapCV(src_model, width, height, map1_, map2_, solver_options);
-  width_ = (result.status == camgeom::StatusCode::OK) ? width : 0;
-  height_ = (result.status == camgeom::StatusCode::OK) ? height : 0;
-  valid_ = (result.status == camgeom::StatusCode::OK) && (result.valid_count > 0);
+  width_ = (result.status == camxiom::StatusCode::OK) ? width : 0;
+  height_ = (result.status == camxiom::StatusCode::OK) ? height : 0;
+  valid_ = (result.status == camxiom::StatusCode::OK) && (result.valid_count > 0);
   return result;
 }
 
@@ -214,7 +212,7 @@ RectifyRemapResult buildRectifyRemapMapCV(
     map1 = cv::Mat{};
     map2 = cv::Mat{};
     RectifyRemapResult fail{};
-    fail.remap_result.status = camgeom::StatusCode::INVALID_INPUT;
+    fail.remap_result.status = camxiom::StatusCode::INVALID_INPUT;
     return fail;
   }
 
@@ -222,9 +220,9 @@ RectifyRemapResult buildRectifyRemapMapCV(
   std::vector<float> map_y_raw(static_cast<std::size_t>(total));
 
   RectifyRemapResult result =
-    camgeom::buildRectifyRemapMap(src_model, src_size, options, map_x_raw.data(), map_y_raw.data());
+    camxiom::buildRectifyRemapMap(src_model, src_size, options, map_x_raw.data(), map_y_raw.data());
 
-  if (result.remap_result.status != camgeom::StatusCode::OK)
+  if (result.remap_result.status != camxiom::StatusCode::OK)
   {
     map1 = cv::Mat{};
     map2 = cv::Mat{};
@@ -244,9 +242,9 @@ RectifyRemapResult RemapCache::buildRectify(
   clear();
   RectifyRemapResult result = buildRectifyRemapMapCV(src_model, src_size, options, map1_, map2_);
   const ImageSize out_size = result.output_size;
-  width_ = (result.remap_result.status == camgeom::StatusCode::OK) ? out_size.width : 0;
-  height_ = (result.remap_result.status == camgeom::StatusCode::OK) ? out_size.height : 0;
-  valid_ = (result.remap_result.status == camgeom::StatusCode::OK) &&
+  width_ = (result.remap_result.status == camxiom::StatusCode::OK) ? out_size.width : 0;
+  height_ = (result.remap_result.status == camxiom::StatusCode::OK) ? out_size.height : 0;
+  valid_ = (result.remap_result.status == camxiom::StatusCode::OK) &&
            (result.remap_result.source_in_bounds_count > 0);
   return result;
 }
@@ -270,7 +268,7 @@ bool undistortImage(
   const RemapResult result =
     buildUndistortRemapMapCV(src_model, src.cols, src.rows, map1, map2, solver_options);
 
-  if (result.status != camgeom::StatusCode::OK || result.valid_count == 0)
+  if (result.status != camxiom::StatusCode::OK || result.valid_count == 0)
   {
     return false;
   }
@@ -294,7 +292,7 @@ bool remapImage(
   const RemapResult result =
     buildRemapMapCV(src_model, dst_model, src.cols, src.rows, map1, map2, solver_options);
 
-  if (result.status != camgeom::StatusCode::OK || result.valid_count == 0)
+  if (result.status != camxiom::StatusCode::OK || result.valid_count == 0)
   {
     return false;
   }
@@ -324,7 +322,7 @@ bool rectifyImage(
   cv::Mat map2;
   const RectifyRemapResult result = buildRectifyRemapMapCV(src_model, src_size, opts, map1, map2);
 
-  if (result.remap_result.status != camgeom::StatusCode::OK || result.remap_result.source_in_bounds_count == 0)
+  if (result.remap_result.status != camxiom::StatusCode::OK || result.remap_result.source_in_bounds_count == 0)
   {
     return false;
   }
@@ -353,7 +351,7 @@ bool distortImage(
   const RemapResult result =
     buildRemapMapCV(src_model, dst_model, src.cols, src.rows, map1, map2, solver_options);
 
-  if (result.status != camgeom::StatusCode::OK || result.valid_count == 0)
+  if (result.status != camxiom::StatusCode::OK || result.valid_count == 0)
   {
     return false;
   }

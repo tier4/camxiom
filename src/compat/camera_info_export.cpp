@@ -26,12 +26,16 @@
 namespace camxiom
 {
 
-StatusCode exportPinholeCameraInfo(
-  const CameraModel &model, const PinholeCompatProfile profile, CameraInfo &camera_info_out
+template <typename T>
+StatusCode exportPinholeCameraInfoImpl(
+  const CameraModelT<T> &model, const PinholeCompatProfile profile, CameraInfo &camera_info_out
 )
 {
   PinholeExternalModel external_model;
-  const StatusCode status = exportPinholeModel(model, profile, external_model);
+  const StatusCode status = [&]() {
+    if constexpr (std::is_same_v<T, float>) return exportPinholeModel(model, profile, external_model);
+    else return exportPinholeModel64(model, profile, external_model);
+  }();
   if (status != StatusCode::OK)
   {
     return status;
@@ -53,12 +57,16 @@ StatusCode exportPinholeCameraInfo(
   return StatusCode::OK;
 }
 
-StatusCode exportFisheyeCameraInfo(
-  const CameraModel &model, const FisheyeCompatProfile profile, CameraInfo &camera_info_out
+template <typename T>
+StatusCode exportFisheyeCameraInfoImpl(
+  const CameraModelT<T> &model, const FisheyeCompatProfile profile, CameraInfo &camera_info_out
 )
 {
   FisheyeExternalModel external_model;
-  const StatusCode status = exportFisheyeModel(model, profile, external_model);
+  const StatusCode status = [&]() {
+    if constexpr (std::is_same_v<T, float>) return exportFisheyeModel(model, profile, external_model);
+    else return exportFisheyeModel64(model, profile, external_model);
+  }();
   if (status != StatusCode::OK)
   {
     return status;
@@ -79,12 +87,16 @@ StatusCode exportFisheyeCameraInfo(
   return StatusCode::OK;
 }
 
-StatusCode exportOmnidirectionalCameraInfo(
-  const CameraModel &model, const OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out
+template <typename T>
+StatusCode exportOmnidirectionalCameraInfoImpl(
+  const CameraModelT<T> &model, const OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out
 )
 {
   OmnidirectionalExternalModel external_model;
-  const StatusCode status = exportOmnidirectionalModel(model, profile, external_model);
+  const StatusCode status = [&]() {
+    if constexpr (std::is_same_v<T, float>) return exportOmnidirectionalModel(model, profile, external_model);
+    else return exportOmnidirectionalModel64(model, profile, external_model);
+  }();
   if (status != StatusCode::OK)
   {
     return status;
@@ -111,12 +123,16 @@ StatusCode exportOmnidirectionalCameraInfo(
   return StatusCode::OK;
 }
 
-StatusCode exportDoubleSphereCameraInfo(
-  const CameraModel &model, const DoubleSphereCompatProfile profile, CameraInfo &camera_info_out
+template <typename T>
+StatusCode exportDoubleSphereCameraInfoImpl(
+  const CameraModelT<T> &model, const DoubleSphereCompatProfile profile, CameraInfo &camera_info_out
 )
 {
   DoubleSphereExternalModel external_model;
-  const StatusCode status = exportDoubleSphereModel(model, profile, external_model);
+  const StatusCode status = [&]() {
+    if constexpr (std::is_same_v<T, float>) return exportDoubleSphereModel(model, profile, external_model);
+    else return exportDoubleSphereModel64(model, profile, external_model);
+  }();
   if (status != StatusCode::OK)
   {
     return status;
@@ -137,12 +153,16 @@ StatusCode exportDoubleSphereCameraInfo(
   return StatusCode::OK;
 }
 
-StatusCode exportEucmCameraInfo(
-  const CameraModel &model, const EucmCompatProfile profile, CameraInfo &camera_info_out
+template <typename T>
+StatusCode exportEucmCameraInfoImpl(
+  const CameraModelT<T> &model, const EucmCompatProfile profile, CameraInfo &camera_info_out
 )
 {
   EucmExternalModel external_model;
-  const StatusCode status = exportEucmModel(model, profile, external_model);
+  const StatusCode status = [&]() {
+    if constexpr (std::is_same_v<T, float>) return exportEucmModel(model, profile, external_model);
+    else return exportEucmModel64(model, profile, external_model);
+  }();
   if (status != StatusCode::OK)
   {
     return status;
@@ -161,6 +181,66 @@ StatusCode exportEucmCameraInfo(
     camera_info_out.d.end(), external_model.D.begin(), external_model.D.end()
   );
   return StatusCode::OK;
+}
+
+StatusCode exportPinholeCameraInfo(
+  const CameraModel &model, PinholeCompatProfile profile, CameraInfo &camera_info_out)
+{
+  return exportPinholeCameraInfoImpl(model, profile, camera_info_out);
+}
+
+StatusCode exportPinholeCameraInfo64(
+  const CameraModel64 &model, PinholeCompatProfile profile, CameraInfo &camera_info_out)
+{
+  return exportPinholeCameraInfoImpl(model, profile, camera_info_out);
+}
+
+StatusCode exportFisheyeCameraInfo(
+  const CameraModel &model, FisheyeCompatProfile profile, CameraInfo &camera_info_out)
+{
+  return exportFisheyeCameraInfoImpl(model, profile, camera_info_out);
+}
+
+StatusCode exportFisheyeCameraInfo64(
+  const CameraModel64 &model, FisheyeCompatProfile profile, CameraInfo &camera_info_out)
+{
+  return exportFisheyeCameraInfoImpl(model, profile, camera_info_out);
+}
+
+StatusCode exportOmnidirectionalCameraInfo(
+  const CameraModel &model, OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out)
+{
+  return exportOmnidirectionalCameraInfoImpl(model, profile, camera_info_out);
+}
+
+StatusCode exportOmnidirectionalCameraInfo64(
+  const CameraModel64 &model, OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out)
+{
+  return exportOmnidirectionalCameraInfoImpl(model, profile, camera_info_out);
+}
+
+StatusCode exportDoubleSphereCameraInfo(
+  const CameraModel &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out)
+{
+  return exportDoubleSphereCameraInfoImpl(model, profile, camera_info_out);
+}
+
+StatusCode exportDoubleSphereCameraInfo64(
+  const CameraModel64 &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out)
+{
+  return exportDoubleSphereCameraInfoImpl(model, profile, camera_info_out);
+}
+
+StatusCode exportEucmCameraInfo(
+  const CameraModel &model, EucmCompatProfile profile, CameraInfo &camera_info_out)
+{
+  return exportEucmCameraInfoImpl(model, profile, camera_info_out);
+}
+
+StatusCode exportEucmCameraInfo64(
+  const CameraModel64 &model, EucmCompatProfile profile, CameraInfo &camera_info_out)
+{
+  return exportEucmCameraInfoImpl(model, profile, camera_info_out);
 }
 
 }  // namespace camxiom

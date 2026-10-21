@@ -145,3 +145,29 @@ The writer emits what it is given — it does not re-validate K/D consistency
       ├── toCameraInfoYaml / saveCameraInfoYaml         (ROS-free calibration YAML)
       └── ros.hpp: sensor_msgs ⇄ CameraInfo POD         (optional layer, binning/ROI folded)
 ```
+
+### Saving and reloading in double precision
+
+`makeCameraModel64` and `import*Model64` / `export*Model64` /
+`export*CameraInfo64` pass intrinsics, distortion coefficients and projection
+parameters through without rounding them to float. To keep that precision in
+YAML, pass `CameraInfoYamlPrecision::ROUND_TRIP` after the camera name.
+Without it, the existing format is unchanged: 6 decimal places for the
+matrices and 12 for the distortion coefficients.
+
+```cpp
+camxiom::CameraInfo info;
+auto status = camxiom::exportFisheyeCameraInfo64(
+    fit.camera_model, camxiom::FisheyeCompatProfile::CANONICAL, info);
+if (status == camxiom::StatusCode::OK) {
+  status = camxiom::saveCameraInfoYaml(
+      path, info, "front_camera", camxiom::CameraInfoYamlPrecision::ROUND_TRIP);
+}
+```
+
+`ROUND_TRIP` writes finite doubles in scientific notation with 17 significant
+digits, so negative zero and subnormal values survive as well. To reload,
+read the numbers into a `CameraInfo` as doubles with an existing YAML reader
+and pass it to `makeCameraModel64`; camxiom itself adds no YAML reader
+dependency. `theta_max` is not part of the CameraInfo format and is not
+saved, so keep any application-specific field-of-view limit separately.
