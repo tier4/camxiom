@@ -162,6 +162,25 @@ now round-trips through `parseDistortionModelType` (some spellings changed);
 and the never-returned `StatusCode` enumerators (`NOT_IMPLEMENTED`,
 `JACOBIAN_SINGULAR`) were dropped.
 
+Breaking changes in 0.2.0 (details in the release notes):
+
+- Public struct layouts changed (`ValidatedCameraModel`,
+  `CalibrationOptions`, `CalibrationResult`, `PnpSolverOptions`,
+  `PnpResult`), so rebuild everything that uses camxiom.
+- `PnpSolver::solve()` fails, and `calibrate()` returns `NON_CONVERGED`,
+  when any view has fewer than three projectable points or fewer than half
+  of its points projectable.
+- `computeReprojErrors()` and per-view RMS values are infinity, not 0, when
+  nothing can be evaluated.
+- The five-argument `init::estimatePinholeOpenCv()` returns
+  `DEGENERATE_CONFIG` for an ill-conditioned focal solve.
+- Default omnidirectional, double sphere and EUCM seeds use
+  `theta_max = pi`, and PnP write-back keeps a narrower `theta_max` set by
+  the caller.
+- The per-model template kernels reject non-finite results and singular
+  denominators, and `projectGeneric` is templated on the model's scalar
+  type.
+
 ## Thread safety
 
 Free functions are stateless and safe on shared models from any thread.
