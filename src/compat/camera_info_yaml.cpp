@@ -196,7 +196,7 @@ void appendAlignedMatrix(
 }  // namespace
 
 std::string toCameraInfoYaml(
-  const CameraInfo &camera_info, CameraInfoYamlPrecision precision, const std::string &camera_name
+  const CameraInfo &camera_info, const std::string &camera_name, CameraInfoYamlPrecision precision
 )
 {
   std::ostringstream out;
@@ -232,8 +232,8 @@ std::string toCameraInfoYaml(
 }
 
 StatusCode saveCameraInfoYaml(
-  const std::string &path, const CameraInfo &camera_info, CameraInfoYamlPrecision precision,
-  const std::string &camera_name
+  const std::string &path, const CameraInfo &camera_info, const std::string &camera_name,
+  CameraInfoYamlPrecision precision
 )
 {
   std::ofstream file(path, std::ios::out | std::ios::trunc);
@@ -241,21 +241,21 @@ StatusCode saveCameraInfoYaml(
   {
     return StatusCode::INVALID_INPUT;
   }
-  file << toCameraInfoYaml(camera_info, precision, camera_name);
+  file << toCameraInfoYaml(camera_info, camera_name, precision);
   file.flush();
   return file.good() ? StatusCode::OK : StatusCode::INVALID_INPUT;
 }
 
 std::string toCameraInfoYaml(const CameraInfo &camera_info, const std::string &camera_name)
 {
-  return toCameraInfoYaml(camera_info, CameraInfoYamlPrecision::FIXED, camera_name);
+  return toCameraInfoYaml(camera_info, camera_name, CameraInfoYamlPrecision::FIXED);
 }
 
 StatusCode saveCameraInfoYaml(
   const std::string &path, const CameraInfo &camera_info, const std::string &camera_name
 )
 {
-  return saveCameraInfoYaml(path, camera_info, CameraInfoYamlPrecision::FIXED, camera_name);
+  return saveCameraInfoYaml(path, camera_info, camera_name, CameraInfoYamlPrecision::FIXED);
 }
 
 }  // namespace camxiom

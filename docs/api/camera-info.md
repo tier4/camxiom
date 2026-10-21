@@ -159,7 +159,7 @@ auto status = camxiom::exportFisheyeCameraInfo64(
     fit.camera_model, camxiom::FisheyeCompatProfile::CANONICAL, info);
 if (status == camxiom::StatusCode::OK) {
   status = camxiom::saveCameraInfoYaml(
-      path, info, camxiom::CameraInfoYamlPrecision::ROUND_TRIP, "front_camera");
+      path, info, "front_camera", camxiom::CameraInfoYamlPrecision::ROUND_TRIP);
 }
 ```
 
