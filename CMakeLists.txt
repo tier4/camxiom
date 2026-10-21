@@ -376,6 +376,8 @@ option(CAMXIOM_BUILD_BENCHMARKS "Build camxiom microbenchmarks" OFF)
 if(CAMXIOM_BUILD_BENCHMARKS)
   add_executable(camxiom_projection_benchmark benchmarks/projection_benchmark.cpp)
   target_link_libraries(camxiom_projection_benchmark PRIVATE camxiom_core)
+  add_executable(camxiom_projection_template_benchmark benchmarks/projection_template_benchmark.cpp)
+  target_link_libraries(camxiom_projection_template_benchmark PRIVATE camxiom_core)
   if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(WARNING
       "camxiom: CAMXIOM_BUILD_BENCHMARKS is ON but CMAKE_BUILD_TYPE is unset; "
@@ -433,6 +435,7 @@ if(BUILD_TESTING)
     # coeffs (scalar/SIMD divergence guard) and polynomial-fisheye caps must
     # sit inside the monotone range (forward/inverse round-trip guard).
     camxiom_add_gtest(camxiom_model_validate_test tests/model_validate_test.cpp)
+    camxiom_add_gtest(camxiom_fisheye_domain_test tests/fisheye_domain_test.cpp)
     camxiom_add_gtest(camxiom_model_compare_test tests/model_compare_test.cpp)
     camxiom_add_gtest(camxiom_projection_smoke_test tests/projection_smoke_test.cpp)
     camxiom_add_gtest(camxiom_batch_parity_test tests/batch_parity_test.cpp)
@@ -440,6 +443,7 @@ if(BUILD_TESTING)
     # denominators and overflow triggers through the public projection API,
     # float and double, scalar and batch.
     camxiom_add_gtest(camxiom_projection_error_paths_test tests/projection_error_paths_test.cpp)
+    camxiom_add_gtest(camxiom_projection_template_test tests/projection_template_test.cpp)
     camxiom_add_gtest(camxiom_camera_info_yaml_test tests/camera_info_yaml_test.cpp)
     camxiom_add_gtest(camxiom_remap_test tests/remap_test.cpp)
     camxiom_add_gtest(camxiom_remap_kernel_test tests/remap_kernel_test.cpp)
@@ -491,6 +495,7 @@ if(BUILD_TESTING)
       camxiom_add_gtest(camxiom_pinhole_opencv_test tests/pinhole_opencv_test.cpp)
       camxiom_add_gtest(camxiom_pinhole_zhang_test tests/pinhole_zhang_test.cpp)
       camxiom_add_gtest(camxiom_calib_intrinsics_test tests/calib_intrinsics_test.cpp)
+      camxiom_add_gtest(camxiom_calib_precision_test tests/calib_precision_test.cpp)
       camxiom_add_gtest(camxiom_mapping_compare_test tests/mapping_compare_test.cpp)
       camxiom_add_gtest(camxiom_model_convert_test tests/model_convert_test.cpp)
       camxiom_add_gtest(camxiom_calib_uncertainty_test tests/calib_uncertainty_test.cpp)
@@ -505,6 +510,7 @@ if(BUILD_TESTING)
       camxiom_add_gtest(camxiom_calib_prior_test tests/calib_prior_test.cpp)
       camxiom_add_gtest(camxiom_dlt_pnp_test tests/dlt_pnp_test.cpp)
       camxiom_add_gtest(camxiom_pnp_huber_test tests/pnp_huber_test.cpp)
+      camxiom_add_gtest(camxiom_pnp_precision_test tests/pnp_precision_test.cpp)
       camxiom_add_gtest(camxiom_double_sphere_test tests/double_sphere_test.cpp)
       camxiom_add_gtest(camxiom_eucm_test tests/eucm_test.cpp)
       camxiom_add_gtest(camxiom_integration_test tests/integration_test.cpp)
@@ -520,8 +526,8 @@ if(BUILD_TESTING)
   # fixes), and AVX2 instructions escaping the target("avx2,fma") functions into
   # unconditional code (which faults on any CPU without AVX2). Both are
   # invisible to a functional test on an AVX2 host, so the script disassembles
-  # the built archive. It self-skips where objdump is missing or the target is
-  # not x86.
+  # the built archive. It self-skips where GNU objdump is missing or the target
+  # is not x86.
   #
   # Not registered when the build itself targets AVX2 (-mavx2): the whole
   # library is then AVX2 by construction and "contained" is neither true nor
@@ -532,6 +538,21 @@ if(BUILD_TESTING)
     "#if !defined(__AVX2__)\n#error not an avx2 build\n#endif\nint main() { return 0; }"
     CAMXIOM_BUILD_TARGETS_AVX2)
   find_package(Python3 QUIET COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    set(_camxiom_avx2_containment_script_test_cmd
+      ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/simd_containment/check_avx2_containment_test.py)
+    if(ament_cmake_FOUND)
+      find_package(ament_cmake_test REQUIRED)
+      ament_add_test(camxiom_avx2_containment_script_test
+        COMMAND ${_camxiom_avx2_containment_script_test_cmd}
+        GENERATE_RESULT_FOR_RETURN_CODE_ZERO
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    else()
+      add_test(NAME camxiom_avx2_containment_script_test
+        COMMAND ${_camxiom_avx2_containment_script_test_cmd})
+    endif()
+  endif()
   if(Python3_Interpreter_FOUND AND NOT CAMXIOM_BUILD_TARGETS_AVX2)
     set(_camxiom_avx2_containment_cmd
       ${Python3_EXECUTABLE}

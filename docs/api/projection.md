@@ -158,3 +158,37 @@ struct ReprojCost {
 
 Note that these templates apply `u = fx·x + cx` without skew (the
 4-element intrinsics block is `[fx, fy, cx, cy]`).
+
+## Domain of the template projections
+
+`projectGeneric` applies the model's `theta_max`. `projectGenericParametric`
+takes an optional trailing `double theta_max` that sets the evaluation limit
+(default π), so a caller can pick an evaluation limit separate from the limit
+it uses to accept observations. The PnP automatic-differentiation path passes
+the limit derived from the current parameters and applies the same shrink to
+the polynomial's monotone range as the analytical path.
+
+Both dispatchers and the per-model templates return `false` and zero their
+outputs on non-finite inputs or results and at singular denominators. As in
+the runtime projection, the rational denominator may take either sign; it is
+rejected when its magnitude is at or below a precision-dependent threshold.
+Accepting only positive denominators, or checking that a pixel lies inside
+the image, is up to the caller. The per-model templates are bare formulas that
+do not receive the model's field-of-view declaration, so use the generic API
+whenever the field-of-view limit must be checked.
+
+The model returned by PnP keeps the input `theta_max` as its upper limit. If
+the optimized fisheye coefficients have a narrower monotone range, the limit
+shrinks further, but write-back never widens the field of view on its own.
+The rule is the same for the float and double versions. For the wide-angle
+models (omnidirectional, double sphere and EUCM), `getDefaultSeed` sets
+`theta_max = pi` and relies on each projection's own valid range. A caller
+that needs a narrower field of view can set the limit itself.
+
+Template projection of the omnidirectional, double sphere and EUCM models
+combined with a plane distortion shares every coefficient and the pole checks
+of RATIONAL8, THIN_PRISM12 and TILTED14 with the runtime projection. The
+automatic-differentiation path used to evaluate these models as RADTAN5,
+ignoring the coefficients past the fifth; that is fixed. With a
+field-of-view limit of pi, the wide-angle models still reject non-finite ray
+norms and projection denominators.

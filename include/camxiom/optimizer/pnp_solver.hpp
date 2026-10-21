@@ -18,6 +18,7 @@
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/optimizer/pnp_flag.hpp"
 #include "camxiom/types.hpp"
+#include "camxiom/types64.hpp"
 
 #include <Eigen/Core>
 
@@ -134,6 +135,29 @@ struct [[nodiscard]] PnpResult
   explicit operator bool() const { return ok(); }
 };
 
+/// Double-precision inputs and outputs, with no float model intermediary.
+struct PnpInitialGuess64
+{
+  camxiom::CameraModel64 camera_model{};
+  std::vector<Eigen::Vector3d> rvecs{};
+  std::vector<Eigen::Vector3d> tvecs{};
+};
+
+struct [[nodiscard]] PnpResult64
+{
+  bool success{false};
+  double rmse{std::numeric_limits<double>::infinity()};
+  camxiom::CameraModel64 camera_model{};
+  std::vector<Eigen::Vector3d> rvecs{};
+  std::vector<Eigen::Vector3d> tvecs{};
+  std::size_t valid_count{0};
+  std::size_t total_count{0};
+  std::vector<std::size_t> per_view_valid_counts{};
+
+  constexpr bool ok() const { return success; }
+  explicit operator bool() const { return ok(); }
+};
+
 /// Backend-agnostic snapshot of the last optimization.
 ///
 /// Plain replacement for `ceres::Solver::Summary`: exposes only the fields
@@ -198,6 +222,31 @@ public:
   )
   {
     PnpResult result;
+    solve(object_points, image_points, initial_guess, result, options, flags);
+    return result;
+  }
+
+  /// Solve with provided initial guess.
+  bool solve(
+    const ObjectPointSets &object_points, const ImagePointSets &image_points,
+    const PnpInitialGuess64 &initial_guess, PnpResult64 &result_out,
+    const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE
+  );
+
+  /// Solve single-view convenience overload.
+  bool solve(
+    const ObjectPoints &object_points, const ImagePoints &image_points,
+    const PnpInitialGuess64 &initial_guess, PnpResult64 &result_out,
+    const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE
+  );
+
+  PnpResult64 solve(
+    const ObjectPointSets &object_points, const ImagePointSets &image_points,
+    const PnpInitialGuess64 &initial_guess, const PnpSolverOptions &options = PnpSolverOptions(),
+    PnpFlag flags = PnpFlag::NONE
+  )
+  {
+    PnpResult64 result;
     solve(object_points, image_points, initial_guess, result, options, flags);
     return result;
   }

@@ -310,7 +310,7 @@ struct NamedModel
 
 std::vector<NamedModel> representativeModels()
 {
-  return {
+  std::vector<NamedModel> models{
     {"pinhole+none", makePinholeNone()},
     {"pinhole+radtan5", makePinholeRadtan5()},
     {"pinhole+rational8", makePinholeRational8()},
@@ -325,6 +325,19 @@ std::vector<NamedModel> representativeModels()
     {"double_sphere", makeDoubleSphere()},
     {"eucm", makeEucm()},
   };
+  for (const auto &base : std::vector<NamedModel>{
+         {"omni", makeOmnidirectional()}, {"ds", makeDoubleSphere()}, {"eucm", makeEucm()}})
+    for (const auto &plane : std::vector<NamedModel>{
+           {"radtan5", makePinholeRadtan5()},
+           {"rational8", makePinholeRational8()},
+           {"thin_prism12", makePinholeThinPrism12()},
+           {"tilted14", makePinholeTilted14()}})
+    {
+      auto model = base.model;
+      model.distortion = plane.model.distortion;
+      models.push_back({base.name + "+" + plane.name, model});
+    }
+  return models;
 }
 
 // Moderate off-axis rays valid (z>0, well within FOV) for every model. On-axis
@@ -379,7 +392,7 @@ AutoDiffJacobian autodiffJacobian(const CameraModel64 &m, const Eigen::Vector3d 
   AutoDiffJacobian out;
   out.ok = tpl::projectGenericParametric<Jet>(
     m.projection.type, m.distortion.type, intrinsics, dist, static_cast<int>(m.distortion.count),
-    xi, alpha, beta, x, y, z, u, v
+    xi, alpha, beta, x, y, z, u, v, m.projection.theta_max
   );
   out.u = u.a;
   out.v = v.a;
@@ -488,5 +501,258 @@ TEST(AutoDiffJacobian, Radtan4ReadsOnlyFourCoefficients)
     ASSERT_TRUE(ok);
     EXPECT_TRUE(close(u.a, analytic.pixel.u, 1e-6, 1e-9));
     EXPECT_TRUE(close(v.a, analytic.pixel.v, 1e-6, 1e-9));
+  }
+}
+
+TEST(AutoDiffJacobian, RejectsTheSameRayDomainAsRuntime)
+{
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  for (auto nm : representativeModels())
+  {
+    if (nm.model.projection.type != ProjectionModelType::PINHOLE)
+      nm.model.projection.theta_max = 1.0;
+    for (const Eigen::Vector3d &ray : std::vector<Eigen::Vector3d>{
+           {0, 0, 0},
+           {0, 0, -1},
+           {1, 0, 0},
+           {nan, 0, 1},
+           {0, inf, 1},
+           {1e200, 0, 1},
+           {std::sin(0.999), 0, std::cos(0.999)},
+           {std::sin(1.001), 0, std::cos(1.001)},
+           {1e-8, 0, 1e-8}})
+    {
+      const auto runtime = rayToPixel64(nm.model, ray);
+      const auto ad = autodiffJacobian(nm.model, ray);
+      EXPECT_EQ(ad.ok, runtime.ok()) << nm.name << " ray=" << ray.transpose();
+      if (!ad.ok)
+      {
+        EXPECT_EQ(ad.u, 0.0);
+        EXPECT_EQ(ad.v, 0.0);
+        EXPECT_TRUE(ad.J.isZero());
+      }
+    }
+  }
+}
+
+TEST(AutoDiffJacobian, RationalPoleAndNegativeBranchMatchRuntime)
+{
+  auto model = makePinholeRational8();
+  model.distortion.coeffs.fill(0.0);
+  model.distortion.coeffs[5] = -1.0;
+  for (double x : {0.5, 1.0, std::sqrt(2.0)})
+  {
+    const Eigen::Vector3d ray(x, 0, 1);
+    const auto runtime = rayToPixelWithJacobian64(model, ray);
+    const auto ad = autodiffJacobian(model, ray);
+    ASSERT_EQ(ad.ok, runtime.ok());
+    if (ad.ok)
+    {
+      EXPECT_NEAR(ad.u, runtime.pixel.u, 1e-9);
+      EXPECT_TRUE(ad.J.isApprox(runtime.J, 1e-9));
+      // Independent finite difference away from the pole.
+      for (int k = 0; k < 3; ++k)
+      {
+        auto plus = ray, minus = ray;
+        plus[k] += 1e-6;
+        minus[k] -= 1e-6;
+        auto pp = rayToPixel64(model, plus), pm = rayToPixel64(model, minus);
+        EXPECT_NEAR(ad.J(0, k), (pp.pixel.u - pm.pixel.u) / 2e-6, 1e-5);
+        EXPECT_NEAR(ad.J(1, k), (pp.pixel.v - pm.pixel.v) / 2e-6, 1e-5);
+      }
+    }
+  }
+}
+
+TEST(AutoDiffJacobian, WidePlaneModelsMatchIndependentFiniteDifferences)
+{
+  for (const auto &nm : representativeModels())
+  {
+    if (nm.model.projection.type == ProjectionModelType::PINHOLE || nm.model.projection.type == ProjectionModelType::FISHEYE_THETA)
+      continue;
+    for (const auto &ray : sampleRays())
+    {
+      const auto ad = autodiffJacobian(nm.model, ray);
+      ASSERT_TRUE(ad.ok) << nm.name;
+      for (int k = 0; k < 3; ++k)
+      {
+        auto plus = ray, minus = ray;
+        plus[k] += 1e-6;
+        minus[k] -= 1e-6;
+        const auto pp = rayToPixel64(nm.model, plus), pm = rayToPixel64(nm.model, minus);
+        ASSERT_TRUE(pp.ok());
+        ASSERT_TRUE(pm.ok());
+        EXPECT_NEAR(ad.J(0, k), (pp.pixel.u - pm.pixel.u) / 2e-6, 1e-5) << nm.name;
+        EXPECT_NEAR(ad.J(1, k), (pp.pixel.v - pm.pixel.v) / 2e-6, 1e-5) << nm.name;
+      }
+    }
+  }
+}
+
+TEST(AutoDiffJacobian, WideModelsRejectPolesAndOverflowWithUnrestrictedCap)
+{
+  for (auto model : {makeOmnidirectional(), makeDoubleSphere(), makeEucm()})
+  {
+    model.projection.xi = 0.0;
+    model.projection.alpha = 0.0;
+    model.projection.beta = 1.0;
+    model.projection.theta_max = constants::kPi;
+    for (auto plane : {makePinholeRational8(), makePinholeThinPrism12(), makePinholeTilted14()})
+    {
+      model.distortion = plane.distortion;
+      model.distortion.coeffs[5] = -1.0;
+      model.distortion.coeffs[6] = model.distortion.coeffs[7] = 0.0;
+      ASSERT_EQ(validateCameraModel64(model), StatusCode::OK);
+      for (const Eigen::Vector3d &ray : std::vector<Eigen::Vector3d>{{1, 0, 1}, {1e200, 0, 1}})
+      {
+        EXPECT_FALSE(rayToPixel64(model, ray).ok());
+        const auto ad = autodiffJacobian(model, ray);
+        EXPECT_FALSE(ad.ok);
+        EXPECT_EQ(ad.u, 0.0);
+        EXPECT_EQ(ad.v, 0.0);
+        EXPECT_TRUE(ad.J.isZero());
+      }
+    }
+  }
+}
+
+TEST(AutoDiffJacobian, AcceptsZeroPaddedIdealFisheyeCoefficients)
+{
+  for (auto type :
+       {DistortionModelType::EQUIDISTANT, DistortionModelType::EQUISOLID,
+        DistortionModelType::STEREOGRAPHIC, DistortionModelType::ORTHOGRAPHIC})
+    for (int count : {0, 4, 8, 14})
+    {
+      CameraModel64 model = makePinholeRadtan5();
+      model.projection.type = ProjectionModelType::FISHEYE_THETA;
+      model.projection.theta_max = 1.4;
+      model.distortion = DistortionModel64{};
+      model.distortion.type = type;
+      model.distortion.space = DistortionSpace::ANGLE;
+      model.distortion.count = static_cast<std::uint8_t>(count);
+      ASSERT_EQ(validateCameraModel64(model), StatusCode::OK);
+      for (const auto &ray : sampleRays())
+      {
+        const auto analytic = rayToPixelWithJacobian64(model, ray);
+        ASSERT_TRUE(analytic.ok());
+        const auto ad = autodiffJacobian(model, ray);
+        ASSERT_TRUE(ad.ok) << "type=" << int(type) << " count=" << count;
+        EXPECT_NEAR(ad.u, analytic.pixel.u, 1e-6);
+        EXPECT_NEAR(ad.v, analytic.pixel.v, 1e-6);
+        EXPECT_LT((ad.J - analytic.J).cwiseAbs().maxCoeff(), 1e-5);
+        double u, v;
+        ASSERT_TRUE(
+          camxiom::projection_template::projectGeneric(model, ray.x(), ray.y(), ray.z(), u, v)
+        );
+        EXPECT_NEAR(u, analytic.pixel.u, 1e-6);
+        EXPECT_NEAR(v, analytic.pixel.v, 1e-6);
+      }
+      if (count > 0)
+      {
+        model.distortion.coeffs[0] = 0.1;
+        EXPECT_EQ(validateCameraModel64(model), StatusCode::INVALID_MODEL);
+        EXPECT_FALSE(autodiffJacobian(model, Eigen::Vector3d(0.1, 0.2, 1)).ok);
+      }
+    }
+}
+
+TEST(AutoDiffJacobian, AcceptsTheLegacyFiveCoefficientRadtan4Layout)
+{
+  for (auto named : representativeModels())
+  {
+    auto model = named.model;
+    if (model.distortion.type != DistortionModelType::RADTAN5) continue;
+    model.distortion.type = DistortionModelType::RADTAN4;
+    model.distortion.count = 5;
+    model.distortion.coeffs[4] = 0.02;
+    ASSERT_EQ(validateCameraModel64(model), StatusCode::OK) << named.name;
+    for (const auto &ray : sampleRays())
+    {
+      const auto analytic = rayToPixelWithJacobian64(model, ray);
+      ASSERT_TRUE(analytic.ok());
+      const auto ad = autodiffJacobian(model, ray);
+      ASSERT_TRUE(ad.ok) << named.name;
+      EXPECT_NEAR(ad.u, analytic.pixel.u, 1e-6);
+      EXPECT_NEAR(ad.v, analytic.pixel.v, 1e-6);
+      EXPECT_LT((ad.J - analytic.J).cwiseAbs().maxCoeff(), 1e-5);
+      double u, v;
+      ASSERT_TRUE(
+        camxiom::projection_template::projectGeneric(model, ray.x(), ray.y(), ray.z(), u, v)
+      );
+      EXPECT_NEAR(u, analytic.pixel.u, 1e-6);
+      EXPECT_NEAR(v, analytic.pixel.v, 1e-6);
+    }
+  }
+}
+
+TEST(AutoDiffJacobian, NonFiniteParametersRejectAndClearBothTemplatePaths)
+{
+  using Jet = ceres::Jet<double, 3>;
+  const double inf = std::numeric_limits<double>::infinity();
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  for (const auto &named : representativeModels())
+    for (const Eigen::Vector3d &ray : {Eigen::Vector3d(0, 0, 1), Eigen::Vector3d(.2, .1, 1)})
+      for (double invalid : {nan, inf, -inf})
+        for (int i = 0; i < 4 + named.model.distortion.count; ++i)
+        {
+          auto m = named.model;
+          const std::array<double *, 4> intr = {
+            &m.intrinsics.fx, &m.intrinsics.fy, &m.intrinsics.cx, &m.intrinsics.cy};
+          if (i < 4)
+            *intr[i] = invalid;
+          else
+            m.distortion.coeffs[i - 4] = invalid;
+          SCOPED_TRACE(named.name);
+          SCOPED_TRACE(i);
+          const auto ad = autodiffJacobian(m, ray);
+          EXPECT_FALSE(ad.ok);
+          EXPECT_EQ(ad.u, 0.0);
+          EXPECT_EQ(ad.v, 0.0);
+          EXPECT_TRUE(ad.J.isZero());
+          Jet u(17), v(19);
+          EXPECT_FALSE(camxiom::projection_template::projectGeneric(
+            m, Jet(ray.x(), 0), Jet(ray.y(), 1), Jet(ray.z(), 2), u, v
+          ));
+          EXPECT_EQ(u.a, 0.0);
+          EXPECT_EQ(v.a, 0.0);
+          EXPECT_TRUE(u.v.isZero());
+          EXPECT_TRUE(v.v.isZero());
+        }
+}
+
+TEST(AutoDiffJacobian, ModelDispatchPreservesRayDerivativesAtTheFisheyeCap)
+{
+  using Jet = ceres::Jet<double, 3>;
+  for (auto named : representativeModels())
+  {
+    auto &m = named.model;
+    if (m.projection.type != ProjectionModelType::FISHEYE_THETA) continue;
+    for (double x : {0.0, 1e-16, .25, 1.0})
+    {
+      const Eigen::Vector3d ray(x, 0, 1);
+      const double angle = std::atan2(x, 1.0);
+      for (double cap : {std::nextafter(angle, 0.0), angle, std::nextafter(angle, 1.0), 1e-20, 1.4})
+      {
+        m.projection.theta_max = cap;
+        const bool expected = cap > 0 && angle <= cap;
+        const auto ad = autodiffJacobian(m, ray);
+        Jet u(17), v(19);
+        EXPECT_EQ(
+          camxiom::projection_template::projectGeneric(m, Jet(x, 0), Jet(0, 1), Jet(1, 2), u, v),
+          expected
+        );
+        EXPECT_EQ(ad.ok, expected);
+        EXPECT_DOUBLE_EQ(u.a, ad.u);
+        EXPECT_DOUBLE_EQ(v.a, ad.v);
+        for (int i = 0; i < 3; ++i)
+        {
+          EXPECT_DOUBLE_EQ(u.v[i], ad.J(0, i));
+          EXPECT_DOUBLE_EQ(v.v[i], ad.J(1, i));
+          EXPECT_TRUE(std::isfinite(u.v[i]));
+          EXPECT_TRUE(std::isfinite(v.v[i]));
+        }
+      }
+    }
   }
 }

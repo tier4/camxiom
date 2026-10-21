@@ -23,17 +23,20 @@
 namespace camxiom
 {
 
-CameraModel makeCameraModel(const CameraInfo &camera_info)
+namespace
 {
-  CameraModel model;
-  const float invalid_parameter = std::numeric_limits<float>::quiet_NaN();
-  model.intrinsics.fx = static_cast<float>(camera_info.k[0]);
-  model.intrinsics.skew = static_cast<float>(camera_info.k[1]);
-  model.intrinsics.cx = static_cast<float>(camera_info.k[2]);
-  model.intrinsics.fy = static_cast<float>(camera_info.k[4]);
-  model.intrinsics.cy = static_cast<float>(camera_info.k[5]);
-  model.projection.xi = 0.0f;
-  model.projection.alpha = 0.0f;
+template <typename T>
+CameraModelT<T> makeCameraModelImpl(const CameraInfo &camera_info)
+{
+  CameraModelT<T> model;
+  const T invalid_parameter = std::numeric_limits<T>::quiet_NaN();
+  model.intrinsics.fx = static_cast<T>(camera_info.k[0]);
+  model.intrinsics.skew = static_cast<T>(camera_info.k[1]);
+  model.intrinsics.cx = static_cast<T>(camera_info.k[2]);
+  model.intrinsics.fy = static_cast<T>(camera_info.k[4]);
+  model.intrinsics.cy = static_cast<T>(camera_info.k[5]);
+  model.projection.xi = T(0);
+  model.projection.alpha = T(0);
   detail::setIdentity3x3(model.distortion.tilt_matrix);
   detail::setIdentity3x3(model.distortion.inv_tilt_matrix);
 
@@ -59,7 +62,7 @@ CameraModel makeCameraModel(const CameraInfo &camera_info)
   {
     if (!camera_info.d.empty())
     {
-      model.projection.xi = static_cast<float>(camera_info.d[0]);
+      model.projection.xi = static_cast<T>(camera_info.d[0]);
       distortion_offset = 1U;
     }
     const std::size_t remaining =
@@ -71,11 +74,11 @@ CameraModel makeCameraModel(const CameraInfo &camera_info)
   {
     if (!camera_info.d.empty())
     {
-      model.projection.xi = static_cast<float>(camera_info.d[0]);
+      model.projection.xi = static_cast<T>(camera_info.d[0]);
     }
     if (camera_info.d.size() >= 2U)
     {
-      model.projection.alpha = static_cast<float>(camera_info.d[1]);
+      model.projection.alpha = static_cast<T>(camera_info.d[1]);
       distortion_offset = 2U;
     }
     else
@@ -93,11 +96,11 @@ CameraModel makeCameraModel(const CameraInfo &camera_info)
   {
     if (!camera_info.d.empty())
     {
-      model.projection.alpha = static_cast<float>(camera_info.d[0]);
+      model.projection.alpha = static_cast<T>(camera_info.d[0]);
     }
     if (camera_info.d.size() >= 2U)
     {
-      model.projection.beta = static_cast<float>(camera_info.d[1]);
+      model.projection.beta = static_cast<T>(camera_info.d[1]);
       distortion_offset = 2U;
     }
     else
@@ -132,7 +135,7 @@ CameraModel makeCameraModel(const CameraInfo &camera_info)
   model.distortion.count = static_cast<std::uint8_t>(coefficient_count);
   for (std::size_t index = 0; index < coefficient_count; ++index)
   {
-    model.distortion.coeffs[index] = static_cast<float>(camera_info.d[index + distortion_offset]);
+    model.distortion.coeffs[index] = static_cast<T>(camera_info.d[index + distortion_offset]);
   }
 
   detail::rebuildDistortionAuxState(model.distortion);
@@ -157,10 +160,17 @@ CameraModel makeCameraModel(const CameraInfo &camera_info)
   // Single source for the per-family theta_max policy — this used to be an
   // inline copy of updateThetaMax's switch, the exact two-sided-copy
   // pattern behind the D47 pi-boundary bug.
-  updateThetaMax(model);
+  if constexpr (std::is_same_v<T, float>) updateThetaMax(model);
+  else updateThetaMax64(model);
 
   return model;
 }
+
+}  // namespace
+
+CameraModel makeCameraModel(const CameraInfo &info) { return makeCameraModelImpl<float>(info); }
+
+CameraModel64 makeCameraModel64(const CameraInfo &info) { return makeCameraModelImpl<double>(info); }
 
 const char *toString(const PinholeCompatProfile profile)
 {

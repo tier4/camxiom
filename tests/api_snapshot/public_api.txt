@@ -22,8 +22,10 @@ namespace camxiom
 
 === include/camxiom/calib/convert.hpp ===
 camxiom::calib | [[nodiscard]] ModelConversionResult convertCameraModel( const CameraModel &src_model, int image_width, int image_height, const CameraModel &dst_seed, const ModelConversionOptions &options = ModelConversionOptions{} )
+camxiom::calib | [[nodiscard]] ModelConversionResult64 convertCameraModel64( const CameraModel64 &src_model, int image_width, int image_height, const CameraModel64 &dst_seed, const ModelConversionOptions &options = ModelConversionOptions{} )
 camxiom::calib | struct ModelConversionOptions
 camxiom::calib | struct [[nodiscard]] ModelConversionResult
+camxiom::calib | struct [[nodiscard]] ModelConversionResult64
 camxiom::calib::ModelConversionOptions | int grid_cols
 camxiom::calib::ModelConversionOptions | int grid_rows
 camxiom::calib::ModelConversionOptions | int max_iterations
@@ -31,11 +33,15 @@ namespace camxiom::calib
 
 === include/camxiom/calib/intrinsics.hpp ===
 camxiom::calib | [[nodiscard]] CalibrationResult calibrate( const std::vector<CalibrationView> &views, const CameraModel &initial_model, PnpFlag lock_flags, const CalibrationOptions &options )
+camxiom::calib | [[nodiscard]] CalibrationResult64 calibrate64( const std::vector<CalibrationView> &views, const CameraModel64 &initial_model, PnpFlag lock_flags, const CalibrationOptions &options )
 camxiom::calib | [[nodiscard]] ReprojectionErrorResult computeReprojErrors( const std::vector<CalibrationView> &views, const CameraModel &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t )
 camxiom::calib | [[nodiscard]] double computeReprojErrors( const std::vector<CalibrationView> &views, const CameraModel &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t, std::vector<double> &per_view_rms_out, double &max_err_out )
+camxiom::calib | [[nodiscard]] double computeReprojErrors64( const std::vector<CalibrationView> &views, const CameraModel64 &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t, std::vector<double> &per_view_rms_out, double &max_err_out )
 camxiom::calib | [[nodiscard]] std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals( const std::vector<CalibrationView> &views, const CameraModel &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t )
+camxiom::calib | [[nodiscard]] std::vector<std::vector<Eigen::Vector2d>> computePerPointResiduals64( const std::vector<CalibrationView> &views, const CameraModel64 &model, const std::vector<Eigen::Matrix3d> &R, const std::vector<Eigen::Vector3d> &t )
 camxiom::calib | struct CalibrationOptions
 camxiom::calib | struct CalibrationResult
+camxiom::calib | struct CalibrationResult64
 camxiom::calib | struct CalibrationView
 camxiom::calib | struct ReprojectionErrorResult
 camxiom::calib | using optimizer::PnpFlag
@@ -82,6 +88,31 @@ camxiom::calib::CalibrationResult | std::vector<std::string> parameters_at_or_ne
 camxiom::calib::CalibrationResult | std::vector<std::string> uncertainty_labels
 camxiom::calib::CalibrationResult | std::vector<std::string> underdetermined_parameters
 camxiom::calib::CalibrationResult | std::vector<std::vector<Eigen::Vector2d>> per_point_residuals
+camxiom::calib::CalibrationResult64 | CameraModel64 camera_model
+camxiom::calib::CalibrationResult64 | StatusCode reprojection_status
+camxiom::calib::CalibrationResult64 | StatusCode status
+camxiom::calib::CalibrationResult64 | bool observability_available
+camxiom::calib::CalibrationResult64 | bool observability_ok
+camxiom::calib::CalibrationResult64 | bool uncertainty_available
+camxiom::calib::CalibrationResult64 | bool uncertainty_has_parameters_near_bounds
+camxiom::calib::CalibrationResult64 | constexpr bool ok() const
+camxiom::calib::CalibrationResult64 | double max_reprojection_error_px
+camxiom::calib::CalibrationResult64 | double min_singular_value
+camxiom::calib::CalibrationResult64 | double normalized_condition_number
+camxiom::calib::CalibrationResult64 | double rms_reprojection_error_px
+camxiom::calib::CalibrationResult64 | explicit operator bool() const
+camxiom::calib::CalibrationResult64 | int iterations_used
+camxiom::calib::CalibrationResult64 | std::size_t total_count
+camxiom::calib::CalibrationResult64 | std::size_t valid_count
+camxiom::calib::CalibrationResult64 | std::vector<Eigen::Matrix3d> per_view_rotations
+camxiom::calib::CalibrationResult64 | std::vector<Eigen::Vector3d> per_view_translations
+camxiom::calib::CalibrationResult64 | std::vector<double> parameter_std
+camxiom::calib::CalibrationResult64 | std::vector<double> per_view_rms_px
+camxiom::calib::CalibrationResult64 | std::vector<std::size_t> per_view_valid_counts
+camxiom::calib::CalibrationResult64 | std::vector<std::string> parameters_at_or_near_bounds
+camxiom::calib::CalibrationResult64 | std::vector<std::string> uncertainty_labels
+camxiom::calib::CalibrationResult64 | std::vector<std::string> underdetermined_parameters
+camxiom::calib::CalibrationResult64 | std::vector<std::vector<Eigen::Vector2d>> per_point_residuals
 camxiom::calib::CalibrationView | std::vector<Eigen::Vector2d> image_points
 camxiom::calib::CalibrationView | std::vector<Eigen::Vector3d> world_points
 camxiom::calib::ReprojectionErrorResult | StatusCode status
@@ -123,28 +154,49 @@ namespace camxiom::calib
 
 === include/camxiom/camera_info_yaml.hpp ===
 camxiom | [[nodiscard]] StatusCode saveCameraInfoYaml( const std::string &path, const CameraInfo &camera_info, const std::string &camera_name = "" )
+camxiom | [[nodiscard]] StatusCode saveCameraInfoYaml( const std::string &path, const CameraInfo &camera_info, const std::string &camera_name, CameraInfoYamlPrecision precision )
 camxiom | [[nodiscard]] std::string toCameraInfoYaml( const CameraInfo &camera_info, const std::string &camera_name = "" )
+camxiom | [[nodiscard]] std::string toCameraInfoYaml( const CameraInfo &camera_info, const std::string &camera_name, CameraInfoYamlPrecision precision )
+camxiom | enum class CameraInfoYamlPrecision : std::uint8_t
+camxiom::CameraInfoYamlPrecision | #000 FIXED = 0U
+camxiom::CameraInfoYamlPrecision | #001 ROUND_TRIP = 1U
 namespace camxiom
 
 === include/camxiom/camxiom.hpp ===
 
 === include/camxiom/compat.hpp ===
 camxiom | [[nodiscard]] CameraModel makeCameraModel(const CameraInfo &camera_info)
+camxiom | [[nodiscard]] CameraModel64 makeCameraModel64(const CameraInfo &camera_info)
 camxiom | [[nodiscard]] StatusCode exportDoubleSphereCameraInfo( const CameraModel &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out )
+camxiom | [[nodiscard]] StatusCode exportDoubleSphereCameraInfo64( const CameraModel64 &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out)
 camxiom | [[nodiscard]] StatusCode exportDoubleSphereModel( const CameraModel &model, DoubleSphereCompatProfile profile, DoubleSphereExternalModel &external_model_out )
+camxiom | [[nodiscard]] StatusCode exportDoubleSphereModel64( const CameraModel64 &model, DoubleSphereCompatProfile profile, DoubleSphereExternalModel &external_model_out)
 camxiom | [[nodiscard]] StatusCode exportEucmCameraInfo( const CameraModel &model, EucmCompatProfile profile, CameraInfo &camera_info_out )
+camxiom | [[nodiscard]] StatusCode exportEucmCameraInfo64( const CameraModel64 &model, EucmCompatProfile profile, CameraInfo &camera_info_out)
 camxiom | [[nodiscard]] StatusCode exportEucmModel( const CameraModel &model, EucmCompatProfile profile, EucmExternalModel &external_model_out )
+camxiom | [[nodiscard]] StatusCode exportEucmModel64( const CameraModel64 &model, EucmCompatProfile profile, EucmExternalModel &external_model_out)
 camxiom | [[nodiscard]] StatusCode exportFisheyeCameraInfo( const CameraModel &model, FisheyeCompatProfile profile, CameraInfo &camera_info_out )
+camxiom | [[nodiscard]] StatusCode exportFisheyeCameraInfo64( const CameraModel64 &model, FisheyeCompatProfile profile, CameraInfo &camera_info_out)
 camxiom | [[nodiscard]] StatusCode exportFisheyeModel( const CameraModel &model, FisheyeCompatProfile profile, FisheyeExternalModel &external_model_out )
+camxiom | [[nodiscard]] StatusCode exportFisheyeModel64( const CameraModel64 &model, FisheyeCompatProfile profile, FisheyeExternalModel &external_model_out)
 camxiom | [[nodiscard]] StatusCode exportOmnidirectionalCameraInfo( const CameraModel &model, OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out )
+camxiom | [[nodiscard]] StatusCode exportOmnidirectionalCameraInfo64( const CameraModel64 &model, OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out)
 camxiom | [[nodiscard]] StatusCode exportOmnidirectionalModel( const CameraModel &model, OmnidirectionalCompatProfile profile, OmnidirectionalExternalModel &external_model_out )
+camxiom | [[nodiscard]] StatusCode exportOmnidirectionalModel64( const CameraModel64 &model, OmnidirectionalCompatProfile profile, OmnidirectionalExternalModel &external_model_out)
 camxiom | [[nodiscard]] StatusCode exportPinholeCameraInfo( const CameraModel &model, PinholeCompatProfile profile, CameraInfo &camera_info_out )
+camxiom | [[nodiscard]] StatusCode exportPinholeCameraInfo64( const CameraModel64 &model, PinholeCompatProfile profile, CameraInfo &camera_info_out)
 camxiom | [[nodiscard]] StatusCode exportPinholeModel( const CameraModel &model, PinholeCompatProfile profile, PinholeExternalModel &external_model_out )
+camxiom | [[nodiscard]] StatusCode exportPinholeModel64( const CameraModel64 &model, PinholeCompatProfile profile, PinholeExternalModel &external_model_out)
 camxiom | [[nodiscard]] StatusCode importDoubleSphereModel( const DoubleSphereExternalModel &external_model, DoubleSphereCompatProfile profile, CameraModel &model_out )
+camxiom | [[nodiscard]] StatusCode importDoubleSphereModel64( const DoubleSphereExternalModel &external_model, DoubleSphereCompatProfile profile, CameraModel64 &model_out)
 camxiom | [[nodiscard]] StatusCode importEucmModel( const EucmExternalModel &external_model, EucmCompatProfile profile, CameraModel &model_out )
+camxiom | [[nodiscard]] StatusCode importEucmModel64( const EucmExternalModel &external_model, EucmCompatProfile profile, CameraModel64 &model_out)
 camxiom | [[nodiscard]] StatusCode importFisheyeModel( const FisheyeExternalModel &external_model, FisheyeCompatProfile profile, CameraModel &model_out )
+camxiom | [[nodiscard]] StatusCode importFisheyeModel64( const FisheyeExternalModel &external_model, FisheyeCompatProfile profile, CameraModel64 &model_out)
 camxiom | [[nodiscard]] StatusCode importOmnidirectionalModel( const OmnidirectionalExternalModel &external_model, OmnidirectionalCompatProfile profile, CameraModel &model_out )
+camxiom | [[nodiscard]] StatusCode importOmnidirectionalModel64( const OmnidirectionalExternalModel &external_model, OmnidirectionalCompatProfile profile, CameraModel64 &model_out)
 camxiom | [[nodiscard]] StatusCode importPinholeModel( const PinholeExternalModel &external_model, PinholeCompatProfile profile, CameraModel &model_out )
+camxiom | [[nodiscard]] StatusCode importPinholeModel64( const PinholeExternalModel &external_model, PinholeCompatProfile profile, CameraModel64 &model_out)
 camxiom | const char *toString(DoubleSphereCompatProfile profile)
 camxiom | const char *toString(EucmCompatProfile profile)
 camxiom | const char *toString(FisheyeCompatProfile profile)
@@ -329,13 +381,27 @@ namespace camxiom
 
 === include/camxiom/model.hpp ===
 camxiom | [[nodiscard]] CameraModel makeDistortionFree(const CameraModel &model)
+camxiom | [[nodiscard]] CameraModel64 makeDistortionFree64(const CameraModel64 &model)
 camxiom | [[nodiscard]] DistortionModelType parseDistortionModelType(const std::string &model_name)
+camxiom | [[nodiscard]] FisheyeDomain64 getFisheyeDomain64(const CameraModel64 &model)
 camxiom | [[nodiscard]] ProjectionModelType chooseProjectionModelType( DistortionModelType distortion_model_type )
 camxiom | [[nodiscard]] StatusCode validateCameraModel(const CameraModel &model)
 camxiom | [[nodiscard]] StatusCode validateCameraModel64(const CameraModel64 &model)
 camxiom | [[nodiscard]] bool isFisheyeDistortionModel(const std::string &model_name)
 camxiom | [[nodiscard]] bool isRationalDistortionModel(const std::string &model_name)
+camxiom | enum class FisheyeDomainLimit : std::uint8_t
+camxiom | struct FisheyeDomain64
 camxiom | void updateThetaMax(CameraModel &model)
+camxiom | void updateThetaMax64(CameraModel64 &model)
+camxiom::FisheyeDomain64 | FisheyeDomainLimit limit
+camxiom::FisheyeDomain64 | StatusCode status
+camxiom::FisheyeDomain64 | constexpr bool ok() const
+camxiom::FisheyeDomain64 | double safe_theta_max
+camxiom::FisheyeDomain64 | double theta_limit
+camxiom::FisheyeDomainLimit | #000 UNKNOWN = 0U
+camxiom::FisheyeDomainLimit | #001 ANGULAR_LIMIT
+camxiom::FisheyeDomainLimit | #002 MONOTONICITY_LIMIT
+camxiom::FisheyeDomainLimit | #003 NUMERIC_LIMIT
 namespace camxiom
 
 === include/camxiom/model_compare.hpp ===
@@ -464,11 +530,13 @@ camxiom::optimizer | class PnpSolver
 camxiom::optimizer | enum class PnpCostType : std::uint8_t
 camxiom::optimizer | struct PnpBound
 camxiom::optimizer | struct PnpInitialGuess
+camxiom::optimizer | struct PnpInitialGuess64
 camxiom::optimizer | struct PnpOptimizerOptions
 camxiom::optimizer | struct PnpPrincipalPointPrior
 camxiom::optimizer | struct PnpSolverOptions
 camxiom::optimizer | struct PnpSummary
 camxiom::optimizer | struct [[nodiscard]] PnpResult
+camxiom::optimizer | struct [[nodiscard]] PnpResult64
 camxiom::optimizer | using ImagePointSets = std::vector<ImagePoints>
 camxiom::optimizer | using ImagePoints = std::vector<Eigen::Vector2d>
 camxiom::optimizer | using ObjectPointSets = std::vector<ObjectPoints>
@@ -484,6 +552,9 @@ camxiom::optimizer::PnpCostType | #001 ANALYTICAL = 1
 camxiom::optimizer::PnpInitialGuess | camxiom::CameraModel camera_model
 camxiom::optimizer::PnpInitialGuess | std::vector<Eigen::Vector3d> rvecs
 camxiom::optimizer::PnpInitialGuess | std::vector<Eigen::Vector3d> tvecs
+camxiom::optimizer::PnpInitialGuess64 | camxiom::CameraModel64 camera_model
+camxiom::optimizer::PnpInitialGuess64 | std::vector<Eigen::Vector3d> rvecs
+camxiom::optimizer::PnpInitialGuess64 | std::vector<Eigen::Vector3d> tvecs
 camxiom::optimizer::PnpOptimizerOptions | bool minimizer_progress_to_stdout
 camxiom::optimizer::PnpOptimizerOptions | double function_tolerance
 camxiom::optimizer::PnpOptimizerOptions | double gradient_tolerance
@@ -494,13 +565,16 @@ camxiom::optimizer::PnpPrincipalPointPrior | double reference_x
 camxiom::optimizer::PnpPrincipalPointPrior | double reference_y
 camxiom::optimizer::PnpPrincipalPointPrior | double sigma_px
 camxiom::optimizer::PnpSolver | PnpResult solve( const ObjectPointSets &object_points, const ImagePointSets &image_points, const PnpInitialGuess &initial_guess, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
+camxiom::optimizer::PnpSolver | PnpResult64 solve( const ObjectPointSets &object_points, const ImagePointSets &image_points, const PnpInitialGuess64 &initial_guess, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
 camxiom::optimizer::PnpSolver | PnpSolver &operator=(PnpSolver &&) noexcept
 camxiom::optimizer::PnpSolver | PnpSolver &operator=(const PnpSolver &) = delete
 camxiom::optimizer::PnpSolver | PnpSolver()
 camxiom::optimizer::PnpSolver | PnpSolver(PnpSolver &&) noexcept
 camxiom::optimizer::PnpSolver | PnpSolver(const PnpSolver &) = delete
 camxiom::optimizer::PnpSolver | bool solve( const ObjectPointSets &object_points, const ImagePointSets &image_points, const PnpInitialGuess &initial_guess, PnpResult &result_out, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
+camxiom::optimizer::PnpSolver | bool solve( const ObjectPointSets &object_points, const ImagePointSets &image_points, const PnpInitialGuess64 &initial_guess, PnpResult64 &result_out, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
 camxiom::optimizer::PnpSolver | bool solve( const ObjectPoints &object_points, const ImagePoints &image_points, const PnpInitialGuess &initial_guess, PnpResult &result_out, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
+camxiom::optimizer::PnpSolver | bool solve( const ObjectPoints &object_points, const ImagePoints &image_points, const PnpInitialGuess64 &initial_guess, PnpResult64 &result_out, const PnpSolverOptions &options = PnpSolverOptions(), PnpFlag flags = PnpFlag::NONE )
 camxiom::optimizer::PnpSolver | const PnpSummary &lastSummary() const
 camxiom::optimizer::PnpSolver | ~PnpSolver()
 camxiom::optimizer::PnpSolverOptions | PnpBound lower_bound
@@ -533,18 +607,18 @@ camxiom | RayResult64 pixelToRay64( const CameraModel64 &model, const Pixel2d &p
 namespace camxiom
 
 === include/camxiom/projection_template.hpp ===
+camxiom::projection_template | template <typename T, typename Scalar> [[gnu::always_inline]] [[nodiscard]] inline bool projectGeneric( const CameraModelT<Scalar> &model, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
+camxiom::projection_template | template <typename T> [[gnu::always_inline]] [[nodiscard]] inline bool projectRadtan5( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectDoubleSphere( const T *intrinsics, const T &xi, const T &alpha, const T *dist, int dist_count, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectEquidistant( const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectEquisolid( const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectEucm( const T *intrinsics, const T &alpha, const T &beta, const T *dist, int dist_count, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectFisheye4( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
-camxiom::projection_template | template <typename T> [[nodiscard]] bool projectGeneric( const CameraModel &model, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
-camxiom::projection_template | template <typename T> [[nodiscard]] bool projectGenericParametric( ProjectionModelType proj_type, DistortionModelType dist_type, const T *intrinsics, const T *dist, int dist_count, const T &proj_xi, const T &proj_alpha, const T &proj_beta, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
+camxiom::projection_template | template <typename T> [[nodiscard]] bool projectGenericParametric( ProjectionModelType proj_type, DistortionModelType dist_type, const T *intrinsics, const T *dist, int dist_count, const T &proj_xi, const T &proj_alpha, const T &proj_beta, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out, double theta_max = constants::kPi )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectKB4( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectKB8( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectOmnidirectional( const T *intrinsics, const T &xi, const T *dist, int dist_count, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectOrthographic( const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
-camxiom::projection_template | template <typename T> [[nodiscard]] bool projectRadtan5( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectRational8( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectStereographic( const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectThinPrism12( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )

@@ -28,8 +28,8 @@ exactly two ways to go wrong, and both are silent:
     machine or CI runner would ever notice.
 
 Neither shows up in a functional test on an AVX2 host, so this inspects the
-built archive directly. It reads the disassembly, so it needs objdump; where
-objdump is missing or the target is not x86 the check reports SKIPPED.
+built archive directly. It reads the disassembly with GNU objdump; where GNU
+objdump is unavailable or the target is not x86 the check reports SKIPPED.
 
 Usage: check_avx2_containment.py <path-to-libcamxiom_core.a>
 """
@@ -39,6 +39,7 @@ import re
 import shutil
 import subprocess
 import sys
+from typing import Optional
 
 # 256-bit register operands and the FMA / AVX2-only mnemonics. Matching on ymm
 # alone would miss nothing in practice, but the mnemonics make a leak easier to
@@ -54,9 +55,34 @@ AVX_FUNC_NAME = re.compile(r"Avx")
 FUNC_HEADER = re.compile(r"^[0-9a-f]+ <(.+)>:$")
 
 
-def disassemble(archive: str) -> str:
+def find_gnu_objdump() -> Optional[str]:
+    """Return the PATH objdump only when it is GNU binutils' implementation."""
+    objdump = shutil.which("objdump")
+    if objdump is None:
+        print("SKIPPED: GNU objdump not available")
+        return None
+
+    try:
+        version = subprocess.run(
+            [objdump, "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        print("SKIPPED: GNU objdump not available")
+        return None
+
+    if version.returncode != 0 or "GNU objdump" not in (version.stdout + version.stderr):
+        print(f"SKIPPED: GNU objdump required (found {objdump})")
+        return None
+
+    return objdump
+
+
+def disassemble(objdump: str, archive: str) -> str:
     return subprocess.run(
-        ["objdump", "-d", "--no-show-raw-insn", "-C", archive],
+        [objdump, "-d", "--no-show-raw-insn", "-C", archive],
         capture_output=True,
         text=True,
         check=True,
@@ -91,11 +117,11 @@ def main() -> int:
     parser.add_argument("archive", help="path to libcamxiom_core.a")
     args = parser.parse_args()
 
-    if shutil.which("objdump") is None:
-        print("SKIPPED: objdump not available")
+    objdump = find_gnu_objdump()
+    if objdump is None:
         return 0
 
-    disasm = disassemble(args.archive)
+    disasm = disassemble(objdump, args.archive)
 
     # Non-x86 targets (the aarch64 dev machine) compile no AVX2 at all, and the
     # NEON path is covered by the functional tests instead.

@@ -19,9 +19,10 @@
 namespace camxiom
 {
 
-StatusCode importPinholeModel(
+template <typename T>
+StatusCode importPinholeModelImpl(
   const PinholeExternalModel &external_model, const PinholeCompatProfile profile,
-  CameraModel &model_out
+  CameraModelT<T> &model_out
 )
 {
   if (!isFiniteArray9(external_model.K) || !isFiniteVector(external_model.D))
@@ -50,8 +51,9 @@ StatusCode importPinholeModel(
   return makeAndValidateProjectionModel(camera_info, ProjectionModelType::PINHOLE, model_out);
 }
 
-StatusCode exportPinholeModel(
-  const CameraModel &model, const PinholeCompatProfile profile,
+template <typename T>
+StatusCode exportPinholeModelImpl(
+  const CameraModelT<T> &model, const PinholeCompatProfile profile,
   PinholeExternalModel &external_model_out
 )
 {
@@ -85,6 +87,30 @@ StatusCode exportPinholeModel(
     external_model_out.D[index] = static_cast<double>(model.distortion.coeffs[index]);
   }
   return StatusCode::OK;
+}
+
+StatusCode importPinholeModel(
+  const PinholeExternalModel &external_model, PinholeCompatProfile profile, CameraModel &model_out)
+{
+  return importPinholeModelImpl(external_model, profile, model_out);
+}
+
+StatusCode exportPinholeModel(
+  const CameraModel &model, PinholeCompatProfile profile, PinholeExternalModel &external_model_out)
+{
+  return exportPinholeModelImpl(model, profile, external_model_out);
+}
+
+StatusCode importPinholeModel64(
+  const PinholeExternalModel &external_model, PinholeCompatProfile profile, CameraModel64 &model_out)
+{
+  return importPinholeModelImpl(external_model, profile, model_out);
+}
+
+StatusCode exportPinholeModel64(
+  const CameraModel64 &model, PinholeCompatProfile profile, PinholeExternalModel &external_model_out)
+{
+  return exportPinholeModelImpl(model, profile, external_model_out);
 }
 
 }  // namespace camxiom

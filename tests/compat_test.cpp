@@ -600,3 +600,82 @@ TEST(CompatCameraInfoExport, RoundTripsThroughMakeCameraModel)
 }
 
 }  // namespace
+
+TEST(CompatDouble, PreservesCameraInfoAcrossAllFamilies)
+{
+  const std::vector<std::pair<std::string, std::vector<double>>> cases = {
+    {"plumb_bob", {-0.123456789012345, 0.0123456789012345, 0.000123456789, 0, 0}},
+    {"rational_polynomial", {-0.1, 0.02, 0.000123456789, 0, 0, 0.001234567890123, 0, 0}},
+    {"equidistant", {-0.0123456789012345, 0.00123456789012345, 0, 0}},
+    {"omnidirectional", {1.123456789012345, -0.0123456789012345, 0, 0, 0}},
+    {"double_sphere", {-0.123456789012345, 0.543210987654321}},
+    {"eucm", {0.543210987654321, 1.123456789012345}}};
+  for (const auto &entry : cases)
+  {
+    SCOPED_TRACE(entry.first);
+    CameraInfo info;
+    info.k = makeK(1234.56789012345, 1230.98765432109, 639.12345678901, 479.98765432109);
+    info.distortion_model = entry.first;
+    info.d = entry.second;
+    auto model = makeCameraModel64(info);
+    ASSERT_EQ(validateCameraModel64(model), StatusCode::OK);
+    EXPECT_EQ(model.intrinsics.fx, info.k[0]);
+    EXPECT_NE(model.intrinsics.fx, static_cast<double>(static_cast<float>(info.k[0])));
+    CameraInfo out;
+    out.width = 1280;
+    out.height = 960;
+    StatusCode status = StatusCode::INVALID_MODEL;
+    switch (model.projection.type)
+    {
+      case ProjectionModelType::PINHOLE:
+        status = exportPinholeCameraInfo64(model, PinholeCompatProfile::CANONICAL, out); break;
+      case ProjectionModelType::FISHEYE_THETA:
+        status = exportFisheyeCameraInfo64(model, FisheyeCompatProfile::CANONICAL, out); break;
+      case ProjectionModelType::OMNIDIRECTIONAL:
+        status = exportOmnidirectionalCameraInfo64(model, OmnidirectionalCompatProfile::CANONICAL, out); break;
+      case ProjectionModelType::DOUBLE_SPHERE:
+        status = exportDoubleSphereCameraInfo64(model, DoubleSphereCompatProfile::CANONICAL, out); break;
+      case ProjectionModelType::EUCM:
+        status = exportEucmCameraInfo64(model, EucmCompatProfile::CANONICAL, out); break;
+      case ProjectionModelType::UNKNOWN: break;
+    }
+    ASSERT_EQ(status, StatusCode::OK);
+    EXPECT_EQ(out.k, info.k);
+    EXPECT_EQ(out.d, info.d);
+    EXPECT_EQ(out.width, 1280u);
+    EXPECT_EQ(out.height, 960u);
+    const auto reloaded = makeCameraModel64(out);
+    EXPECT_EQ(reloaded.intrinsics.fx, model.intrinsics.fx);
+    EXPECT_EQ(reloaded.distortion.coeffs, model.distortion.coeffs);
+    EXPECT_EQ(reloaded.projection.xi, model.projection.xi);
+    EXPECT_EQ(reloaded.projection.alpha, model.projection.alpha);
+    EXPECT_EQ(reloaded.projection.beta, model.projection.beta);
+    updateThetaMax64(model);
+    EXPECT_EQ(validateCameraModel64(model), StatusCode::OK);
+    EXPECT_EQ(makeDistortionFree64(model).intrinsics.fx, info.k[0]);
+  }
+}
+
+TEST(CompatDouble, ImportsProfilesWithoutFloatIntermediates)
+{
+  const auto k = makeK(1000.12345678901, 1001.98765432109, 639.12345678901, 479.98765432109);
+  CameraModel64 model;
+  PinholeExternalModel pin{k, {-0.123456789012345, 0, 0, 0, 0}};
+  ASSERT_EQ(importPinholeModel64(pin, PinholeCompatProfile::CANONICAL, model), StatusCode::OK);
+  EXPECT_EQ(model.distortion.coeffs[0], pin.D[0]);
+  FisheyeExternalModel fish{k, {-0.0123456789012345, 0, 0, 0}, DistortionModelType::KB4};
+  ASSERT_EQ(importFisheyeModel64(fish, FisheyeCompatProfile::CANONICAL, model), StatusCode::OK);
+  EXPECT_EQ(model.distortion.coeffs[0], fish.D[0]);
+  OmnidirectionalExternalModel omni{k, {}, 1.123456789012345};
+  ASSERT_EQ(importOmnidirectionalModel64(omni, OmnidirectionalCompatProfile::CANONICAL, model), StatusCode::OK);
+  EXPECT_EQ(model.projection.xi, omni.xi);
+  DoubleSphereExternalModel ds{k, {}, -0.123456789012345, 0.543210987654321};
+  ASSERT_EQ(importDoubleSphereModel64(ds, DoubleSphereCompatProfile::CANONICAL, model), StatusCode::OK);
+  EXPECT_EQ(model.projection.alpha, ds.alpha);
+  EucmExternalModel eu{k, {}, 0.543210987654321, 1.123456789012345};
+  ASSERT_EQ(importEucmModel64(eu, EucmCompatProfile::CANONICAL, model), StatusCode::OK);
+  EXPECT_EQ(model.projection.beta, eu.beta);
+  EXPECT_EQ(model.intrinsics.fx, k[0]);
+  pin.K[0] = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_EQ(importPinholeModel64(pin, PinholeCompatProfile::CANONICAL, model), StatusCode::INVALID_INPUT);
+}

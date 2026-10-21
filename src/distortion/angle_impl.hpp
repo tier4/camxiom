@@ -348,41 +348,68 @@ constexpr T fisheyeThetaScanStep()
          static_cast<T>(kFisheyeThetaScanSamples);
 }
 
-/// Largest theta (on the scan grid) up to which the polynomial theta
-/// distortion is finite, non-negative, and strictly increasing. Scans from
-/// near-zero up to pi: starting higher (a historical pi/2 start) missed
-/// non-monotonicity below pi/2 caused by large negative high-order
-/// coefficients (e.g. overfitting a nearly-pinhole camera with a fisheye
-/// polynomial). Resolution is one scan step (~pi/512 rad); callers comparing
-/// a cap against this value must allow for that granularity.
 template <typename T>
-inline T estimateSafeThetaMaxForPolynomialFisheye(const DistortionModelT<T> &model)
+struct PolynomialFisheyeDomain
+{
+  T safe_theta_max{T(0)};
+  T theta_limit{T(0)};
+  // OK: reached the scan cap; DOMAIN_ERROR: lost monotonicity/positivity;
+  // otherwise the distortion evaluation failed (usually NUMERIC_ERROR).
+  StatusCode limit_status{StatusCode::OK};
+};
+
+/// Sample the positive monotone prefix and retain why/where the scan stops.
+/// Sub-grid folds are not certified; theta_limit is not an exact root.
+template <typename T>
+inline PolynomialFisheyeDomain<T> scanPolynomialFisheyeDomain(const DistortionModelT<T> &model)
 {
   constexpr T theta_start = fisheyeThetaScanStart<T>();
   constexpr T theta_cap = fisheyeThetaScanCap<T>();
 
-  T candidate = theta_start;
-  for (int i = 1; i <= kFisheyeThetaScanSamples; ++i)
+  PolynomialFisheyeDomain<T> result;
+  // Validate the starting sample too: blindly returning theta_start used to
+  // advertise an unusable cap when a fold or overflow preceded the grid.
+  for (int i = 0; i <= kFisheyeThetaScanSamples; ++i)
   {
     const T ratio = static_cast<T>(i) / static_cast<T>(kFisheyeThetaScanSamples);
     const T theta = theta_start + (theta_cap - theta_start) * ratio;
+    result.theta_limit = theta;
 
     T theta_d = T(0);
-    if (distortTheta<T>(model, theta, theta_d) != StatusCode::OK || !std::isfinite(theta_d) || theta_d < T(0))
+    result.limit_status = distortTheta<T>(model, theta, theta_d);
+    if (result.limit_status != StatusCode::OK)
     {
-      break;
+      return result;
+    }
+    if (theta_d < T(0))
+    {
+      result.limit_status = StatusCode::DOMAIN_ERROR;
+      return result;
     }
 
     T derivative = T(0);
-    if (distortThetaDerivative<T>(model, theta, derivative) != StatusCode::OK || !std::isfinite(derivative) || derivative <= T(0))
+    result.limit_status = distortThetaDerivative<T>(model, theta, derivative);
+    if (result.limit_status != StatusCode::OK)
     {
-      break;
+      return result;
+    }
+    if (derivative <= T(0))
+    {
+      result.limit_status = StatusCode::DOMAIN_ERROR;
+      return result;
     }
 
-    candidate = theta;
+    result.safe_theta_max = theta;
   }
 
-  return candidate;
+  return result;
+}
+
+/// Last usable sample (~pi/512 rad resolution), or zero if none was found.
+template <typename T>
+inline T estimateSafeThetaMaxForPolynomialFisheye(const DistortionModelT<T> &model)
+{
+  return scanPolynomialFisheyeDomain<T>(model).safe_theta_max;
 }
 
 }  // namespace camxiom::detail_impl

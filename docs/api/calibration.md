@@ -273,3 +273,38 @@ check finiteness or use the status-bearing overload.
   family.
 - [Design / numerical strategy](../design/numerical-strategy.md) — why
   identifiability locks exist, solver internals.
+
+### Double-precision PnP input and output
+
+`PnpSolver::solve` with `PnpInitialGuess64` and `PnpResult64` keeps the input
+model, the write-back after optimization and the returned model as
+`CameraModel64`. It supports single and multiple views and the analytical
+Jacobian, automatic-differentiation and pose-only fast paths. The existing
+`PnpInitialGuess` / `PnpResult` remain float.
+
+### Keeping calibration results in double precision
+
+`calib::calibrate64(views, initial_model64, flags, options)` returns a
+`CalibrationResult64`. Nothing is converted to float on the way: not the
+initial model, the principal-point prior, the hand-off to PnP, the result
+model, or the evaluation of reprojection error, covariance and
+observability. `computeReprojErrors64` and `computePerPointResiduals64`
+evaluate the same model directly. The status codes, the empty result on
+failure and the rules for returning a best-effort estimate are the same as in
+the float API.
+
+```cpp
+camxiom::CameraModel64 seed = camxiom::makeCameraModel64(camera_info);
+auto fit = camxiom::calib::calibrate64(views, seed, flags, options);
+if (fit.status == camxiom::StatusCode::OK) {
+  auto next = camxiom::calib::calibrate64(views, fit.camera_model, flags, options);
+}
+```
+
+Double precision guarantees how the numbers are represented. The accuracy
+reached on real data still depends on the observations and the model.
+
+The model returned by PnP keeps the input field-of-view limit. The limit
+shrinks only when the monotone range of the fisheye coefficients shrinks, so
+the range of rays that can be accepted never suddenly widens between the
+optimization and its result.

@@ -131,8 +131,9 @@ inline constexpr double kEucmBetaLower = 1e-6;
 ///     Sphere / EUCM), independent of the caller's PnpBound.
 /// Parameters held by `flags` (or without a bound, e.g. OMNIDIRECTIONAL xi and
 /// all distortion coefficients) keep a default (unbounded) ScalarBound.
+template <typename T>
 inline CalibrationParameterBounds computeCalibrationParameterBounds(
-  const camxiom::CameraModel &model, PnpFlag flags, const PnpBound &lower, const PnpBound &upper
+  const camxiom::CameraModelT<T> &model, PnpFlag flags, const PnpBound &lower, const PnpBound &upper
 )
 {
   CalibrationParameterBounds bounds;

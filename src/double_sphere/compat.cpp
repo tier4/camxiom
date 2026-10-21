@@ -19,9 +19,10 @@
 namespace camxiom
 {
 
-StatusCode importDoubleSphereModel(
+template <typename T>
+StatusCode importDoubleSphereModelImpl(
   const DoubleSphereExternalModel &external_model, const DoubleSphereCompatProfile profile,
-  CameraModel &model_out
+  CameraModelT<T> &model_out
 )
 {
   if (!isFiniteArray9(external_model.K) || !isFiniteVector(external_model.D) ||
@@ -55,8 +56,9 @@ StatusCode importDoubleSphereModel(
   return makeAndValidateProjectionModel(camera_info, ProjectionModelType::DOUBLE_SPHERE, model_out);
 }
 
-StatusCode exportDoubleSphereModel(
-  const CameraModel &model, const DoubleSphereCompatProfile profile,
+template <typename T>
+StatusCode exportDoubleSphereModelImpl(
+  const CameraModelT<T> &model, const DoubleSphereCompatProfile profile,
   DoubleSphereExternalModel &external_model_out
 )
 {
@@ -93,6 +95,30 @@ StatusCode exportDoubleSphereModel(
     external_model_out.D[index] = static_cast<double>(model.distortion.coeffs[index]);
   }
   return StatusCode::OK;
+}
+
+StatusCode importDoubleSphereModel(
+  const DoubleSphereExternalModel &external_model, DoubleSphereCompatProfile profile, CameraModel &model_out)
+{
+  return importDoubleSphereModelImpl(external_model, profile, model_out);
+}
+
+StatusCode exportDoubleSphereModel(
+  const CameraModel &model, DoubleSphereCompatProfile profile, DoubleSphereExternalModel &external_model_out)
+{
+  return exportDoubleSphereModelImpl(model, profile, external_model_out);
+}
+
+StatusCode importDoubleSphereModel64(
+  const DoubleSphereExternalModel &external_model, DoubleSphereCompatProfile profile, CameraModel64 &model_out)
+{
+  return importDoubleSphereModelImpl(external_model, profile, model_out);
+}
+
+StatusCode exportDoubleSphereModel64(
+  const CameraModel64 &model, DoubleSphereCompatProfile profile, DoubleSphereExternalModel &external_model_out)
+{
+  return exportDoubleSphereModelImpl(model, profile, external_model_out);
 }
 
 }  // namespace camxiom

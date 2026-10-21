@@ -46,5 +46,17 @@ CameraModel makeDistortionFree(const CameraModel &model)
   result.distortion.has_tilt = false;
   return result;
 }
+CameraModel64 makeDistortionFree64(const CameraModel64 &model)
+{
+  CameraModel64 result = model;
+  result.distortion.type = DistortionModelType::NONE;
+  result.distortion.space = DistortionSpace::NONE;
+  result.distortion.coeffs.fill(0.0);
+  result.distortion.count = 0U;
+  result.distortion.is_rational = false;
+  result.distortion.has_thin_prism = false;
+  result.distortion.has_tilt = false;
+  return result;
+}
 
 }  // namespace camxiom

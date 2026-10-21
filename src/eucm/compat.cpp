@@ -19,8 +19,9 @@
 namespace camxiom
 {
 
-StatusCode importEucmModel(
-  const EucmExternalModel &external_model, const EucmCompatProfile profile, CameraModel &model_out
+template <typename T>
+StatusCode importEucmModelImpl(
+  const EucmExternalModel &external_model, const EucmCompatProfile profile, CameraModelT<T> &model_out
 )
 {
   if (!isFiniteArray9(external_model.K) || !isFiniteVector(external_model.D) ||
@@ -58,8 +59,9 @@ StatusCode importEucmModel(
   return makeAndValidateProjectionModel(camera_info, ProjectionModelType::EUCM, model_out);
 }
 
-StatusCode exportEucmModel(
-  const CameraModel &model, const EucmCompatProfile profile, EucmExternalModel &external_model_out
+template <typename T>
+StatusCode exportEucmModelImpl(
+  const CameraModelT<T> &model, const EucmCompatProfile profile, EucmExternalModel &external_model_out
 )
 {
   const StatusCode model_status = validateEucmModelForExport(model);
@@ -95,6 +97,30 @@ StatusCode exportEucmModel(
     external_model_out.D[index] = static_cast<double>(model.distortion.coeffs[index]);
   }
   return StatusCode::OK;
+}
+
+StatusCode importEucmModel(
+  const EucmExternalModel &external_model, EucmCompatProfile profile, CameraModel &model_out)
+{
+  return importEucmModelImpl(external_model, profile, model_out);
+}
+
+StatusCode exportEucmModel(
+  const CameraModel &model, EucmCompatProfile profile, EucmExternalModel &external_model_out)
+{
+  return exportEucmModelImpl(model, profile, external_model_out);
+}
+
+StatusCode importEucmModel64(
+  const EucmExternalModel &external_model, EucmCompatProfile profile, CameraModel64 &model_out)
+{
+  return importEucmModelImpl(external_model, profile, model_out);
+}
+
+StatusCode exportEucmModel64(
+  const CameraModel64 &model, EucmCompatProfile profile, EucmExternalModel &external_model_out)
+{
+  return exportEucmModelImpl(model, profile, external_model_out);
 }
 
 }  // namespace camxiom
