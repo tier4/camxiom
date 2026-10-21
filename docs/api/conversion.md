@@ -74,10 +74,13 @@ if (conv.ok() && conv.rms_fit_error_px < 0.5 &&
 }
 ```
 
-### 倍精度のモデル変換
+### Double-precision model conversion
 
-`convertCameraModel64` は入力元・初期値に `CameraModel64` を受け取り、
-`ModelConversionResult64` を返します。入力の光線生成、最適化、結果の誤差評価に
-float モデルを挟みません。終了状態・点数・誤差の意味は上記と共通です。
-反復上限に達した場合の「数値的に一致」の許容RMSは、float版の `1e-3 px` に対し
-倍精度版では `1e-9 px` です。通常のソルバ収束判定は従来どおり適用します。
+`convertCameraModel64` takes `CameraModel64` for the source model and the
+initial guess and returns `ModelConversionResult64`. Ray generation from the
+source, the optimization and the error evaluation of the result never go
+through a float model. Status codes, point counts and errors mean the same as
+above. When the iteration limit is reached, the RMS below which the result
+still counts as numerically exact is `1e-9 px` for the double version,
+against `1e-3 px` for the float version. The usual solver convergence checks
+apply as before.

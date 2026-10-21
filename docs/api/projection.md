@@ -159,27 +159,36 @@ struct ReprojCost {
 Note that these templates apply `u = fx·x + cx` without skew (the
 4-element intrinsics block is `[fx, fy, cx, cy]`).
 
-## テンプレート投影の定義域
+## Domain of the template projections
 
-`projectGeneric` はモデルの `theta_max` を適用します。
-`projectGenericParametric` は末尾の省略可能な `double theta_max` で評価上限を
-指定できます（既定値は π）。観測採用の上限とは別に、利用側が評価上限を選べます。
-PnP の自動微分経路は現在のパラメータから求めた上限を渡し、解析微分経路と同じ
-多項式の単調範囲への縮小を適用します。
+`projectGeneric` applies the model's `theta_max`. `projectGenericParametric`
+takes an optional trailing `double theta_max` that sets the evaluation limit
+(default π), so a caller can pick an evaluation limit separate from the limit
+it uses to accept observations. The PnP automatic-differentiation path passes
+the limit derived from the current parameters and applies the same shrink to
+the polynomial's monotone range as the analytical path.
 
-両ディスパッチとモデル別テンプレートは、非有限の入力・結果および分母の特異点で
-`false` を返し、出力をゼロにします。rational の分母は通常投影と同じく符号の両方を
-許し、絶対値が精度別の閾値以下なら拒否します。正の分母だけを採用する方針や
-画像内判定は利用側の責務です。モデル別テンプレートはモデルの視野宣言を受け取らない
-数式部品なので、視野上限を含む判定には generic API を使ってください。
+Both dispatchers and the per-model templates return `false` and zero their
+outputs on non-finite inputs or results and at singular denominators. As in
+the runtime projection, the rational denominator may take either sign; it is
+rejected when its magnitude is at or below a precision-dependent threshold.
+Accepting only positive denominators, or checking that a pixel lies inside
+the image, is up to the caller. The per-model templates are bare formulas that
+do not receive the model's field-of-view declaration, so use the generic API
+whenever the field-of-view limit must be checked.
 
-PnPの返却モデルでも、入力に指定した `theta_max` を上限として保持します。
-最適化した魚眼係数の単調範囲が狭くなった場合はさらに縮小しますが、
-書き戻しで視野を勝手に広げません。この規則はfloat版・倍精度版に共通です。
-広角モデル（Omni・Double Sphere・EUCM）の `getDefaultSeed` は `theta_max = pi` とし、
-それぞれの投影式の有効範囲を使います。狭い視野が必要なら利用側で上限を指定できます。
+The model returned by PnP keeps the input `theta_max` as its upper limit. If
+the optimized fisheye coefficients have a narrower monotone range, the limit
+shrinks further, but write-back never widens the field of view on its own.
+The rule is the same for the float and double versions. For the wide-angle
+models (omnidirectional, double sphere and EUCM), `getDefaultSeed` sets
+`theta_max = pi` and relies on each projection's own valid range. A caller
+that needs a narrower field of view can set the limit itself.
 
-Omni・Double Sphere・EUCMに平面歪みを組み合わせたテンプレート投影も、
-RATIONAL8・THIN_PRISM12・TILTED14の全係数と極の判定を通常投影と共有します。
-以前の自動微分経路で8係数以降をRADTAN5として扱っていた箇所を修正しました。
-広角モデルで視野上限がpiの場合も、光線ノルムや投影分母の非有限値を拒否します。
+Template projection of the omnidirectional, double sphere and EUCM models
+combined with a plane distortion shares every coefficient and the pole checks
+of RATIONAL8, THIN_PRISM12 and TILTED14 with the runtime projection. The
+automatic-differentiation path used to evaluate these models as RADTAN5,
+ignoring the coefficients past the fifth; that is fixed. With a
+field-of-view limit of pi, the wide-angle models still reject non-finite ray
+norms and projection denominators.

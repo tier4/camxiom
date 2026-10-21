@@ -274,20 +274,24 @@ check finiteness or use the status-bearing overload.
 - [Design / numerical strategy](../design/numerical-strategy.md) — why
   identifiability locks exist, solver internals.
 
-### PnP の倍精度入出力
+### Double-precision PnP input and output
 
-`PnpInitialGuess64` と `PnpResult64` を使う `PnpSolver::solve` は、
-入力モデル、最適化後の書き戻し、返却モデルを `CameraModel64` のまま保持します。
-単一ビュー・複数ビュー、解析ヤコビアン・自動微分・姿勢のみの高速経路に対応します。
-既存の `PnpInitialGuess` / `PnpResult` は float のまま利用できます。
+`PnpSolver::solve` with `PnpInitialGuess64` and `PnpResult64` keeps the input
+model, the write-back after optimization and the returned model as
+`CameraModel64`. It supports single and multiple views and the analytical
+Jacobian, automatic-differentiation and pose-only fast paths. The existing
+`PnpInitialGuess` / `PnpResult` remain float.
 
-### 校正結果を倍精度で保持する
+### Keeping calibration results in double precision
 
-`calib::calibrate64(views, initial_model64, flags, options)` は
-`CalibrationResult64` を返します。初期値、主点制約、PnPへの受け渡し、結果モデル、
-再投影誤差・共分散・可観測性の評価まで float への変換を挟みません。
-`computeReprojErrors64` と `computePerPointResiduals64` でも同じモデルを直接評価できます。
-終了状態・失敗時の空の結果・最良の推定値の返却条件は既存の float API と共通です。
+`calib::calibrate64(views, initial_model64, flags, options)` returns a
+`CalibrationResult64`. Nothing is converted to float on the way: not the
+initial model, the principal-point prior, the hand-off to PnP, the result
+model, or the evaluation of reprojection error, covariance and
+observability. `computeReprojErrors64` and `computePerPointResiduals64`
+evaluate the same model directly. The status codes, the empty result on
+failure and the rules for returning a best-effort estimate are the same as in
+the float API.
 
 ```cpp
 camxiom::CameraModel64 seed = camxiom::makeCameraModel64(camera_info);
@@ -297,7 +301,10 @@ if (fit.status == camxiom::StatusCode::OK) {
 }
 ```
 
-倍精度の保持は数値表現の保証です。実データから得られる精度は観測条件やモデルに依存します。
+Double precision guarantees how the numbers are represented. The accuracy
+reached on real data still depends on the observations and the model.
 
-PnPの返却モデルは入力の視野上限を維持します。魚眼係数の単調範囲が縮小した場合にだけ
-上限も縮小するため、最適化中と最適化後で採用できる光線の範囲が突然広がることはありません。
+The model returned by PnP keeps the input field-of-view limit. The limit
+shrinks only when the monotone range of the fisheye coefficients shrinks, so
+the range of rays that can be accepted never suddenly widens between the
+optimization and its result.

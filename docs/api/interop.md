@@ -120,13 +120,15 @@ For a PnP without OpenCV at all, use
 [`init::estimatePoseRefined`](calibration.md#init-estimators-camxiominit)
 from the calibration layer instead.
 
-### 倍精度のモデル入出力
+### Double-precision model import and export
 
-`CameraInfo` および各互換プロファイルの `double` 値を保持する場合は、
-`makeCameraModel64`、`import*Model64`、`export*Model64`、
-`export*CameraInfo64` を使います。これらは途中で `CameraModel`（float）へ変換せず、
-`CameraModel64` を直接読み書きします。既存の float API は従来どおり利用できます。
+To keep the `double` values of a `CameraInfo` and of each compatibility
+profile, use `makeCameraModel64`, `import*Model64`, `export*Model64` and
+`export*CameraInfo64`. They read and write `CameraModel64` directly, without
+converting to `CameraModel` (float) on the way. The existing float API remains
+available.
 
-係数を直接変更した場合は `updateThetaMax64` で定義域を更新してください。
-`makeDistortionFree64` は内参・投影パラメータの倍精度を維持したまま歪みを取り除きます。
-テンプレート投影 `projectGeneric` も `CameraModel64` を直接受け取れます。
+After changing coefficients directly, refresh the domain with
+`updateThetaMax64`. `makeDistortionFree64` removes the distortion while
+keeping the intrinsics and projection parameters in double precision. The
+template projection `projectGeneric` also accepts `CameraModel64` directly.

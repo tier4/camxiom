@@ -118,10 +118,14 @@ void updateThetaMax(CameraModel &model);
 void updateThetaMax64(CameraModel64 &model);
 ```
 
-係数を直接変更した後は上限を再計算してください。これらの関数は利用側が指定した
-狭い上限も上書きします。非魚眼モデルも既定の角度上限に戻します。
-モデル生成・校正・変換のAPIは、返すモデルの上限を更新済みです。
-利用側の上限を保持したまま現在の係数から定義域を調べる場合は、以下の非破壊APIを使います。
+must be called after distortion coefficients are modified by hand or by an
+optimizer. Both functions also overwrite a narrower limit set by the caller,
+and they reset non-fisheye models to their default angular limit. Model
+factories (`makeCameraModel`, `getDefaultSeed`, `calibrate`,
+`convertCameraModel` and their double-precision counterparts) already leave
+`theta_max` consistent. To inspect the domain of the current coefficients
+while keeping the caller's own limit, use the non-mutating API described
+below.
 
 This consistency is enforced, not advisory: for the polynomial families
 (KB4 / KB8 / OpenCV-fisheye4) `validateCameraModel` certifies that
@@ -133,34 +137,41 @@ the coefficient-free types (`NONE` and the ideal `equidistant` /
 all-zero `coeffs` array — stale non-zero entries are rejected instead of
 being silently ignored by some code paths and applied by others.
 
-### 倍精度の魚眼定義域の取得
+### Fisheye domain in double precision
 
-`<camxiom/model.hpp>` の `getFisheyeDomain64(const CameraModel64&)` は、モデルを
-変更せず `FisheyeDomain64` を返します。入力の `projection.theta_max` は無視します。
-狭い上限、古い係数から求めた上限、NaNの上限でも現在の係数から再計算できます。
-それ以外のモデルの整合性は検査し、対象は `FISHEYE_THETA` です。
+`getFisheyeDomain64(const CameraModel64&)` in `<camxiom/model.hpp>` returns a
+`FisheyeDomain64` without modifying the model. It ignores the input
+`projection.theta_max`, so the domain is recomputed from the current
+coefficients even when the declared limit is narrow, stale or NaN. The rest of
+the model is still checked for consistency. Only `FISHEYE_THETA` models are
+accepted.
 
-| フィールド | 意味 |
+| Field | Meaning |
 |---|---|
-| `status` / `ok()` | 成否。非魚眼・不正なモデルは失敗 |
-| `safe_theta_max` | 評価に使える角度上限の推定値（rad）。`updateThetaMax64` と同じ計算 |
-| `theta_limit` | 幾何学的な端点、または最初に評価条件を満たさなかった走査点（rad） |
+| `status` / `ok()` | Success. Non-fisheye and malformed models fail |
+| `safe_theta_max` | Estimated angular limit usable for evaluation (rad); the same computation as `updateThetaMax64` |
+| `theta_limit` | The geometric endpoint, or the first scan sample that failed the evaluation conditions (rad) |
 | `limit` | `ANGULAR_LIMIT` / `MONOTONICITY_LIMIT` / `NUMERIC_LIMIT` |
 
-多項式魚眼（KB4・KB8・OpenCV fisheye4）は、既存の512分割の走査を共有します。
-1e-3 radから約π−1e-4 radまで調べ、半径が有限かつ非負・傾きが有限かつ正である
-最後の走査点を `safe_theta_max` とします。`theta_limit` は厳密な折り返しの根では
-ありません。走査間隔（約π/512 rad）より狭い折り返しや開始点より前で回復する折り返しは
-検出できない場合があります。全域の単射性を厳密に証明するAPIではありません。
-開始点も検査し、使用できる正の走査点がない場合は失敗します。
+The polynomial fisheye models (KB4, KB8, OpenCV fisheye4) share the existing
+512-step scan. It runs from 1e-3 rad to about π − 1e-4 rad and returns as
+`safe_theta_max` the last sample whose radius is finite and non-negative and
+whose slope is finite and positive. `theta_limit` is not an exact root of the
+fold. A fold narrower than the scan step (about π/512 rad), or one that
+appears and recovers before the starting sample, may go undetected; the API
+does not prove injectivity over the whole range. The starting sample is
+checked too, and the call fails when no usable positive sample exists.
 
-`ANGULAR_LIMIT` はπ（orthographicだけπ/2）を端点とします。
-多項式以外は端点から1e-4 rad内側を安全上限にします。`MONOTONICITY_LIMIT` は
-非正の傾きまたは負の半径、`NUMERIC_LIMIT` は半径や傾きの非有限値を検出した場合です。
-失敗時は角度を両方0、理由を `UNKNOWN` にします。成功後も係数を変えたら再取得してください。
+For `ANGULAR_LIMIT` the endpoint is π (π/2 for orthographic only), and the
+non-polynomial models use a safe limit 1e-4 rad inside it.
+`MONOTONICITY_LIMIT` means a non-positive slope or a negative radius was
+found; `NUMERIC_LIMIT` means a non-finite radius or slope. On failure both
+angles are 0 and the reason is `UNKNOWN`. Query again whenever the
+coefficients change.
 
-観測を採用する上限と最適化中の評価上限は、利用側で別々に保持します。例えば、
-呼出し側で有効性を確認した有限・非負の `margin_rad` を使う場合：
+The caller keeps the limit for accepting observations and the limit for
+evaluation during optimization separately. For example, with a finite,
+non-negative `margin_rad` that the caller has validated:
 
 ```cpp
 const auto domain = camxiom::getFisheyeDomain64(model);
@@ -170,9 +181,11 @@ evaluation_model.projection.theta_max =
   std::min(acceptance_theta_max + margin_rad, domain.safe_theta_max);
 ```
 
-`acceptance_theta_max` も利用側で保持する有限・正の値です。係数の変化で安全上限が
-採用上限を下回った場合、その観測をどう扱うかは呼出し側が決めます。
-このAPIは観測選別、余白の既定値、係数変更後のキャッシュ管理を行いません。
+`acceptance_theta_max` is likewise a finite, positive value held by the
+caller. If a coefficient change pushes the safe limit below the acceptance
+limit, the caller decides what to do with the affected observations. This API
+does not select observations, choose a default margin, or manage caches after
+coefficient changes.
 
 ## Distortion models
 
