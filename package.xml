@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>camxiom</name>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <description>
     Unified camera geometry library: one ray/pixel API across pinhole,
     fisheye, omnidirectional, double-sphere and EUCM models, with a
