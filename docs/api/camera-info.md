@@ -44,8 +44,7 @@ ROS / OpenCV / third-party spellings:
 | `rational8`, `rational_polynomial` | `RATIONAL8` | pinhole |
 | `thin_prism12`, `thin_prism_fisheye` | `THIN_PRISM12` | pinhole |
 | `tilted14`, `tilted` | `TILTED14` | pinhole |
-| `equidistant`, `fisheye`, `opencv_fisheye4` | `OPENCV_FISHEYE4` | fisheye |
-| `kb4`, `kannala_brandt`, `kannala-brandt` | `KB4` | fisheye |
+| `kb4`, `kannala_brandt`, `kannala-brandt`, `equidistant`, `fisheye`, `opencv_fisheye4` | `KB4` | fisheye |
 | `kb8`, `kannala_brandt8`, `kannala-brandt8` | `KB8` | fisheye |
 | `ideal_equidistant` | `EQUIDISTANT` (coefficient-free) | fisheye |
 | `equisolid[_angle]`, `stereographic[_angle]`, `orthographic[_angle]` | trigonometric fisheye variants | fisheye |
@@ -56,9 +55,11 @@ ROS / OpenCV / third-party spellings:
 
 Two pitfalls worth knowing:
 
-- ROS's `equidistant` means the **4-coefficient OpenCV fisheye**, not the
-  ideal equidistant mapping — camxiom follows ROS here and provides
-  `ideal_equidistant` for the coefficient-free model.
+- ROS's `equidistant` means the **4-coefficient fisheye polynomial**
+  (OpenCV's fisheye model, which is the same function as KB4), not the
+  ideal equidistant mapping. camxiom reads it as `KB4`, writes `KB4` back
+  under that name, and provides `ideal_equidistant` for the
+  coefficient-free model.
 - For Mei / DS / EUCM, the projection-level parameters ride in the *front*
   of `d` (see the table). They are unpacked into
   `CameraModel::projection`, not kept as distortion coefficients.
