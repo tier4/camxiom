@@ -46,7 +46,7 @@ camxiom collapses that into one model set handled uniformly everywhere:
 | [Batch projection](api/batch.md) | Bulk ray↔pixel APIs (Eigen and raw-pointer overloads) with SIMD (AVX2 / SSE2 / NEON) and OpenMP acceleration |
 | [Jacobians](api/jacobians.md) | Analytical 2×3 point Jacobians, batch variants, and full parameter Jacobians (intrinsics / distortion / projection parameters) for optimization |
 | [Inverse LUT](api/lut.md) | Precomputed grid + bilinear interpolation for O(1) approximate `pixelToRay` |
-| [Remap & rectification](api/remap.md) | OpenCV-free undistort / rectify pipeline: virtual output-camera generation, `alpha`-blended fitting compatible with OpenCV semantics, remap-map builders, CPU sampling kernel |
+| [Remap & rectification](api/remap.md) | OpenCV-free undistort / rectify pipeline: an output camera of any projection (the latitude-longitude projections included) fitted from a template and one `alpha`, remap-map builders, CPU sampling kernel |
 | [CameraInfo interchange](api/camera-info.md) | ROS-free `camxiom::CameraInfo` POD, `makeCameraModel` string parsing, per-model import/export profiles (OpenCV-Calib3D / Kalibr / Basalt), `camera_calibration_parsers`-layout YAML writer |
 | [Calibration](api/calibration.md) | Default seeds, linear + model-specific init estimators, model-agnostic `PnpSolver` with `FIX_*` staged optimization, single-pass `calibrate()` with covariance and observability diagnostics |
 | [Model conversion](api/conversion.md) | `convertCameraModel`: fit a model of a different family to reproduce a source model's geometry, with honest fit-quality reporting |
