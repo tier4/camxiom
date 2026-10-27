@@ -457,15 +457,7 @@ projectFisheye(
   if (!fisheyeCoordinates<T, CheckTheta>(x_cam, y_cam, z_cam, cap, xy_norm, theta))
     return reject(u_out, v_out);
   T theta_d;
-  if constexpr (Type == DistortionModelType::OPENCV_FISHEYE4)
-  {
-    const T t2 = theta * theta;
-    const T t4 = t2 * t2;
-    const T t6 = t4 * t2;
-    const T t8 = t4 * t4;
-    theta_d = theta * (T(1.0) + dist[0] * t2 + dist[1] * t4 + dist[2] * t6 + dist[3] * t8);
-  }
-  else if constexpr (Type == DistortionModelType::KB4 || Type == DistortionModelType::KB8)
+  if constexpr (Type == DistortionModelType::KB4 || Type == DistortionModelType::KB8)
   {
     const T t2 = theta * theta;
     const T t3 = t2 * theta;
@@ -499,17 +491,6 @@ projectFisheye(
   return finish(u_out, v_out);
 }
 }  // namespace detail
-
-template <typename T>
-[[nodiscard]] bool projectFisheye4(
-  const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out,
-  T &v_out
-)
-{
-  return detail::projectFisheye<DistortionModelType::OPENCV_FISHEYE4, false>(
-    intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
-  );
-}
 
 template <typename T>
 [[nodiscard]] bool projectKB4(
@@ -769,7 +750,6 @@ template <typename T>
         }
         case DistortionModelType::RADTAN5:
           return projectRadtan5(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
-        case DistortionModelType::OPENCV_FISHEYE4:
         case DistortionModelType::KB4:
         case DistortionModelType::KB8:
         case DistortionModelType::EQUIDISTANT:
@@ -791,10 +771,6 @@ template <typename T>
         case DistortionModelType::NONE:
         case DistortionModelType::EQUIDISTANT:
           return detail::projectFisheye<DistortionModelType::EQUIDISTANT, true>(
-            intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
-          );
-        case DistortionModelType::OPENCV_FISHEYE4:
-          return detail::projectFisheye<DistortionModelType::OPENCV_FISHEYE4, true>(
             intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
           );
         case DistortionModelType::KB4:
@@ -876,7 +852,6 @@ bool validParameters(
   switch (dist_type)
   {
     case DistortionModelType::RADTAN4:
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
       required = 4;
       break;
@@ -980,15 +955,15 @@ bool projectModel(
   constexpr bool ideal =
     Type == DistortionModelType::EQUIDISTANT || Type == DistortionModelType::EQUISOLID ||
     Type == DistortionModelType::STEREOGRAPHIC || Type == DistortionModelType::ORTHOGRAPHIC;
-  constexpr bool fish = ideal || Type == DistortionModelType::OPENCV_FISHEYE4 ||
-                        Type == DistortionModelType::KB4 || Type == DistortionModelType::KB8;
+  constexpr bool fish =
+    ideal || Type == DistortionModelType::KB4 || Type == DistortionModelType::KB8;
   constexpr int count =
-    (Type == DistortionModelType::RADTAN4 || Type == DistortionModelType::RADTAN5)       ? 5
-    : (Type == DistortionModelType::OPENCV_FISHEYE4 || Type == DistortionModelType::KB4) ? 4
-    : (Type == DistortionModelType::KB8 || Type == DistortionModelType::RATIONAL8)       ? 8
-    : Type == DistortionModelType::THIN_PRISM12                                          ? 12
-    : Type == DistortionModelType::TILTED14                                              ? 14
-                                                                                         : 0;
+    (Type == DistortionModelType::RADTAN4 || Type == DistortionModelType::RADTAN5) ? 5
+    : Type == DistortionModelType::KB4                                             ? 4
+    : (Type == DistortionModelType::KB8 || Type == DistortionModelType::RATIONAL8) ? 8
+    : Type == DistortionModelType::THIN_PRISM12                                    ? 12
+    : Type == DistortionModelType::TILTED14                                        ? 14
+                                                                                   : 0;
   const int size = model.distortion.count;
   if constexpr (ideal)
   {
@@ -1077,10 +1052,6 @@ projectGeneric(
         );
       case DistortionModelType::TILTED14:
         return detail::projectModel<DistortionModelType::TILTED14>(
-          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
-        );
-      case DistortionModelType::OPENCV_FISHEYE4:
-        return detail::projectModel<DistortionModelType::OPENCV_FISHEYE4>(
           model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
         );
       case DistortionModelType::KB4:

@@ -21,8 +21,7 @@ namespace camxiom
 bool isFisheyeDistortionModel(const std::string &model_name)
 {
   const DistortionModelType model_type = parseDistortionModelType(model_name);
-  return model_type == DistortionModelType::OPENCV_FISHEYE4 ||
-         model_type == DistortionModelType::EQUIDISTANT || model_type == DistortionModelType::KB4 ||
+  return model_type == DistortionModelType::EQUIDISTANT || model_type == DistortionModelType::KB4 ||
          model_type == DistortionModelType::KB8 || model_type == DistortionModelType::EQUISOLID ||
          model_type == DistortionModelType::STEREOGRAPHIC ||
          model_type == DistortionModelType::ORTHOGRAPHIC;
@@ -45,7 +44,7 @@ DistortionModelType parseDistortionModelType(const std::string &model_name)
   // survive a round trip. (The remaining canonical names — radtan4/5, kb4,
   // kb8, equisolid, stereographic, orthographic, omnidirectional — are
   // already covered by the compatibility aliases below.) Note the ROS name
-  // "equidistant" denotes the 4-coefficient OpenCV fisheye model, so the
+  // "equidistant" denotes the 4-coefficient fisheye polynomial (KB4), so the
   // coefficient-free ideal mapping uses the distinct canonical name
   // "ideal_equidistant".
   if (model == "none")
@@ -63,10 +62,6 @@ DistortionModelType parseDistortionModelType(const std::string &model_name)
   if (model == "tilted14")
   {
     return DistortionModelType::TILTED14;
-  }
-  if (model == "opencv_fisheye4")
-  {
-    return DistortionModelType::OPENCV_FISHEYE4;
   }
   if (model == "ideal_equidistant")
   {
@@ -101,11 +96,11 @@ DistortionModelType parseDistortionModelType(const std::string &model_name)
   {
     return DistortionModelType::TILTED14;
   }
-  if (model == "equidistant" || model == "fisheye")
-  {
-    return DistortionModelType::OPENCV_FISHEYE4;
-  }
-  if (model == "kannala_brandt" || model == "kannala-brandt" || model == "kb4")
+  // OpenCV's fisheye model, θd = θ(1 + k1θ² + k2θ⁴ + k3θ⁶ + k4θ⁸), is the
+  // same function with the same coefficient order as KB4, so its names
+  // (ROS "equidistant", OpenCV "fisheye") are read as KB4.
+  if (model == "kannala_brandt" || model == "kannala-brandt" || model == "kb4" ||
+      model == "equidistant" || model == "fisheye" || model == "opencv_fisheye4")
   {
     return DistortionModelType::KB4;
   }
@@ -136,7 +131,6 @@ ProjectionModelType chooseProjectionModelType(const DistortionModelType distorti
 {
   switch (distortion_model_type)
   {
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
     case DistortionModelType::KB8:
     case DistortionModelType::EQUIDISTANT:

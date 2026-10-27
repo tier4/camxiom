@@ -34,8 +34,7 @@ namespace
 inline bool requiresSimdRoundTripVerification(const CameraModel &model)
 {
   return model.projection.type == ProjectionModelType::FISHEYE_THETA &&
-         (model.distortion.type == DistortionModelType::OPENCV_FISHEYE4 ||
-          model.distortion.type == DistortionModelType::KB4 ||
+         (model.distortion.type == DistortionModelType::KB4 ||
           model.distortion.type == DistortionModelType::KB8);
 }
 
@@ -46,7 +45,6 @@ inline bool fisheyeSseForwardSupports(const DistortionModelType type)
 {
   switch (type)
   {
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
     case DistortionModelType::EQUIDISTANT:
       return true;
@@ -495,7 +493,7 @@ int pixelToRayFisheyeSse4(
   }
   else
   {
-    // Polynomial (OPENCV_FISHEYE4 / KB4): Newton iteration
+    // Polynomial (KB4): Newton iteration
     // theta_d = theta*(1 + k1*t^2 + k2*t^4 + k3*t^6 + k4*t^8)
     // Start from theta = r_d as initial guess
     theta = r_d;

@@ -40,7 +40,6 @@ bool supportsFisheyeSseDistortion(const DistortionModelType type)
 {
   switch (type)
   {
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
     case DistortionModelType::EQUIDISTANT:
       return true;
@@ -527,8 +526,7 @@ int pixelToRayBatch(
 #if defined(__aarch64__)
   const bool simd_inverse_profitable =
     !(model.projection.type == ProjectionModelType::FISHEYE_THETA &&
-      (model.distortion.type == DistortionModelType::OPENCV_FISHEYE4 ||
-       model.distortion.type == DistortionModelType::KB4 ||
+      (model.distortion.type == DistortionModelType::KB4 ||
        model.distortion.type == DistortionModelType::KB8));
 #else
   const bool simd_inverse_profitable = true;
@@ -548,8 +546,7 @@ int pixelToRayBatch(
     // kernel is unaffected and stays selected -- it is 1.7x faster than SSE2.
     const bool avx2_inverse_profitable =
       !(model.projection.type == ProjectionModelType::FISHEYE_THETA &&
-        (model.distortion.type == DistortionModelType::OPENCV_FISHEYE4 ||
-         model.distortion.type == DistortionModelType::KB4 ||
+        (model.distortion.type == DistortionModelType::KB4 ||
          model.distortion.type == DistortionModelType::KB8));
     if (detail::cpuHasAvx2() && avx2_inverse_profitable)
     {

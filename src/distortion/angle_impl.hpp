@@ -59,15 +59,6 @@ inline StatusCode distortTheta(const DistortionModelT<T> &model, const T theta, 
     case DistortionModelType::EQUIDISTANT:
       theta_d = theta;
       break;
-    case DistortionModelType::OPENCV_FISHEYE4: {
-      const T t2 = theta * theta;
-      const T t4 = t2 * t2;
-      const T t6 = t4 * t2;
-      const T t8 = t4 * t4;
-      const auto &c = model.coeffs;
-      theta_d = theta * (T(1) + c[0] * t2 + c[1] * t4 + c[2] * t6 + c[3] * t8);
-      break;
-    }
     case DistortionModelType::KB4: {
       const T t2 = theta * theta;
       const T t3 = t2 * theta;
@@ -135,7 +126,6 @@ inline StatusCode distortThetaDerivative(
     case DistortionModelType::EQUIDISTANT:
       derivative_out = T(1);
       break;
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4: {
       const T t2 = theta * theta;
       const T t4 = t2 * t2;

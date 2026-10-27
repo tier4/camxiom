@@ -54,7 +54,6 @@ inline DistortionSpace distortionSpaceFromType(const DistortionModelType type)
     case DistortionModelType::THIN_PRISM12:
     case DistortionModelType::TILTED14:
       return DistortionSpace::PLANE;
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
     case DistortionModelType::KB8:
     case DistortionModelType::EQUIDISTANT:
@@ -136,9 +135,7 @@ bool shrinkThetaMaxToPolynomialMonotoneRange(CameraModelT<T> &model)
   {
     return false;
   }
-  if (model.distortion.type != DistortionModelType::KB4 &&
-      model.distortion.type != DistortionModelType::KB8 &&
-      model.distortion.type != DistortionModelType::OPENCV_FISHEYE4)
+  if (model.distortion.type != DistortionModelType::KB4 && model.distortion.type != DistortionModelType::KB8)
   {
     return false;
   }
@@ -158,7 +155,6 @@ inline float defaultFisheyeThetaMax(const DistortionModel &model)
     case DistortionModelType::ORTHOGRAPHIC:
       // theta->sin(theta) is monotonic only on [0, pi/2].
       return kHalfPi - 1e-4f;
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
     case DistortionModelType::KB8:
       return estimateSafeThetaMaxForPolynomialFisheye(model);

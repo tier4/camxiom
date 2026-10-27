@@ -111,7 +111,7 @@ inline __m128 atan2Sse4HighPrecision(const __m128 y, const __m128 x)
 inline __m128 sqrtSse4(__m128 x) { return _mm_sqrt_ps(x); }
 
 /// Process 4 fisheye forward projections simultaneously using SSE.
-/// Handles: polynomial angle distortion (OPENCV_FISHEYE4 / KB4 / EQUIDISTANT), intrinsics.
+/// Handles: polynomial angle distortion (KB4 / EQUIDISTANT), intrinsics.
 /// Returns bitmask of valid points (0-15).
 inline int rayToPixelFisheyeSse4(
   const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
@@ -157,10 +157,8 @@ inline int rayToPixelFisheyeSse4(
     return 0;
   }
 
-  // Distort theta: theta_d = theta * (1 + k1*t² + k2*t⁴ + k3*t⁶ + k4*t⁸)
-  // This works for both OPENCV_FISHEYE4 and KB4 since derivative formula is shared.
-  // For KB4: theta_d = theta + k1*t³ + k2*t⁵ + k3*t⁷ + k4*t⁹
-  //        = theta * (1 + k1*t² + k2*t⁴ + k3*t⁶ + k4*t⁸)  (same form)
+  // Distort theta (KB4): theta_d = theta + k1*t³ + k2*t⁵ + k3*t⁷ + k4*t⁹,
+  // evaluated in the factored form theta * (1 + k1*t² + k2*t⁴ + k3*t⁶ + k4*t⁸).
   const auto &c = model.distortion.coeffs;
   const __m128 k1 = _mm_set1_ps(c[0]);
   const __m128 k2 = _mm_set1_ps(c[1]);

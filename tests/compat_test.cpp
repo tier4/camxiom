@@ -491,11 +491,19 @@ TEST(CompatCameraInfoExport, FisheyeKb4Canonical)
 
   CameraInfo out;
   ASSERT_EQ(exportFisheyeCameraInfo(model, FisheyeCompatProfile::CANONICAL, out), StatusCode::OK);
-  EXPECT_EQ(out.distortion_model, "kb4");
+  // KB4 is the polynomial ROS calls "equidistant", so it is written under
+  // that name and reads back as the same model.
+  EXPECT_EQ(out.distortion_model, "equidistant");
   expectKNear(out.k, in.k);
   expectDNear(out.d, in.d);
   expectIdentityR(out);
   expectProjectionMatrix(out, 300.0, 300.0, 320.0, 240.0);
+  const CameraModel back = makeCameraModel(out);
+  EXPECT_EQ(back.distortion.type, DistortionModelType::KB4);
+  for (int i = 0; i < 4; ++i)
+  {
+    EXPECT_EQ(back.distortion.coeffs[i], model.distortion.coeffs[i]) << i;
+  }
 }
 
 TEST(CompatCameraInfoExport, OmnidirectionalCanonicalPacksXiFirst)
