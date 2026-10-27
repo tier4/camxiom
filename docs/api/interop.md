@@ -111,10 +111,13 @@ bool solvePnP(const CameraModel &model,
 double reprojectRmse(const CameraModel &model, object_points, image_points, rvec, tvec);
 ```
 
-Works with **all** camxiom models: observed pixels are normalized through
-camxiom's `undistortPoints`, then `cv::solvePnP` runs with an identity
-camera matrix. `reprojectRmse` averages over successfully projected points
-only, and returns infinity when nothing projects.
+Works with every camxiom model except the latitude-longitude projections:
+observed pixels are normalized through camxiom's `undistortPoints`, then
+`cv::solvePnP` runs with an identity camera matrix. A ray of these projections
+and its opposite share the same normalized point, so `undistortPoints` returns
+-1 and `solvePnP` returns false for `EQUIRECTANGULAR` and `CYLINDRICAL`.
+`reprojectRmse` averages over successfully projected points only, and returns
+infinity when nothing projects.
 
 For a PnP without OpenCV at all, use
 [`init::estimatePoseRefined`](calibration.md#init-estimators-camxiominit)

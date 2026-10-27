@@ -10,9 +10,10 @@ ROS 2 / OpenCV interfaces.
 
 - **Every camera model, one API.** The primary API is two functions —
   `rayToPixel()` / `pixelToRay()`. Projection, undistortion, rectification,
-  Jacobians, PnP, and calibration all behave identically across the five
-  projection families; supporting a new camera in your application never
-  means a new code path.
+  Jacobians, PnP, and calibration all behave identically across the camera
+  models (the latitude-longitude projections take part in everything but
+  calibration and pose estimation); supporting a new camera in your application
+  never means a new code path.
 - **A calibrator with the same breadth.** The PnP / intrinsics solver is
   model-agnostic (single templated cost, analytical Jacobians, a Ceres-free
   Gauss–Newton fast path for pose-only solves), with per-parameter `FIX_*`
@@ -44,15 +45,19 @@ correction on top of it; each law takes the corrections listed here.
 | Omnidirectional | ξ + optional radtan | Mei & Rives 2007 |
 | Double sphere | ξ, α + optional radtan | Usenko et al. 2018 |
 | EUCM | α, β + optional radtan | Khomutenko et al. 2015 |
+| Equirectangular / cylindrical | none | — |
 
 All of them share the same `CameraModel` aggregate, the same generic API,
-the same batch / Jacobian / LUT / remap machinery, and the same calibrator.
+and the same batch / Jacobian / LUT / remap machinery. The calibrator
+covers every model except the latitude-longitude projections, which are output
+and remap targets (e.g. unwrapping a fisheye into a 360 × 180 equirectangular
+image), not lenses to calibrate.
 
 ## Features
 
 | | |
 |---|---|
-| **Unified projection** | Generic `rayToPixel` / `pixelToRay` over all five models; float32 (real-time) and float64 (calibration) variants; `ValidatedCameraModel` for validate-once hot loops; Ceres-`Jet`-ready projection templates for AutoDiff cost functors |
+| **Unified projection** | Generic `rayToPixel` / `pixelToRay` over every model; float32 (real-time) and float64 (calibration) variants; `ValidatedCameraModel` for validate-once hot loops; Ceres-`Jet`-ready projection templates for AutoDiff cost functors |
 | **Calibration** *(optional, Ceres)* | Default seeds, linear + per-model init estimators, model-agnostic `PnpSolver` with per-parameter `FIX_*` flags for staged optimization, single-pass `calibrate()` with parameter-covariance and **observability diagnostics** (catches "low RMS but unobservable focal") |
 | **Model conversion** *(optional, Ceres)* | `convertCameraModel` refits across model families (e.g. KB4 → pinhole+radtan5) with honest fit-quality reporting |
 | **Bulk APIs** | Batch projection / Jacobians with SIMD (AVX2 · SSE2 · NEON) + OpenMP; `InverseLut` for O(1) approximate unprojection |

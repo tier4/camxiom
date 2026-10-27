@@ -72,10 +72,22 @@ FovResult computeFov(const CameraModel &model, ImageSize image_size,
                      const SolverOptions &solver_options = {});
 ```
 
-Horizontal / vertical / diagonal FOV in degrees, measured between the
-unprojected rays of boundary pixels — works for any model. A boundary pixel
-that cannot be unprojected reports that single component as `0.0` with
-overall status `OK`.
+Horizontal / vertical / diagonal FOV in degrees.
+
+- Pinhole, fisheye laws, omnidirectional, double sphere, EUCM: the angle
+  between the unprojected rays of two boundary pixels — `(0, cy)`..`(W−1, cy)`,
+  `(cx, 0)`..`(cx, H−1)` and the two opposite corners. A boundary pixel that
+  cannot be unprojected reports that single component as `0.0` with overall
+  status `OK`.
+- `EQUIRECTANGULAR`, `CYLINDRICAL`: angular spans of valid pixels, edge to
+  edge and clipped to the sphere, since the angle between two rays cannot
+  exceed 180°. Horizontal is the longitude span of the principal row (from
+  the left edge of column 0, `u = −0.5`, to the right edge of the last
+  column); vertical is the latitude span of the principal column `u = cx`,
+  top edge to bottom edge. With skew that column's longitude changes from
+  row to row, and rows where it passes the seam are not counted. A
+  whole-sphere equirectangular image reports 360 × 180. `diagonal_fov_deg`
+  is 0: these projections have no diagonal angle.
 
 ## Rectification
 

@@ -24,7 +24,8 @@ PixelResult64 rayToPixel64(const CameraModel64 &model, const Eigen::Vector3d &ra
 - Result: `PixelResult{ StatusCode status; Pixel2 pixel; }` with `.ok()` and
   `explicit operator bool()`. Typical non-OK statuses: `BEHIND_CAMERA`
   (pinhole, `z <= 0`), `OUT_OF_FOV` (past `theta_max` / model domain),
-  `INVALID_MODEL` (validation failed).
+  `DOMAIN_ERROR` (e.g. an equirectangular or cylindrical ray straight up or
+  down, which has no longitude), `INVALID_MODEL` (validation failed).
 
 ## Inverse projection
 
@@ -39,6 +40,11 @@ RayResult64 pixelToRay64(const CameraModel64 &model, const Pixel2d &pixel,
 ```
 
 - Returns `RayResult{ status, ray }`; `ray.direction` is a **unit vector**.
+- The latitude-longitude projections (`EQUIRECTANGULAR`, `CYLINDRICAL`) invert
+  in closed form and return `OUT_OF_FOV` for a pixel past the longitude seam
+  (or, equirectangular, past a pole) instead of wrapping it, and
+  `DOMAIN_ERROR` for the equirectangular pole rows; see
+  [Latitude-longitude projections](../camera-models.md#latitude-longitude-projections).
 - Undistortion is numerical for models without a closed-form inverse; the
   iterative solver is governed by `SolverOptions`:
 
@@ -125,6 +131,11 @@ bool projectGenericParametric(ProjectionModelType proj_type,
                               const T &x_cam, const T &y_cam, const T &z_cam,
                               T &u_out, T &v_out);
 ```
+
+The latitude-longitude projections have no template form (the templates serve
+the calibration cost functions, and latitude-longitude models are not
+calibrated): both dispatchers return `false` for `EQUIRECTANGULAR` and
+`CYLINDRICAL`.
 
 Per-model building blocks are also public (`projectRadtan5`,
 `projectRational8`, `projectThinPrism12`, `projectTilted14`,
