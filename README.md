@@ -33,10 +33,14 @@ Docs: [`docs/`](docs/index.md) (MkDocs / GitHub Pages ready)
 
 ## Supported camera models
 
-| Projection | Distortion | Reference |
+The projection type names the law and the distortion type names the lens
+correction on top of it; each law takes the corrections listed here.
+
+| Projection (law) | Distortion (correction) | Reference |
 |---|---|---|
 | Pinhole | none / radtan4 / radtan5 (plumb_bob) / rational8 / thin-prism12 / tilted14 (Scheimpflug) | OpenCV-compatible coefficients |
-| Fisheye (θ-based) | KB4 (also OpenCV's fisheye model), KB8, ideal equidistant / equisolid / stereographic / orthographic | Kannala & Brandt 2006 |
+| Equidistant fisheye | none / KB4 (also OpenCV's fisheye model) / KB8 | Kannala & Brandt 2006 |
+| Equisolid / stereographic / orthographic fisheye | none | — |
 | Omnidirectional | ξ + optional radtan | Mei & Rives 2007 |
 | Double sphere | ξ, α + optional radtan | Usenko et al. 2018 |
 | EUCM | α, β + optional radtan | Khomutenko et al. 2015 |

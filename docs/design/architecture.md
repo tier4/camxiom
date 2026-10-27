@@ -58,6 +58,10 @@ Two boundary decisions worth spelling out:
   use a single `switch` per call (hoisted out of loops in batch), never
   virtual dispatch, never per-point heap allocation. Derived state (tilt
   matrices, distortion flags, `theta_max`) is precomputed at model build.
+  Each slot means one thing: the projection names the law (pinhole, a
+  fisheye law, Mei, double sphere, EUCM) and the distortion only the lens
+  correction on top of it, so dropping the correction never changes the law
+  (see [Camera models](../camera-models.md#projection-law-and-lens-correction)).
 - **Forward-only model authoring.** A new model implements forward
   projection (+ Jacobians); the inverse comes from shared numerical solvers
   (see [Numerical strategy](numerical-strategy.md)).

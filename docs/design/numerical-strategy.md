@@ -15,7 +15,8 @@ shared solvers:
   their model-specific back-projection.
 - **Angle solver** — 1D hybrid of bisection and Newton (~5–15 iterations)
   solving `θ_d(θ) = r/f` over the monotonic range `[0, theta_max]` for the
-  fisheye family.
+  fisheye laws, where `θ_d` is the law's radial function with its KB
+  correction, if any, applied.
 
 This is why adding a model is cheap and why inverse behaviour is uniform:
 convergence policy, tolerances, and failure reporting (`NON_CONVERGED`)
@@ -37,7 +38,7 @@ Everything that mutates coefficients refreshes it (`updateThetaMax` after
 manual edits; factories and `calibrate`/`convertCameraModel` handle it
 internally). Domain checks reject rather than clamp: the Mei injectivity
 limit, the double-sphere bijectivity condition (Usenko 2018 eq. 43–45), the
-EUCM validity condition, and the orthographic model's non-injective rear
+EUCM validity condition, and the orthographic law's non-injective rear
 hemisphere all return non-OK statuses instead of folding rays onto wrong
 pixels.
 
@@ -113,7 +114,7 @@ only comparable relatively.
 
 ## SIMD strategy (why float and double differ)
 
-Float is the throughput API: all five models have vectorized batch kernels
+Float is the throughput API: every model family has vectorized batch kernels
 (8-wide AVX2 / 4-wide SSE2, run on aarch64 through a minimal NEON
 compatibility layer). Double is the accuracy API: only the undistorted
 pinhole fast path is vectorized; the rest is scalar under OpenMP. The

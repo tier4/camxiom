@@ -60,15 +60,46 @@ stack-allocatable (~200 bytes), no virtual functions, no heap. A camera model
 is the *composition* of three orthogonal parts:
 
 - **`IntrinsicsModel`** — the affine pixel mapping (`fx`, `fy`, `cx`, `cy`, `skew`).
-- **`ProjectionModel`** — the projection family and its *projection-level*
+- **`ProjectionModel`** — the projection law and its *projection-level*
   parameters: `type`, `theta_max` (maximum accepted ray-to-axis angle,
   default π/2), `xi` (omnidirectional / double-sphere), `alpha`
   (double-sphere / EUCM), `beta` (EUCM).
-- **`DistortionModel`** — the distortion model applied in between: `type`,
-  `coeffs[14]` (OpenCV-compatible layout,
-  `count` says how many leading entries are meaningful), precomputed tilt
-  matrices for TILTED14, and derived flags (`is_rational`, `has_thin_prism`,
-  `has_tilt`).
+- **`DistortionModel`** — the lens correction applied on top of the law:
+  `type`, `coeffs[14]` (OpenCV-compatible layout, `count` says how many
+  leading entries are meaningful), precomputed tilt matrices for TILTED14,
+  and derived flags (`is_rational`, `has_thin_prism`, `has_tilt`).
+
+### Projection law and lens correction
+
+camxiom keeps two questions apart:
+
+- **the law** — how a ray direction maps to the normalized image plane for
+  an ideal lens of that kind (pinhole, one of the fisheye laws, or a
+  sphere-based model). It always lives in the projection slot
+  (`ProjectionModelType`), together with its parameters.
+- **the correction** — how a real lens deviates from its law. It always
+  lives in the distortion slot (`DistortionModelType`). `NONE` means the
+  camera follows its law exactly.
+
+Each law takes the corrections that are defined for it:
+
+| Projection law | Allowed distortion |
+|---|---|
+| `PINHOLE`, `OMNIDIRECTIONAL`, `DOUBLE_SPHERE`, `EUCM` | `NONE`, `RADTAN4`, `RADTAN5`, `RATIONAL8`, `THIN_PRISM12`, `TILTED14` (plane corrections) |
+| `EQUIDISTANT` | `NONE`, `KB4`, `KB8` (angle corrections) |
+| `EQUISOLID`, `STEREOGRAPHIC`, `ORTHOGRAPHIC` | `NONE` |
+
+`validateCameraModel` rejects every other pair. The Kannala–Brandt
+polynomials are corrections of the equidistant law: with all coefficients
+zero, KB4 maps exactly like plain `EQUIDISTANT`. A zero KB4 is still kept
+as KB4 (it is a correction whose coefficients can be fitted), never folded
+into `NONE`.
+
+Because the law never sits in the distortion slot, removing the correction
+keeps the law: `makeDistortionFree` returns the same projection (type,
+`theta_max`, `xi`, `alpha`, `beta`) with distortion `NONE` — a
+stereographic model stays stereographic, and `EQUIDISTANT` + `KB4` becomes
+plain `EQUIDISTANT`.
 
 ### Float and double variants
 
@@ -85,13 +116,22 @@ Member names are identical across precisions. Conversion helpers:
 
 ## Projection models
 
-`ProjectionModelType`: `PINHOLE`, `FISHEYE_THETA`, `OMNIDIRECTIONAL`,
-`DOUBLE_SPHERE`, `EUCM` (+ `UNKNOWN`).
+`ProjectionModelType`: `PINHOLE`, `EQUIDISTANT`, `EQUISOLID`,
+`STEREOGRAPHIC`, `ORTHOGRAPHIC`, `OMNIDIRECTIONAL`, `DOUBLE_SPHERE`, `EUCM`
+(+ `UNKNOWN`). `isFisheyeProjection(type)` is true for the four fisheye
+laws.
+
+The fisheye laws map the angle `θ = atan2(√(X²+Y²), Z)` between the ray and
+the optical axis to an image radius `r`, and place the point at
+`(x, y) = r · (X, Y) / √(X²+Y²)`.
 
 | Model | Projection-level params | Forward projection (before distortion & intrinsics) | Reference |
 |---|---|---|---|
 | `PINHOLE` | — | `(x, y) = (X/Z, Y/Z)` | — |
-| `FISHEYE_THETA` | `theta_max` | `θ = atan2(√(X²+Y²), Z)`; radius `r = f·θ_d(θ)` per the angle-distortion model | Kannala & Brandt, PAMI 2006 |
+| `EQUIDISTANT` | `theta_max` | `r = θ` (with KB4 / KB8: `r = θ_d(θ)`, see below) | Kannala & Brandt, PAMI 2006 |
+| `EQUISOLID` | `theta_max` | `r = 2·sin(θ/2)` | — |
+| `STEREOGRAPHIC` | `theta_max` | `r = 2·tan(θ/2)` | — |
+| `ORTHOGRAPHIC` | `theta_max` (≤ π/2) | `r = sin(θ)` (rear hemisphere rejected — non-injective past π/2) | — |
 | `OMNIDIRECTIONAL` (Mei) | `xi` | `(x, y) = (X, Y) / (Z + ξ·‖P‖)` | Mei & Rives, ICRA 2007 |
 | `DOUBLE_SPHERE` | `xi`, `alpha` | `d₁=‖P‖`, `d₂=√(X²+Y²+(ξd₁+Z)²)`, `(x, y) = (X, Y) / (α·d₂ + (1−α)(ξd₁+Z))` | Usenko et al., 3DV 2018 |
 | `EUCM` | `alpha`, `beta` | `d=√(β(X²+Y²)+Z²)`, `(x, y) = (X, Y) / (α·d + (1−α)Z)` | Khomutenko et al., RA-L 2015 |
@@ -132,10 +172,9 @@ This consistency is enforced, not advisory: for the polynomial families
 `theta_max` sits inside the polynomial's positive monotone range, and even
 the per-point query APIs reject a cap whose endpoint slope is negative
 (the common hand-set-cap-past-the-fold case) as `INVALID_MODEL`. Likewise,
-the coefficient-free types (`NONE` and the ideal `equidistant` /
-`equisolid` / `stereographic` / `orthographic` mappings) must carry an
-all-zero `coeffs` array — stale non-zero entries are rejected instead of
-being silently ignored by some code paths and applied by others.
+`NONE` carries no coefficients on any law: `count` is 0 and the `coeffs`
+array is all zero — stale non-zero entries are rejected instead of being
+silently ignored by some code paths and applied by others.
 
 ### Fisheye domain in double precision
 
@@ -143,8 +182,8 @@ being silently ignored by some code paths and applied by others.
 `FisheyeDomain64` without modifying the model. It ignores the input
 `projection.theta_max`, so the domain is recomputed from the current
 coefficients even when the declared limit is narrow, stale or NaN. The rest of
-the model is still checked for consistency. Only `FISHEYE_THETA` models are
-accepted.
+the model is still checked for consistency. Only fisheye-law models
+(`isFisheyeProjection`) are accepted.
 
 | Field | Meaning |
 |---|---|
@@ -162,8 +201,8 @@ appears and recovers before the starting sample, may go undetected; the API
 does not prove injectivity over the whole range. The starting sample is
 checked too, and the call fails when no usable positive sample exists.
 
-For `ANGULAR_LIMIT` the endpoint is π (π/2 for orthographic only), and the
-non-polynomial models use a safe limit 1e-4 rad inside it.
+For `ANGULAR_LIMIT` the endpoint is π (π/2 for the orthographic law only),
+and the laws without a KB correction use a safe limit 1e-4 rad inside it.
 `MONOTONICITY_LIMIT` means a non-positive slope or a negative radius was
 found; `NUMERIC_LIMIT` means a non-finite radius or slope. On failure both
 angles are 0 and the reason is `UNKNOWN`. Query again whenever the
@@ -189,15 +228,19 @@ coefficient changes.
 
 ## Distortion models
 
-`DistortionSpace` divides distortion models into two families. It is not a
-field of `DistortionModel`: `distortionSpaceOf(type)` derives it from the
-distortion type, so a model cannot hold a type and a space that disagree.
-`validateCameraModel` rejects mismatched combinations (e.g. a pinhole
-projection with an angle-space distortion) instead of producing garbage:
+Distortion types are lens corrections only (see
+[Projection law and lens correction](#projection-law-and-lens-correction)).
+`DistortionSpace` divides them into two families. It is not a field of
+`DistortionModel`: `distortionSpaceOf(type)` derives it from the distortion
+type, so a model cannot hold a type and a space that disagree.
+`validateCameraModel` rejects corrections a law does not take (e.g. a
+pinhole projection with an angle-space correction) instead of producing
+garbage:
 
-- **`PLANE`** — distortion applied to normalized image-plane coordinates
-  (pinhole family; also the optional add-on distortion of Mei / DS / EUCM).
-- **`ANGLE`** — distortion applied to the incidence angle θ (fisheye family).
+- **`PLANE`** — corrections applied to normalized image-plane coordinates
+  (pinhole; also the optional add-on correction of Mei / DS / EUCM).
+- **`ANGLE`** — corrections applied to the incidence angle θ of the
+  equidistant law.
 
 ### PLANE space
 
@@ -218,17 +261,16 @@ Coefficient array layout (OpenCV-compatible, full TILTED14 ordering):
 
 ### ANGLE space
 
-Distortion acts on the incidence angle: the projected radius is
-`r = f · θ_d(θ)`.
+The correction acts on the incidence angle of the equidistant law: the
+projected radius is `r = θ_d(θ)` instead of `r = θ`.
 
 | `DistortionModelType` | Coeffs | `θ_d(θ)` |
 |---|---|---|
 | `KB4` | `[k1..k4]` | `θ + k1θ³ + k2θ⁵ + k3θ⁷ + k4θ⁹` (Kannala–Brandt; the same function and coefficient order as OpenCV's fisheye model `θ·(1 + k1θ² + k2θ⁴ + k3θ⁶ + k4θ⁸)`) |
 | `KB8` | `[k1..k8]` | `θ + k1θ³ + ... + k8θ¹⁷` |
-| `EQUIDISTANT` | — | `θ` (ideal, coefficient-free) |
-| `EQUISOLID` | — | `2·sin(θ/2)` |
-| `STEREOGRAPHIC` | — | `2·tan(θ/2)` |
-| `ORTHOGRAPHIC` | — | `sin(θ)` (rear hemisphere rejected — non-injective past π/2) |
+
+The other fisheye laws (equisolid, stereographic, orthographic) take no
+correction.
 
 ### Projection-level parameters are *not* distortion coefficients
 
@@ -246,9 +288,9 @@ Interchange formats that pack them into a `D` vector (e.g. a
 [[nodiscard]] StatusCode validateCameraModel64(const CameraModel64 &model);
 ```
 
-Checks internal consistency (finite parameters, valid type/space
-combinations, parameter ranges such as DS `ξ ∈ (−1, 1)`, `theta_max`
-consistency). Both precisions are single-sourced from one validator template,
+Checks internal consistency: finite parameters, a correction the law takes
+(the combination table above), parameter ranges such as DS `ξ ∈ (−1, 1)`,
+and `theta_max` consistency. Both precisions are single-sourced from one validator template,
 so a model accepted in float is accepted after widening to double — see
 [Numerical strategy](design/numerical-strategy.md) for why this is enforced
 structurally.
@@ -261,10 +303,10 @@ loops, validate once via `ValidatedCameraModel::tryMake()` — see
 
 | Function / header | Purpose |
 |---|---|
-| `parseDistortionModelType(name)` / `toString(...)` | string ↔ enum for distortion models (round-trips through the canonical spellings) |
-| `chooseProjectionModelType(dist_type)` | the natural projection family for a distortion type |
-| `isFisheyeDistortionModel(name)`, `isRationalDistortionModel(name)` | string predicates |
-| `makeDistortionFree(model)` | copy with distortion removed (coeffs zeroed, type `NONE`) |
+| `parseProjectionModelType(name)`, `parseDistortionModelType(name)` / `toString(...)` | string ↔ enum for both slots (round-trip through the canonical spellings; `parseDistortionModelType` also reads the interchange aliases of the corrections, e.g. `plumb_bob`, ROS `equidistant` = KB4) |
+| `isFisheyeProjection(type)`, `distortionSpaceOf(type)` | which laws are fisheye laws; which space a correction acts in |
+| `isFisheyeDistortionModel(name)`, `isRationalDistortionModel(name)` | string predicates on interchange names |
+| `makeDistortionFree(model)` | copy with the correction removed (distortion `NONE`, coeffs zeroed); the projection law is kept |
 | `model_compare.hpp` | `operator==` (exact, cache-invalidation) and `isApprox` (tolerance-based on the semantic parameters, for regression comparison across solver/platform noise) |
 | `toCameraModel64` / `fromCameraModel64` | precision conversion |
 | `version.hpp` | `CAMXIOM_VERSION_{MAJOR,MINOR,PATCH,STRING,CODE}` + `CAMXIOM_MAKE_VERSION(m, n, p)` for numeric comparison |

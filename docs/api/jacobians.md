@@ -9,8 +9,9 @@ uncertainty propagation. Two tiers are provided:
    intrinsics, distortion coefficients, and projection-level parameters —
    for camera calibration and bundle adjustment.
 
-Supported for all five projection models (PINHOLE, FISHEYE_THETA,
-OMNIDIRECTIONAL, DOUBLE_SPHERE, EUCM).
+Supported for every projection law (PINHOLE, the fisheye laws EQUIDISTANT /
+EQUISOLID / STEREOGRAPHIC / ORTHOGRAPHIC, OMNIDIRECTIONAL, DOUBLE_SPHERE,
+EUCM) with any correction the law takes.
 
 Headers: `<camxiom/jacobian.hpp>`, `<camxiom/jacobian64.hpp>`,
 `<camxiom/jacobian_batch.hpp>`, `<camxiom/jacobian_batch64.hpp>`,
