@@ -271,6 +271,49 @@ TEST(BatchParity, NearAxisRaysMatchScalarInEveryLane)
   }
 }
 
+// Finite rays whose squared norm overflows float are invalid input on the
+// scalar path; every SIMD lane must reject them the same way.
+TEST(BatchParity, OverflowingRayNormIsRejectedInEveryLane)
+{
+  CameraModel equidistant = makeBase(ProjectionModelType::EQUIDISTANT, 1000.0f);
+  equidistant.intrinsics.cx = 0.0f;
+  equidistant.intrinsics.cy = 0.0f;
+  equidistant.projection.theta_max = 2.0f;
+  CameraModel kb4 = equidistant;
+  kb4.distortion.type = DistortionModelType::KB4;
+  kb4.distortion.count = 4U;
+  kb4.distortion.coeffs[0] = 0.02f;
+  kb4.distortion.coeffs[1] = -0.005f;
+  updateThetaMax(kb4);
+
+  const std::vector<Eigen::Vector3f> huge{{1e20f, 0.0f, 1e20f}, {0.0f, 3e19f, 1.0f}};
+  constexpr int kLanes = 13;  // one AVX2 group, one SSE group, one scalar lane
+
+  for (const NamedModel &nm : {NamedModel{"equidistant", equidistant}, NamedModel{"kb4", kb4}})
+  {
+    ASSERT_EQ(validateCameraModel(nm.model), StatusCode::OK) << nm.name;
+    for (const Eigen::Vector3f &ray : huge)
+    {
+      ASSERT_EQ(rayToPixel(nm.model, ray).status, StatusCode::INVALID_INPUT) << nm.name;
+      float rays_xyz[3 * kLanes];
+      for (int i = 0; i < kLanes; ++i)
+      {
+        rays_xyz[3 * i + 0] = ray.x();
+        rays_xyz[3 * i + 1] = ray.y();
+        rays_xyz[3 * i + 2] = ray.z();
+      }
+      float u_out[kLanes];
+      float v_out[kLanes];
+      StatusCode statuses[kLanes];
+      EXPECT_EQ(rayToPixelBatch(nm.model, rays_xyz, kLanes, u_out, v_out, statuses), 0) << nm.name;
+      for (int i = 0; i < kLanes; ++i)
+      {
+        EXPECT_EQ(statuses[i], StatusCode::INVALID_INPUT) << nm.name << " lane " << i;
+      }
+    }
+  }
+}
+
 TEST(BatchParity, PixelToRayBatchMatchesScalar)
 {
   const auto pixels = makeTestPixels();
