@@ -1109,6 +1109,17 @@ bool sampleMapBilinear(
 // were fully asserted.
 // ---------------------------------------------------------------------------
 
+// Rectify to a square-pixel pinhole of the source size with the given alpha.
+RectifyRemapResult rectifyWithAlpha(
+  const CameraModel &src, const ImageSize size, const float alpha, float *map_x, float *map_y
+)
+{
+  RectifiedOutputModelOptions options;
+  options.output_size = size;
+  options.alpha = alpha;
+  return buildRectifyRemapMap(src, size, options, map_x, map_y);
+}
+
 void checkRoundTripAlpha0(
   const CameraModel &calibrated, const float *map_x, const float *map_y,
   const CameraModel &output_model, const std::string &model_name, double &max_err_out,
@@ -1205,11 +1216,9 @@ TEST(Ms2Integration, RectifyRoundTripPinholeAlpha0)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK)
-    << "buildRectifyMap alpha=0 failed for Pinhole";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "rectify alpha=0 failed for Pinhole";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "Pinhole rectified output_model is invalid";
 
@@ -1235,10 +1244,9 @@ TEST(Ms2Integration, RectifyRoundTripKB4Alpha0)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "buildRectifyMap alpha=0 failed for KB4";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "rectify alpha=0 failed for KB4";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "KB4 rectified output_model is invalid";
 
@@ -1262,10 +1270,9 @@ TEST(Ms2Integration, RectifyRoundTripMEIAlpha0)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "buildRectifyMap alpha=0 failed for MEI";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "rectify alpha=0 failed for MEI";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "MEI rectified output_model is invalid";
 
@@ -1289,10 +1296,9 @@ TEST(Ms2Integration, RectifyRoundTripDSAlpha0)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "buildRectifyMap alpha=0 failed for DS";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "rectify alpha=0 failed for DS";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "DS rectified output_model is invalid";
 
@@ -1316,10 +1322,9 @@ TEST(Ms2Integration, RectifyRoundTripEUCMAlpha0)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "buildRectifyMap alpha=0 failed for EUCM";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "rectify alpha=0 failed for EUCM";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "EUCM rectified output_model is invalid";
 
@@ -1336,7 +1341,7 @@ TEST(Ms2Integration, RectifyRoundTripEUCMAlpha0)
 // ===========================================================================
 // Group 2: RectifyAlpha1Smoke — 5 models
 //
-// Verify that buildRectifyMap with alpha=1 succeeds and returns finite
+// Verify that rectifying with alpha=1 succeeds and returns finite
 // positive FOV values.  No round-trip assertion here; alpha=1 may clamp
 // for wide fisheye per design (D36).
 // ===========================================================================
@@ -1350,10 +1355,9 @@ TEST(Ms2Integration, RectifyAlpha1SmokePinhole)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 1.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 1.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "Pinhole alpha=1 buildRectifyMap failed";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "Pinhole alpha=1 rectify failed";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "Pinhole alpha=1 output_model is invalid";
 
@@ -1376,10 +1380,9 @@ TEST(Ms2Integration, RectifyAlpha1SmokeKB4)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 1.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 1.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "KB4 alpha=1 buildRectifyMap failed";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "KB4 alpha=1 rectify failed";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "KB4 alpha=1 output_model is invalid";
 
@@ -1398,10 +1401,9 @@ TEST(Ms2Integration, RectifyAlpha1SmokeMEI)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 1.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 1.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "MEI alpha=1 buildRectifyMap failed";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "MEI alpha=1 rectify failed";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "MEI alpha=1 output_model is invalid";
 
@@ -1420,10 +1422,9 @@ TEST(Ms2Integration, RectifyAlpha1SmokeDS)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 1.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 1.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "DS alpha=1 buildRectifyMap failed";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "DS alpha=1 rectify failed";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "DS alpha=1 output_model is invalid";
 
@@ -1442,10 +1443,9 @@ TEST(Ms2Integration, RectifyAlpha1SmokeEUCM)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 1.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 1.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "EUCM alpha=1 buildRectifyMap failed";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "EUCM alpha=1 rectify failed";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "EUCM alpha=1 output_model is invalid";
 
@@ -1528,8 +1528,8 @@ TEST(Ms2Integration, RemapImageSmokePinhole)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult rmap =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult rmap =
+    rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
   ASSERT_EQ(rmap.remap_result.status, StatusCode::OK);
 
   const std::vector<std::uint8_t> src = makeDeterministicSrc(640, 480);
@@ -1583,8 +1583,8 @@ TEST(Ms2Integration, RemapImageSmokeKB4)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult rmap =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult rmap =
+    rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
   ASSERT_EQ(rmap.remap_result.status, StatusCode::OK);
 
   const std::vector<std::uint8_t> src = makeDeterministicSrc(640, 480);
@@ -1629,8 +1629,8 @@ TEST(Ms2Integration, RemapImageSmokeMEI)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult rmap =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult rmap =
+    rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
   ASSERT_EQ(rmap.remap_result.status, StatusCode::OK);
 
   const std::vector<std::uint8_t> src = makeDeterministicSrc(640, 480);
@@ -1675,8 +1675,8 @@ TEST(Ms2Integration, RemapImageSmokeDS)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult rmap =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult rmap =
+    rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
   ASSERT_EQ(rmap.remap_result.status, StatusCode::OK);
 
   const std::vector<std::uint8_t> src = makeDeterministicSrc(640, 480);
@@ -1721,8 +1721,8 @@ TEST(Ms2Integration, RemapImageSmokeEUCM)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult rmap =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult rmap =
+    rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
   ASSERT_EQ(rmap.remap_result.status, StatusCode::OK);
 
   const std::vector<std::uint8_t> src = makeDeterministicSrc(640, 480);

@@ -747,10 +747,7 @@ TEST(ProjectionSmoke, ToStringCoversNewEnums)
 {
   EXPECT_STREQ(camxiom::toString(camxiom::DistortionSpace::PLANE), "plane");
   EXPECT_STREQ(camxiom::toString(camxiom::DistortionSpace::ANGLE), "angle");
-  EXPECT_STREQ(camxiom::toString(camxiom::RectifiedProjectionType::CYLINDRICAL), "cylindrical");
-  EXPECT_STREQ(
-    camxiom::toString(camxiom::RectifyFitPolicy::ALL_SOURCE_CONTAINED), "all_source_contained"
-  );
+  EXPECT_STREQ(camxiom::toString(camxiom::ProjectionModelType::CYLINDRICAL), "cylindrical");
   EXPECT_STREQ(
     camxiom::toString(camxiom::InvalidPixelPolicy::WRITE_NEGATIVE_ONE), "write_negative_one"
   );
