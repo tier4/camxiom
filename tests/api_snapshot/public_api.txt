@@ -717,6 +717,7 @@ camxiom | const char *toString(ProjectionModelType model_type)
 camxiom | const char *toString(StatusCode status_code)
 camxiom | constexpr DistortionSpace distortionSpaceOf(const DistortionModelType type) noexcept
 camxiom | constexpr bool isFisheyeProjection(const ProjectionModelType type) noexcept
+camxiom | constexpr bool isLatLongProjection(const ProjectionModelType type) noexcept
 camxiom | enum class DistortionModelType : std::uint8_t
 camxiom | enum class DistortionSpace : std::uint8_t
 camxiom | enum class ProjectionModelType : std::uint8_t
@@ -781,7 +782,9 @@ camxiom::ProjectionModelType | #004 ORTHOGRAPHIC
 camxiom::ProjectionModelType | #005 OMNIDIRECTIONAL
 camxiom::ProjectionModelType | #006 DOUBLE_SPHERE
 camxiom::ProjectionModelType | #007 EUCM
-camxiom::ProjectionModelType | #008 UNKNOWN
+camxiom::ProjectionModelType | #008 EQUIRECTANGULAR
+camxiom::ProjectionModelType | #009 CYLINDRICAL
+camxiom::ProjectionModelType | #010 UNKNOWN
 camxiom::Ray3T | Eigen::Matrix<T, 3, 1> direction
 camxiom::Ray3T | Eigen::Matrix<T, 3, 1> origin
 camxiom::SolverOptions | bool skip_verify

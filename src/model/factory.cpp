@@ -73,7 +73,8 @@ void updateThetaMax(CameraModel &model)
 {
   if (model.projection.type == ProjectionModelType::OMNIDIRECTIONAL ||
       model.projection.type == ProjectionModelType::DOUBLE_SPHERE ||
-      model.projection.type == ProjectionModelType::EUCM)
+      model.projection.type == ProjectionModelType::EUCM ||
+      isLatLongProjection(model.projection.type))
   {
     model.projection.theta_max = detail::kPi;
   }
@@ -91,7 +92,8 @@ void updateThetaMax64(CameraModel64 &model)
 {
   using P = ProjectionModelType;
   if (model.projection.type == P::OMNIDIRECTIONAL ||
-      model.projection.type == P::DOUBLE_SPHERE || model.projection.type == P::EUCM)
+      model.projection.type == P::DOUBLE_SPHERE || model.projection.type == P::EUCM ||
+      isLatLongProjection(model.projection.type))
     model.projection.theta_max = constants::kPi;
   else if (isFisheyeProjection(model.projection.type))
   {

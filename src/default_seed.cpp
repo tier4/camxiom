@@ -137,6 +137,9 @@ CameraModel getDefaultSeed(ProjectionModelType model_type, int image_width, int 
       break;
     }
 
+    // Lat-long models are not calibrated, so there is no seed for them.
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
     case ProjectionModelType::UNKNOWN: {
       // Unrecognised model: detectable sentinel (projection.type == UNKNOWN).
       return CameraModel{};

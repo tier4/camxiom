@@ -754,6 +754,10 @@ FullProjectionJacobian64 rayToPixelWithFullJacobian64Unchecked(
       return double_sphere::fullJ64(model, ray);
     case ProjectionModelType::EUCM:
       return eucm::fullJ64(model, ray);
+    // The parameter Jacobian serves calibration, which does not estimate
+    // lat-long models.
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
     case ProjectionModelType::UNKNOWN:
       break;
   }

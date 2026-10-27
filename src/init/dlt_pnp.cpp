@@ -530,8 +530,14 @@ StatusCode estimatePoseDLT(
 )
 {
   // ------------------------------------------------------------------
-  // 1. Input validation (no out-param mutation on failure).
+  // 1. Input validation (no out-param mutation on failure). Pose estimation
+  //    belongs to the calibration layer, which does not take the lat-long
+  //    projections.
   // ------------------------------------------------------------------
+  if (isLatLongProjection(model.projection.type))
+  {
+    return StatusCode::INVALID_MODEL;
+  }
   const Eigen::Index n = world_pts.cols();
   if (n < kMinPoints || image_pts.cols() != n)
   {

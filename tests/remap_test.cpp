@@ -969,6 +969,47 @@ TEST(Rectify, InvalidInputRejection)
   }
 }
 
+// The rectify fits sample only the source boundary, which cannot bound a
+// lat-long source (its representable region has edges inside the image), so
+// every rectify entry point refuses one instead of returning a wrong fit.
+TEST(Rectify, LatLongSourceIsRefused)
+{
+  const ImageSize src_size{2048, 1024};
+  const ImageSize out_size{320, 640};
+  CameraModel equirect;
+  equirect.intrinsics.fx = static_cast<float>(src_size.width) / (2.0f * camxiom::constants::kPiF);
+  equirect.intrinsics.fy = static_cast<float>(src_size.height) / camxiom::constants::kPiF;
+  equirect.intrinsics.cx = 0.5f * static_cast<float>(src_size.width - 1);
+  equirect.intrinsics.cy = 0.5f * static_cast<float>(src_size.height - 1);
+  equirect.projection.type = ProjectionModelType::EQUIRECTANGULAR;
+  equirect.projection.theta_max = camxiom::constants::kPiF;
+  CameraModel cylindrical = equirect;
+  cylindrical.projection.type = ProjectionModelType::CYLINDRICAL;
+  cylindrical.intrinsics.fy = 300.0f;
+  ASSERT_EQ(validateCameraModel(equirect), StatusCode::OK);
+  ASSERT_EQ(validateCameraModel(cylindrical), StatusCode::OK);
+  std::vector<float> mx, my;
+  allocMaps(out_size.width, out_size.height, mx, my);
+
+  for (const CameraModel &src : {equirect, cylindrical})
+  {
+    RectifiedOutputModelOptions opts;
+    opts.output_size = out_size;
+    opts.fit_policy = RectifyFitPolicy::ALL_SOURCE_CONTAINED;
+    opts.src_from_output_rotation = Eigen::Vector3f(-1.0f, 1.0f, -1.0f).asDiagonal();
+    EXPECT_EQ(makeRectifiedOutputModel(src, src_size, opts).status, StatusCode::INVALID_MODEL)
+      << toString(src.projection.type);
+    EXPECT_EQ(
+      buildRectifyRemapMap(src, src_size, opts, mx.data(), my.data()).remap_result.status,
+      StatusCode::INVALID_MODEL
+    ) << toString(src.projection.type);
+    EXPECT_EQ(
+      buildRectifyMap(src, src_size, out_size, 1.0f, mx.data(), my.data()).remap_result.status,
+      StatusCode::INVALID_MODEL
+    ) << toString(src.projection.type);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Test 11b: PinholeRadTanFoldOverInscribed
 //

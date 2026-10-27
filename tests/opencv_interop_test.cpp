@@ -606,6 +606,47 @@ TEST(OpenCVInteropPnp, RejectsTooFewPoints)
   );
 }
 
+// The lat-long projections have no normalized image plane (a ray and its
+// opposite share x/z, y/z), so undistortPoints and solvePnP refuse them
+// rather than return a pose that may face the wrong way.
+TEST(OpenCVInteropPnp, RejectsLatLongProjections)
+{
+  for (const auto type : {ProjectionModelType::EQUIRECTANGULAR, ProjectionModelType::CYLINDRICAL})
+  {
+    CameraModel model;
+    model.projection.type = type;
+    model.intrinsics.fx = 2048.0f / (2.0f * 3.14159265f);
+    model.intrinsics.fy = 1024.0f / 3.14159265f;
+    model.intrinsics.cx = 1023.5f;
+    model.intrinsics.cy = 511.5f;
+    ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
+
+    std::vector<cv::Point3f> object_points;
+    for (int r = 0; r < 5; ++r)
+    {
+      for (int c = 0; c < 5; ++c)
+      {
+        object_points.emplace_back(
+          static_cast<float>(c) * 0.05f - 0.1f, static_cast<float>(r) * 0.05f - 0.1f, 0.0f
+        );
+      }
+    }
+    std::vector<cv::Point2f> image_points;
+    ASSERT_EQ(
+      cvx::projectPoints(
+        model, object_points, cv::Vec3d(0.04, -0.08, 0.02), cv::Vec3d(0.03, 0.01, 1.4), image_points
+      ),
+      static_cast<int>(object_points.size())
+    );
+
+    std::vector<cv::Point2f> normalized;
+    EXPECT_EQ(cvx::undistortPoints(model, image_points, normalized), -1);
+    cv::Vec3d rvec;
+    cv::Vec3d tvec;
+    EXPECT_FALSE(cvx::solvePnP(model, object_points, image_points, rvec, tvec));
+  }
+}
+
 // ===========================================================================
 // initCameraMatrix2D — recovers a sane pinhole K from synthetic planar views
 // ===========================================================================

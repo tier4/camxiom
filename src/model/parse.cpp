@@ -106,7 +106,8 @@ ProjectionModelType parseProjectionModelType(const std::string &model_name)
        {ProjectionModelType::PINHOLE, ProjectionModelType::EQUIDISTANT,
         ProjectionModelType::EQUISOLID, ProjectionModelType::STEREOGRAPHIC,
         ProjectionModelType::ORTHOGRAPHIC, ProjectionModelType::OMNIDIRECTIONAL,
-        ProjectionModelType::DOUBLE_SPHERE, ProjectionModelType::EUCM})
+        ProjectionModelType::DOUBLE_SPHERE, ProjectionModelType::EUCM,
+        ProjectionModelType::EQUIRECTANGULAR, ProjectionModelType::CYLINDRICAL})
   {
     if (model == toString(type))
     {

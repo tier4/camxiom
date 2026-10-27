@@ -41,11 +41,13 @@
 //
 // All tests are deterministic (std::mt19937 seed 42). No rand().
 
+#include "camxiom/calib/convert.hpp"
 #include "camxiom/calib/intrinsics.hpp"
 #include "camxiom/default_seed.hpp"
 #include "camxiom/init/dlt_pnp.hpp"
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/model.hpp"
+#include "camxiom/optimizer/pnp_solver.hpp"
 #include "camxiom/projection64.hpp"
 #include "camxiom/types.hpp"
 #include "camxiom/types64.hpp"
@@ -350,6 +352,60 @@ TEST(CalibIntrinsics, NoNoiseRecoveryPinhole)
   EXPECT_LT(fx_rel_err, 0.01) << "Pinhole noise-free: fx relative error = " << fx_rel_err
                               << " exceeds 1% (recovered fx=" << res.camera_model.intrinsics.fx
                               << ")";
+}
+
+// Lat-long projections project like any model but are not calibrated: every
+// calibration entry point refuses them up front instead of running a cost
+// function that has no lat-long form.
+TEST(CalibIntrinsics, LatLongModelsAreNotCalibrated)
+{
+  const CameraModel64 gt_model = buildGTPinhole();
+  const auto world_pts = makeCheckerboard3D(8, 6, 0.05);
+  std::mt19937 rng(42U);
+  const auto views = makeCanonicalViews(gt_model, world_pts, 0.0, &rng);
+  ASSERT_FALSE(views.empty());
+
+  for (const ProjectionModelType type :
+       {ProjectionModelType::EQUIRECTANGULAR, ProjectionModelType::CYLINDRICAL})
+  {
+    CameraModel latlong;
+    latlong.projection.type = type;
+    latlong.intrinsics.fx = 100.0f;
+    latlong.intrinsics.fy = 100.0f;
+    latlong.intrinsics.cx = 320.0f;
+    latlong.intrinsics.cy = 240.0f;
+    ASSERT_EQ(validateCameraModel(latlong), StatusCode::OK);
+
+    EXPECT_EQ(
+      calibrate(views, latlong, PnpFlag::NONE, makeDefaultOptions()).status,
+      StatusCode::INVALID_MODEL
+    );
+
+    optimizer::PnpSolver solver;
+    optimizer::PnpInitialGuess guess;
+    guess.camera_model = latlong;
+    guess.rvecs.assign(1, Eigen::Vector3d::Zero());
+    guess.tvecs.assign(1, Eigen::Vector3d(0.0, 0.0, 0.3));
+    optimizer::PnpResult pnp;
+    EXPECT_FALSE(solver.solve(
+      optimizer::ObjectPointSets{views[0].world_points},
+      optimizer::ImagePointSets{views[0].image_points}, guess, pnp
+    ));
+
+    EXPECT_EQ(
+      calib::convertCameraModel(
+        latlong, 640, 480, getDefaultSeed(ProjectionModelType::PINHOLE, 640, 480)
+      )
+        .status,
+      StatusCode::INVALID_MODEL
+    );
+    EXPECT_EQ(
+      calib::convertCameraModel(fromCameraModel64(gt_model), 640, 480, latlong).status,
+      StatusCode::INVALID_MODEL
+    );
+
+    EXPECT_EQ(getDefaultSeed(type, 640, 480).projection.type, ProjectionModelType::UNKNOWN);
+  }
 }
 
 TEST(CalibIntrinsics, IterationCappedSolveReportsNonConverged)

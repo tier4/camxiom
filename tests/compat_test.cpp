@@ -804,6 +804,8 @@ TEST(CompatDouble, PreservesCameraInfoAcrossAllFamilies)
         status = exportDoubleSphereCameraInfo64(model, DoubleSphereCompatProfile::CANONICAL, out); break;
       case ProjectionModelType::EUCM:
         status = exportEucmCameraInfo64(model, EucmCompatProfile::CANONICAL, out); break;
+      case ProjectionModelType::EQUIRECTANGULAR:
+      case ProjectionModelType::CYLINDRICAL:
       case ProjectionModelType::UNKNOWN: break;
     }
     ASSERT_EQ(status, StatusCode::OK);

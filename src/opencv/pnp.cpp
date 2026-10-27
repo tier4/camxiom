@@ -37,6 +37,13 @@ bool solvePnP(
   {
     return false;
   }
+  // The observations go through the normalized image plane, which cannot
+  // tell a lat-long ray from its opposite; pose estimation does not take
+  // the lat-long projections.
+  if (isLatLongProjection(model.projection.type))
+  {
+    return false;
+  }
 
   std::vector<cv::Point2f> normalized;
   const int undist_ok =

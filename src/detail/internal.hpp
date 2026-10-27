@@ -91,7 +91,8 @@ inline bool isPolynomialFisheyeDistortion(const DistortionModelType type)
 
 // Which lens corrections a projection law takes: the plane corrections sit on
 // the pinhole law and on the sphere-based models, the KB angle corrections on
-// the equidistant law only, and the other fisheye laws take none.
+// the equidistant law only, and the other fisheye laws and the lat-long
+// projections take none.
 inline bool isSupportedModelCombination(
   const ProjectionModelType projection, const DistortionModelType distortion
 )
@@ -107,6 +108,9 @@ inline bool isSupportedModelCombination(
     case ProjectionModelType::DOUBLE_SPHERE:
     case ProjectionModelType::EUCM:
       return distortionSpaceOf(distortion) != DistortionSpace::ANGLE;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return distortion == DistortionModelType::NONE;
     default:
       return false;
   }

@@ -572,7 +572,9 @@ RectifiedOutputModelResult makeRectifiedOutputModel(
     result.status = StatusCode::INVALID_INPUT;
     return result;
   }
-  if (validateCameraModel(src_model) != StatusCode::OK)
+  // The boundary-only fit below cannot bound a lat-long source, whose
+  // representable region has edges inside the image; refuse it.
+  if (validateCameraModel(src_model) != StatusCode::OK || isLatLongProjection(src_model.projection.type))
   {
     result.status = StatusCode::INVALID_MODEL;
     return result;
@@ -666,7 +668,9 @@ RectifyRemapResult buildRectifyRemapMap(
 {
   RectifyRemapResult result{};
 
-  if (validateCameraModel(src_model) != StatusCode::OK)
+  // Lat-long sources are refused for the same reason as in
+  // makeRectifiedOutputModel: the fits only sample the source boundary.
+  if (validateCameraModel(src_model) != StatusCode::OK || isLatLongProjection(src_model.projection.type))
   {
     result.remap_result.status = StatusCode::INVALID_MODEL;
     return result;
@@ -805,7 +809,9 @@ BuildRectifyMapResult buildRectifyMap(
   result.alpha_used = alpha;
 
   // Validation.
-  if (validateCameraModel(src_model) != StatusCode::OK)
+  // Lat-long sources are refused for the same reason as in
+  // makeRectifiedOutputModel: the fits only sample the source boundary.
+  if (validateCameraModel(src_model) != StatusCode::OK || isLatLongProjection(src_model.projection.type))
   {
     result.remap_result.status = StatusCode::INVALID_MODEL;
     return result;

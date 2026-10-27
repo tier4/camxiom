@@ -98,6 +98,12 @@ int undistortPoints(
   {
     return -1;
   }
+  // A lat-long ray and its opposite land on the same normalized-plane point
+  // (x/z, y/z), so the lat-long projections have no normalized image here.
+  if (isLatLongProjection(model.projection.type))
+  {
+    return -1;
+  }
 
   const int n = static_cast<int>(src_points.size());
   if (n == 0)

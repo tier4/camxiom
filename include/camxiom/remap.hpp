@@ -215,8 +215,13 @@ struct [[nodiscard]] RectifiedOutputModelResult
 /// Currently only supports RectifiedProjectionType::PINHOLE.
 /// For non-pinhole rectification types (CYLINDRICAL, STEREOGRAPHIC, LONGITUDE_LATITUDE),
 /// use buildRectifyRemapMap() directly — the output_model field of RectifyRemapResult
-/// will be default-constructed (UNKNOWN) because these projections are not representable
-/// as a CameraModel.
+/// will be default-constructed (UNKNOWN) because this rectify API does not build an
+/// output model for them.
+///
+/// Lat-long source models (EQUIRECTANGULAR, CYLINDRICAL) are refused with
+/// INVALID_MODEL by every rectify entry point: the fit samples only the source
+/// boundary, which cannot bound a lat-long model's representable region. Build a map
+/// from an explicit output model with buildImageRemapMap() instead.
 ///
 /// For PINHOLE, the generated model has:
 ///   - projection.type = PINHOLE

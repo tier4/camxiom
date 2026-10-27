@@ -178,7 +178,8 @@ struct PnpSummary
   bool converged{false};
 };
 
-/// PnP solver that works with ANY camera model supported by camxiom.
+/// PnP solver that works with every camera model camxiom calibrates (all but
+/// the lat-long projections, which solve() rejects).
 ///
 /// Uses projection_template.hpp for the cost functor, so all projection and
 /// distortion models are handled by a single code path. OpenCV-free: the

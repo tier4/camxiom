@@ -161,6 +161,8 @@ std::vector<int> fixedProjectionParamIndices(camxiom::ProjectionModelType type)
     case camxiom::ProjectionModelType::EQUISOLID:
     case camxiom::ProjectionModelType::STEREOGRAPHIC:
     case camxiom::ProjectionModelType::ORTHOGRAPHIC:
+    case camxiom::ProjectionModelType::EQUIRECTANGULAR:
+    case camxiom::ProjectionModelType::CYLINDRICAL:
     case camxiom::ProjectionModelType::UNKNOWN:
       break;
   }
@@ -515,6 +517,12 @@ bool PnpSolver::Impl::solve(
     {
       return false;
     }
+  }
+  // The cost functions have no lat-long form (lat-long models are not
+  // calibrated).
+  if (isLatLongProjection(initial_guess.camera_model.projection.type))
+  {
+    return false;
   }
 
   auto camera_model = initial_guess.camera_model;

@@ -282,6 +282,9 @@ PixelFn64 resolveForwardFn64(const ProjectionModelType type)
       return &double_sphere::rayToPixel64;
     case ProjectionModelType::EUCM:
       return &eucm::rayToPixel64;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return &latlong::rayToPixel64;
     case ProjectionModelType::UNKNOWN:
       break;
   }
@@ -305,6 +308,9 @@ RayFn64 resolveInverseFn64(const ProjectionModelType type)
       return &double_sphere::pixelToRay64;
     case ProjectionModelType::EUCM:
       return &eucm::pixelToRay64;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return &latlong::pixelToRay64;
     case ProjectionModelType::UNKNOWN:
       break;
   }

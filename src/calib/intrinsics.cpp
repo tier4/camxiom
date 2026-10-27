@@ -197,6 +197,8 @@ std::vector<FreeParam> enumerateFreeParams(
       case camxiom::ProjectionModelType::EQUISOLID:
       case camxiom::ProjectionModelType::STEREOGRAPHIC:
       case camxiom::ProjectionModelType::ORTHOGRAPHIC:
+      case camxiom::ProjectionModelType::EQUIRECTANGULAR:
+      case camxiom::ProjectionModelType::CYLINDRICAL:
       case camxiom::ProjectionModelType::UNKNOWN:
         break;
     }
@@ -745,7 +747,10 @@ Result calibrateImpl(
       return failedCalibrationResult<Result>(StatusCode::INVALID_INPUT);
     }
   }
-  if (camxiom::detail::validateModel(initial_model) != StatusCode::OK)
+  // Lat-long models are not calibrated: the cost functions and the parameter
+  // Jacobian have no lat-long form.
+  if (camxiom::detail::validateModel(initial_model) != StatusCode::OK ||
+      isLatLongProjection(initial_model.projection.type))
   {
     return failedCalibrationResult<Result>(StatusCode::INVALID_MODEL);
   }

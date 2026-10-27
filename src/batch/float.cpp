@@ -60,6 +60,9 @@ PixelFn resolveForwardFn(const ProjectionModelType type)
       return &double_sphere::rayToPixel;
     case ProjectionModelType::EUCM:
       return &eucm::rayToPixel;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return &latlong::rayToPixel;
     case ProjectionModelType::UNKNOWN:
       break;
   }
@@ -83,6 +86,9 @@ RayFn resolveInverseFn(const ProjectionModelType type)
       return &double_sphere::pixelToRay;
     case ProjectionModelType::EUCM:
       return &eucm::pixelToRay;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return &latlong::pixelToRay;
     case ProjectionModelType::UNKNOWN:
       break;
   }

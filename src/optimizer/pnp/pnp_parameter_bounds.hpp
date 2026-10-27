@@ -86,6 +86,8 @@ inline int projectionParamCount(const camxiom::ProjectionModelType type)
     case camxiom::ProjectionModelType::EQUISOLID:
     case camxiom::ProjectionModelType::STEREOGRAPHIC:
     case camxiom::ProjectionModelType::ORTHOGRAPHIC:
+    case camxiom::ProjectionModelType::EQUIRECTANGULAR:
+    case camxiom::ProjectionModelType::CYLINDRICAL:
     case camxiom::ProjectionModelType::UNKNOWN:
       break;
   }
@@ -185,6 +187,8 @@ inline CalibrationParameterBounds computeCalibrationParameterBounds(
       case camxiom::ProjectionModelType::STEREOGRAPHIC:
       case camxiom::ProjectionModelType::ORTHOGRAPHIC:
       case camxiom::ProjectionModelType::OMNIDIRECTIONAL:
+      case camxiom::ProjectionModelType::EQUIRECTANGULAR:
+      case camxiom::ProjectionModelType::CYLINDRICAL:
       case camxiom::ProjectionModelType::UNKNOWN:
         break;
     }
