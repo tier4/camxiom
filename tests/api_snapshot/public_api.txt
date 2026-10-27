@@ -714,6 +714,7 @@ camxiom | const char *toString(DistortionModelType model_type)
 camxiom | const char *toString(DistortionSpace space)
 camxiom | const char *toString(ProjectionModelType model_type)
 camxiom | const char *toString(StatusCode status_code)
+camxiom | constexpr DistortionSpace distortionSpaceOf(const DistortionModelType type) noexcept
 camxiom | enum class DistortionModelType : std::uint8_t
 camxiom | enum class DistortionSpace : std::uint8_t
 camxiom | enum class ProjectionModelType : std::uint8_t
@@ -739,7 +740,6 @@ camxiom::CameraModelT | DistortionModelT<T> distortion
 camxiom::CameraModelT | IntrinsicsModelT<T> intrinsics
 camxiom::CameraModelT | ProjectionModelT<T> projection
 camxiom::DistortionModelT | DistortionModelType type
-camxiom::DistortionModelT | DistortionSpace space
 camxiom::DistortionModelT | bool has_thin_prism
 camxiom::DistortionModelT | bool has_tilt
 camxiom::DistortionModelT | bool is_rational

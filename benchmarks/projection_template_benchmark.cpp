@@ -43,8 +43,6 @@ void run(bool fisheye)
   model.projection.theta_max = Scalar(2.0);
   model.distortion.type =
     fisheye ? camxiom::DistortionModelType::KB4 : camxiom::DistortionModelType::RADTAN5;
-  model.distortion.space =
-    fisheye ? camxiom::DistortionSpace::ANGLE : camxiom::DistortionSpace::PLANE;
   model.distortion.count = fisheye ? 4 : 5;
   model.distortion.coeffs[0] = Scalar(fisheye ? .01 : -.28);
   model.distortion.coeffs[1] = Scalar(fisheye ? -.005 : .11);

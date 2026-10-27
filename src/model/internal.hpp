@@ -42,32 +42,6 @@ inline std::string toLowerCopy(const std::string &input)
 // PnP solver write-back and the analytical double cost), together with
 // rebuildDistortionAuxState.
 
-inline DistortionSpace distortionSpaceFromType(const DistortionModelType type)
-{
-  switch (type)
-  {
-    case DistortionModelType::NONE:
-      return DistortionSpace::NONE;
-    case DistortionModelType::RADTAN4:
-    case DistortionModelType::RADTAN5:
-    case DistortionModelType::RATIONAL8:
-    case DistortionModelType::THIN_PRISM12:
-    case DistortionModelType::TILTED14:
-      return DistortionSpace::PLANE;
-    case DistortionModelType::KB4:
-    case DistortionModelType::KB8:
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
-      return DistortionSpace::ANGLE;
-    case DistortionModelType::OMNIDIRECTIONAL:
-    case DistortionModelType::UNKNOWN:
-      break;
-  }
-  return DistortionSpace::NONE;
-}
-
 inline DistortionModelType classifyPlaneDistortionByCount(const std::size_t count)
 {
   if (count >= 14U)

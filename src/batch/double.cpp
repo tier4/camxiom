@@ -43,8 +43,7 @@ using RayFn64 = RayResult64 (*)(const CameraModel64 &, const Pixel2d &, const So
 bool isPinholeUndistorted64(const CameraModel64 &model)
 {
   return model.projection.type == ProjectionModelType::PINHOLE &&
-         model.distortion.type == DistortionModelType::NONE &&
-         model.distortion.space == DistortionSpace::NONE && model.distortion.count == 0U &&
+         model.distortion.type == DistortionModelType::NONE && model.distortion.count == 0U &&
          !model.distortion.is_rational && !model.distortion.has_thin_prism &&
          !model.distortion.has_tilt;
 }

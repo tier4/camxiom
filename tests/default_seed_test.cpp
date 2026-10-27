@@ -71,7 +71,7 @@ TEST(DefaultSeed, ExactFieldValuesPinholeSquare)
 
   // distortion: no distortion
   EXPECT_EQ(m.distortion.type, DistortionModelType::NONE);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::NONE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::NONE);
   EXPECT_EQ(m.distortion.count, 0U);
   for (std::size_t i = 0; i < m.distortion.coeffs.size(); ++i)
   {
@@ -96,7 +96,7 @@ TEST(DefaultSeed, ExactFieldValuesPinholeNonSquare)
   EXPECT_EQ(m.intrinsics.skew, 0.0f);
 
   EXPECT_EQ(m.distortion.type, DistortionModelType::NONE);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::NONE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::NONE);
   EXPECT_EQ(m.distortion.count, 0U);
   for (std::size_t i = 0; i < m.distortion.coeffs.size(); ++i)
   {
@@ -123,7 +123,7 @@ TEST(DefaultSeed, ExactFieldValuesFisheyeThetaSquare)
 
   // KB4 angle distortion, k1..k4 = 0
   EXPECT_EQ(m.distortion.type, DistortionModelType::KB4);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::ANGLE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::ANGLE);
   EXPECT_EQ(m.distortion.count, 4U);
   EXPECT_EQ(m.distortion.is_rational, false);
   EXPECT_EQ(m.distortion.has_thin_prism, false);
@@ -151,7 +151,7 @@ TEST(DefaultSeed, ExactFieldValuesFisheyeThetaNonSquare)
   EXPECT_EQ(m.intrinsics.skew, 0.0f);
 
   EXPECT_EQ(m.distortion.type, DistortionModelType::KB4);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::ANGLE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::ANGLE);
   EXPECT_EQ(m.distortion.count, 4U);
   EXPECT_EQ(m.distortion.is_rational, false);
   EXPECT_EQ(m.distortion.has_thin_prism, false);
@@ -178,7 +178,7 @@ TEST(DefaultSeed, ExactFieldValuesOmnidirectionalSquare)
   EXPECT_EQ(m.intrinsics.skew, 0.0f);
 
   EXPECT_EQ(m.distortion.type, DistortionModelType::NONE);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::NONE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::NONE);
   EXPECT_EQ(m.distortion.count, 0U);
   for (std::size_t i = 0; i < m.distortion.coeffs.size(); ++i)
   {
@@ -202,7 +202,7 @@ TEST(DefaultSeed, ExactFieldValuesOmnidirectionalNonSquare)
   EXPECT_EQ(m.intrinsics.skew, 0.0f);
 
   EXPECT_EQ(m.distortion.type, DistortionModelType::NONE);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::NONE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::NONE);
   EXPECT_EQ(m.distortion.count, 0U);
 }
 
@@ -223,7 +223,7 @@ TEST(DefaultSeed, ExactFieldValuesDoubleSphereSquare)
   EXPECT_EQ(m.intrinsics.skew, 0.0f);
 
   EXPECT_EQ(m.distortion.type, DistortionModelType::NONE);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::NONE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::NONE);
   EXPECT_EQ(m.distortion.count, 0U);
   for (std::size_t i = 0; i < m.distortion.coeffs.size(); ++i)
   {
@@ -248,7 +248,7 @@ TEST(DefaultSeed, ExactFieldValuesDoubleSphereNonSquare)
   EXPECT_EQ(m.intrinsics.skew, 0.0f);
 
   EXPECT_EQ(m.distortion.type, DistortionModelType::NONE);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::NONE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::NONE);
   EXPECT_EQ(m.distortion.count, 0U);
 }
 
@@ -269,7 +269,7 @@ TEST(DefaultSeed, ExactFieldValuesEucmSquare)
   EXPECT_EQ(m.intrinsics.skew, 0.0f);
 
   EXPECT_EQ(m.distortion.type, DistortionModelType::NONE);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::NONE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::NONE);
   EXPECT_EQ(m.distortion.count, 0U);
   for (std::size_t i = 0; i < m.distortion.coeffs.size(); ++i)
   {
@@ -294,7 +294,7 @@ TEST(DefaultSeed, ExactFieldValuesEucmNonSquare)
   EXPECT_EQ(m.intrinsics.skew, 0.0f);
 
   EXPECT_EQ(m.distortion.type, DistortionModelType::NONE);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::NONE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::NONE);
   EXPECT_EQ(m.distortion.count, 0U);
 }
 
@@ -318,7 +318,7 @@ TEST(DefaultSeed, ExactFieldValuesFisheyeTheta1280x960)
   EXPECT_EQ(m.intrinsics.skew, 0.0f);
 
   EXPECT_EQ(m.distortion.type, DistortionModelType::KB4);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::ANGLE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::ANGLE);
   EXPECT_EQ(m.distortion.count, 4U);
 }
 

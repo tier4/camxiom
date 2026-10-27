@@ -101,6 +101,35 @@ enum class DistortionModelType : std::uint8_t {
 
 enum class DistortionSpace : std::uint8_t { NONE = 0U, PLANE, ANGLE };
 
+/// The space a distortion model acts in. It is a property of the type, not a
+/// separate setting: the radtan family corrects the normalized image plane
+/// (PLANE), the Kannala-Brandt family corrects the incidence angle (ANGLE),
+/// and NONE (or an unusable type) corrects nothing.
+constexpr DistortionSpace distortionSpaceOf(const DistortionModelType type) noexcept
+{
+  switch (type)
+  {
+    case DistortionModelType::RADTAN4:
+    case DistortionModelType::RADTAN5:
+    case DistortionModelType::RATIONAL8:
+    case DistortionModelType::THIN_PRISM12:
+    case DistortionModelType::TILTED14:
+      return DistortionSpace::PLANE;
+    case DistortionModelType::KB4:
+    case DistortionModelType::KB8:
+    case DistortionModelType::EQUIDISTANT:
+    case DistortionModelType::EQUISOLID:
+    case DistortionModelType::STEREOGRAPHIC:
+    case DistortionModelType::ORTHOGRAPHIC:
+      return DistortionSpace::ANGLE;
+    case DistortionModelType::NONE:
+    case DistortionModelType::OMNIDIRECTIONAL:
+    case DistortionModelType::UNKNOWN:
+      break;
+  }
+  return DistortionSpace::NONE;
+}
+
 enum class ProjectionModelType : std::uint8_t {
   PINHOLE = 0U,
   FISHEYE_THETA,
@@ -159,7 +188,6 @@ template <typename T>
 struct DistortionModelT
 {
   DistortionModelType type{DistortionModelType::NONE};
-  DistortionSpace space{DistortionSpace::NONE};
   std::array<T, 14> coeffs{};
   std::array<T, 9> tilt_matrix{{T(1), T(0), T(0), T(0), T(1), T(0), T(0), T(0), T(1)}};
   std::array<T, 9> inv_tilt_matrix{{T(1), T(0), T(0), T(0), T(1), T(0), T(0), T(0), T(1)}};

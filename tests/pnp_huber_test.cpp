@@ -64,7 +64,6 @@ CameraModel makePinholeModel()
   m.intrinsics.cy = 240.0f;
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -272,7 +271,6 @@ TEST(PnpHuber, GaussNewtonRecoversWhenSeedLeavesFov)
   model.projection.type = ProjectionModelType::FISHEYE_THETA;
   model.projection.theta_max = 1.2f;
   model.distortion.type = DistortionModelType::EQUIDISTANT;
-  model.distortion.space = DistortionSpace::ANGLE;
   model.distortion.count = 0U;
   ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
   const CameraModel64 m64 = toCameraModel64(model);
@@ -423,7 +421,6 @@ TEST(PnpSolverValidity, EveryBackendChecksEachViewsProjectableCorrespondences)
 {
   CameraModel model = makePinholeModel();
   model.distortion.type = DistortionModelType::RATIONAL8;
-  model.distortion.space = DistortionSpace::PLANE;
   model.distortion.count = 8;
   model.distortion.coeffs[5] = -1.0f;
   model.distortion.is_rational = true;
@@ -518,7 +515,6 @@ TEST(PnpSolverValidity, ProjectableRearFisheyePointsRemainUsable)
   model.projection.type = ProjectionModelType::FISHEYE_THETA;
   model.projection.theta_max = 2.0f;
   model.distortion.type = DistortionModelType::EQUIDISTANT;
-  model.distortion.space = DistortionSpace::ANGLE;
   ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
   // All bearings lie behind z=0, within this fisheye's angular domain.
   const ObjectPoints points{{1, -0.2, -0.1},   {1, 0, -0.2},   {1, 0.2, -0.1},

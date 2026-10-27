@@ -179,7 +179,6 @@ CameraModel64 makeGtPinholeRadtan5()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = kPi / 2.0;
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.count = 5U;
   m.distortion.coeffs.fill(0.0);
   m.distortion.coeffs[0] = -0.10;
@@ -203,7 +202,6 @@ CameraModel makeSeedPinholeRadtan5()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = static_cast<float>(kPi / 2.0);
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.count = 5U;
   m.distortion.coeffs.fill(0.0f);
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -222,7 +220,6 @@ CameraModel64 makeGtKb4()
   m.projection.type = ProjectionModelType::FISHEYE_THETA;
   m.projection.theta_max = kPi;
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 4U;
   m.distortion.coeffs.fill(0.0);
   m.distortion.coeffs[0] = 0.01;

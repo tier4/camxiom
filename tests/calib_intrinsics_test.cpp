@@ -195,7 +195,6 @@ CameraModel64 buildGTPinhole()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -220,7 +219,6 @@ CameraModel64 buildGTKB4()
   m.projection.type = ProjectionModelType::FISHEYE_THETA;
   m.projection.theta_max = 2.6;  // inside the polynomial's monotone range
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 4U;
   m.distortion.coeffs.fill(0.0);
   m.distortion.coeffs[0] = 0.01;    // k1 — free in Ceres
@@ -249,7 +247,6 @@ CameraModel64 buildGTMEI()
   m.projection.xi = 1.0;  // = seed, LOCKED by FIX_PROJECTION_PARAMS
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -274,7 +271,6 @@ CameraModel64 buildGTDS()
   m.projection.alpha = 0.5;  // = seed, LOCKED by FIX_PROJECTION_PARAMS
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -299,7 +295,6 @@ CameraModel64 buildGTEUCM()
   m.projection.beta = 1.0;   // = seed, LOCKED by FIX_PROJECTION_PARAMS
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -1069,7 +1064,6 @@ TEST(CalibIntrinsics, ComputeReprojErrorsNoiseFree)
   gt_model.intrinsics.cy = static_cast<float>(gt_m64.intrinsics.cy);
   gt_model.intrinsics.skew = 0.0f;
   gt_model.distortion.type = DistortionModelType::NONE;
-  gt_model.distortion.space = DistortionSpace::NONE;
   gt_model.distortion.count = 0U;
 
   std::vector<double> per_view_rms;
@@ -1338,7 +1332,6 @@ buildRadtan5Model(float fx, float fy, float cx, float cy, float k1, float k2, fl
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = static_cast<float>(constants::kHalfPi);
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.count = 5U;
   m.distortion.coeffs.fill(0.0f);
   // RADTAN5 layout: k1, k2, p1, p2, k3  (indices 0-4).

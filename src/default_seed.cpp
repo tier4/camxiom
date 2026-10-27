@@ -78,7 +78,6 @@ CameraModel getDefaultSeed(ProjectionModelType model_type, int image_width, int 
       // makeSeedModel use_kb4=true branch. Only fields differing from the
       // struct defaults are set; tilt matrices are already identity.
       model.distortion.type = DistortionModelType::KB4;
-      model.distortion.space = DistortionSpace::ANGLE;
       model.distortion.coeffs.fill(0.0f);
       model.distortion.count = 4U;
       model.distortion.is_rational = false;

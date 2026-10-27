@@ -127,7 +127,7 @@ TEST(CompatRoundTrip, FisheyeKB4)
   ASSERT_EQ(importFisheyeModel(ext, FisheyeCompatProfile::CANONICAL, model), StatusCode::OK);
   EXPECT_EQ(model.projection.type, ProjectionModelType::FISHEYE_THETA);
   EXPECT_EQ(model.distortion.type, DistortionModelType::KB4);
-  EXPECT_EQ(model.distortion.space, DistortionSpace::ANGLE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(model.distortion.type), DistortionSpace::ANGLE);
 
   FisheyeExternalModel out;
   ASSERT_EQ(exportFisheyeModel(model, FisheyeCompatProfile::CANONICAL, out), StatusCode::OK);
@@ -252,7 +252,7 @@ TEST(CompatMakeCameraModel, EquidistantFisheye)
   const CameraModel model = makeCameraModel(info);
   EXPECT_EQ(validateCameraModel(model), StatusCode::OK);
   EXPECT_EQ(model.projection.type, ProjectionModelType::FISHEYE_THETA);
-  EXPECT_EQ(model.distortion.space, DistortionSpace::ANGLE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(model.distortion.type), DistortionSpace::ANGLE);
 }
 
 TEST(CompatMakeCameraModel, DoubleSphereString)

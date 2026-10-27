@@ -58,7 +58,6 @@ CameraModel makePinhole(bool with_distortion)
   if (with_distortion)
   {
     m.distortion.type = DistortionModelType::RADTAN5;
-    m.distortion.space = DistortionSpace::PLANE;
     m.distortion.coeffs[0] = -0.28f;
     m.distortion.coeffs[1] = 0.11f;
     m.distortion.coeffs[2] = 0.0006f;
@@ -69,7 +68,6 @@ CameraModel makePinhole(bool with_distortion)
   else
   {
     m.distortion.type = DistortionModelType::NONE;
-    m.distortion.space = DistortionSpace::NONE;
     m.distortion.count = 0U;
   }
   return m;
@@ -85,7 +83,6 @@ CameraModel makeFisheyeEquidistant()
   m.projection.type = ProjectionModelType::FISHEYE_THETA;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi) - 1e-4f;
   m.distortion.type = DistortionModelType::EQUIDISTANT;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 0U;
   return m;
 }
@@ -100,7 +97,6 @@ CameraModel makeFisheyeKb4()
   m.projection.type = ProjectionModelType::FISHEYE_THETA;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi) - 1e-3f;
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.coeffs[0] = -0.012f;
   m.distortion.coeffs[1] = 0.004f;
   m.distortion.coeffs[2] = -0.0007f;
@@ -120,7 +116,6 @@ CameraModel makeOmnidirectional()
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi);
   m.projection.xi = 1.0f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -137,7 +132,6 @@ CameraModel makeDoubleSphere()
   m.projection.xi = 0.5f;
   m.projection.alpha = 0.5f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -154,7 +148,6 @@ CameraModel makeEucm()
   m.projection.alpha = 0.6f;
   m.projection.beta = 1.1f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -262,7 +255,6 @@ TEST(ValidatedCameraModel, TryMakeRejectsInvalidModels)
 
   CameraModel pinhole_angle = makePinhole(false);
   pinhole_angle.distortion.type = DistortionModelType::EQUIDISTANT;
-  pinhole_angle.distortion.space = DistortionSpace::ANGLE;
   ASSERT_NE(validateCameraModel(pinhole_angle), StatusCode::OK);
   EXPECT_FALSE(ValidatedCameraModel::tryMake(pinhole_angle).has_value());
 }

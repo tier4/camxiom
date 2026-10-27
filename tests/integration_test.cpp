@@ -143,7 +143,6 @@ CameraModel64 buildGTPinhole()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -165,7 +164,6 @@ CameraModel64 buildGTKB4()
   m.projection.type = ProjectionModelType::FISHEYE_THETA;
   m.projection.theta_max = 2.6;  // inside the polynomial's monotone range
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 4U;
   m.distortion.coeffs.fill(0.0);
   m.distortion.coeffs[0] = 0.01;    // k1 — free
@@ -193,7 +191,6 @@ CameraModel64 buildGTMEI()
   m.projection.xi = 1.0;  // = seed, LOCKED
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -217,7 +214,6 @@ CameraModel64 buildGTDS()
   m.projection.alpha = 0.5;  // = seed, LOCKED
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -241,7 +237,6 @@ CameraModel64 buildGTEUCM()
   m.projection.beta = 1.0;   // = seed, LOCKED
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -436,7 +431,6 @@ CameraModel buildPinholeZhangSeed(
   seed.intrinsics.cy = static_cast<float>(K(1, 2));
   seed.intrinsics.skew = 0.0f;  // force skew=0 per spec (standard pinhole path)
   seed.distortion.type = DistortionModelType::NONE;
-  seed.distortion.space = DistortionSpace::NONE;
   seed.distortion.count = 0U;
   return seed;
 }
@@ -2424,7 +2418,6 @@ TEST(Ms2IntegrationFixture, RealCorrespondenceRegression)
     {
       ASSERT_EQ(parsed.model, ProjectionModelType::PINHOLE);
       seed.distortion.type = parsed.pinhole_distortion;
-      seed.distortion.space = DistortionSpace::PLANE;
       seed.distortion.count = parsed.pinhole_distortion == DistortionModelType::RATIONAL8 ? 8U : 5U;
       seed.distortion.is_rational = parsed.pinhole_distortion == DistortionModelType::RATIONAL8;
     }

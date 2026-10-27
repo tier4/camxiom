@@ -120,7 +120,6 @@ TEST(Types, CameraModelToCameraModel64RoundTrip)
   m.projection.type = ProjectionModelType::FISHEYE_THETA;
   m.projection.theta_max = 1.5f;
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.coeffs[0] = -0.1f;
   m.distortion.coeffs[1] = 0.02f;
   m.distortion.count = 4U;
@@ -132,7 +131,7 @@ TEST(Types, CameraModelToCameraModel64RoundTrip)
   EXPECT_EQ(m64.projection.type, ProjectionModelType::FISHEYE_THETA);
   EXPECT_NEAR(m64.projection.theta_max, 1.5, 1e-6);
   EXPECT_EQ(m64.distortion.type, DistortionModelType::KB4);
-  EXPECT_EQ(m64.distortion.space, DistortionSpace::ANGLE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m64.distortion.type), DistortionSpace::ANGLE);
   EXPECT_EQ(m64.distortion.count, 4U);
 
   CameraModel back = fromCameraModel64(m64);
@@ -152,7 +151,7 @@ TEST(Types, DefaultsAreSane)
   EXPECT_EQ(m.intrinsics.fy, 1.0f);
   EXPECT_EQ(m.projection.type, ProjectionModelType::UNKNOWN);
   EXPECT_EQ(m.distortion.type, DistortionModelType::NONE);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::NONE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::NONE);
   EXPECT_EQ(m.distortion.count, 0U);
   EXPECT_FALSE(m.distortion.has_tilt);
   EXPECT_FALSE(m.distortion.has_thin_prism);

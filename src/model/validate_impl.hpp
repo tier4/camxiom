@@ -123,8 +123,8 @@ inline StatusCode validateCameraModelQueryImpl(const CameraModelT<T> &model)
   const DistortionModelT<T> &distortion = model.distortion;
 
   const StatusCode consistency_status = detail::validateDistortionConsistency(
-    distortion.type, distortion.space, distortion.count, distortion.is_rational,
-    distortion.has_thin_prism, distortion.has_tilt
+    distortion.type, distortion.count, distortion.is_rational, distortion.has_thin_prism,
+    distortion.has_tilt
   );
   if (consistency_status != StatusCode::OK)
   {
@@ -193,11 +193,11 @@ inline StatusCode validateCameraModelQueryImpl(const CameraModelT<T> &model)
     }
   }
 
-  if (projection.type == ProjectionModelType::PINHOLE && distortion.space == DistortionSpace::ANGLE)
+  if (projection.type == ProjectionModelType::PINHOLE && distortionSpaceOf(distortion.type) == DistortionSpace::ANGLE)
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (projection.type == ProjectionModelType::FISHEYE_THETA && distortion.space == DistortionSpace::PLANE)
+  if (projection.type == ProjectionModelType::FISHEYE_THETA && distortionSpaceOf(distortion.type) == DistortionSpace::PLANE)
   {
     return StatusCode::INVALID_MODEL;
   }
@@ -254,13 +254,13 @@ inline StatusCode validateCameraModelQueryImpl(const CameraModelT<T> &model)
       }
     }
   }
-  if (projection.type == ProjectionModelType::OMNIDIRECTIONAL && distortion.space == DistortionSpace::ANGLE)
+  if (projection.type == ProjectionModelType::OMNIDIRECTIONAL && distortionSpaceOf(distortion.type) == DistortionSpace::ANGLE)
   {
     return StatusCode::INVALID_MODEL;
   }
   if ((projection.type == ProjectionModelType::DOUBLE_SPHERE ||
        projection.type == ProjectionModelType::EUCM) &&
-      distortion.space == DistortionSpace::ANGLE)
+      distortionSpaceOf(distortion.type) == DistortionSpace::ANGLE)
   {
     return StatusCode::INVALID_MODEL;
   }

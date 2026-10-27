@@ -101,7 +101,6 @@ CameraModel64 buildGroundTruthFisheyeKB4Model()
   m.projection.theta_max = camxiom::constants::kHalfPi;  // pi/2
 
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 4U;
   m.distortion.coeffs.fill(0.0);
   m.distortion.coeffs[0] = 0.01;    // k1
@@ -207,7 +206,6 @@ double computeReprojectionRMS(const KB4InitResult &res, const std::vector<Planar
   rec_model.projection.theta_max = camxiom::constants::kHalfPi;
 
   rec_model.distortion.type = DistortionModelType::KB4;
-  rec_model.distortion.space = DistortionSpace::ANGLE;
   rec_model.distortion.count = 4U;
   rec_model.distortion.coeffs.fill(0.0);
   for (int i = 0; i < 4; ++i)

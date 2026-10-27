@@ -37,8 +37,6 @@ CameraModel64 fisheye(DistortionModelType type = DistortionModelType::KB4)
   model.projection.type = ProjectionModelType::FISHEYE_THETA;
   model.projection.theta_max = 1.0;
   model.distortion.type = type;
-  model.distortion.space =
-    type == DistortionModelType::NONE ? DistortionSpace::NONE : DistortionSpace::ANGLE;
   if (type == DistortionModelType::KB8)
     model.distortion.count = 8;
   else if (type == DistortionModelType::KB4)
@@ -134,7 +132,6 @@ TEST(FisheyeDomain64, IgnoresDeclaredCapAndLeavesInputUnchanged)
     EXPECT_EQ(model.intrinsics.skew, before.intrinsics.skew);
     EXPECT_EQ(model.distortion.coeffs, before.distortion.coeffs);
     EXPECT_EQ(model.distortion.type, before.distortion.type);
-    EXPECT_EQ(model.distortion.space, before.distortion.space);
     EXPECT_EQ(model.distortion.count, before.distortion.count);
     EXPECT_EQ(model.distortion.is_rational, before.distortion.is_rational);
     EXPECT_EQ(model.distortion.has_thin_prism, before.distortion.has_thin_prism);
@@ -243,9 +240,6 @@ TEST(FisheyeDomain64, RejectsNonFisheyeAndMalformedModels)
   expectFailure(model);
   model = fisheye();
   model.distortion.coeffs[0] = std::numeric_limits<double>::quiet_NaN();
-  expectFailure(model);
-  model = fisheye();
-  model.distortion.space = DistortionSpace::PLANE;
   expectFailure(model);
   model = fisheye();
   model.distortion.is_rational = true;

@@ -57,7 +57,6 @@ camxiom::CameraModel64 makeMEIModel(
   model.projection.xi = kXiSeed;
 
   model.distortion.type = camxiom::DistortionModelType::NONE;
-  model.distortion.space = camxiom::DistortionSpace::NONE;
   model.distortion.count = 0U;
 
   return model;

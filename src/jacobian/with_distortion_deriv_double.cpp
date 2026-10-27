@@ -209,7 +209,7 @@ StatusCode distortPlaneWithFullJ64(
   PlaneDistFullJ64 &out
 )
 {
-  if (model.space == DistortionSpace::NONE || model.type == DistortionModelType::NONE)
+  if (model.type == DistortionModelType::NONE)
   {
     xout = xin;
     yout = yin;
@@ -218,7 +218,7 @@ StatusCode distortPlaneWithFullJ64(
     out.dyd_dc.fill(0.0);
     return StatusCode::OK;
   }
-  if (model.space != DistortionSpace::PLANE) return StatusCode::INVALID_MODEL;
+  if (distortionSpaceOf(model.type) != DistortionSpace::PLANE) return StatusCode::INVALID_MODEL;
 
   double xnt = 0.0, ynt = 0.0;
   PlaneDistFullJ64 j_no_tilt{};

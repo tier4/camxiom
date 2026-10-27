@@ -62,7 +62,6 @@ CameraModel makeKB4(const float fx, const float k1, const float k2)
   m.projection.type = ProjectionModelType::FISHEYE_THETA;
   m.projection.theta_max = static_cast<float>(constants::kHalfPi);
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 4U;
   m.distortion.coeffs[0] = k1;
   m.distortion.coeffs[1] = k2;
@@ -73,7 +72,6 @@ CameraModel makePinholeRadtan5Seed()
 {
   CameraModel seed = getDefaultSeed(ProjectionModelType::PINHOLE, 640, 480);
   seed.distortion.type = DistortionModelType::RADTAN5;
-  seed.distortion.space = DistortionSpace::PLANE;
   seed.distortion.count = 5U;  // coefficients start at zero
   return seed;
 }

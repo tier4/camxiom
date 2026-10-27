@@ -64,7 +64,6 @@ CameraModel makeIdealFisheye(const DistortionModelType type)
   m.projection.type = ProjectionModelType::FISHEYE_THETA;
   m.projection.theta_max = static_cast<float>(constants::kPiF) - 1e-4f;
   m.distortion.type = type;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 0U;
   return m;
 }
@@ -78,7 +77,6 @@ CameraModel makePinholeNone()
   m.intrinsics.cy = 240.0f;
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -95,7 +93,6 @@ CameraModel makeKb4(
   m.projection.type = ProjectionModelType::FISHEYE_THETA;
   m.projection.theta_max = theta_max;
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 4U;
   m.distortion.coeffs = {k1, k2, k3, k4};
   return m;

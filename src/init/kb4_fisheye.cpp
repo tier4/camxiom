@@ -106,7 +106,6 @@ camxiom::CameraModel64 makeSeedModel(
 
   model.projection.type = camxiom::ProjectionModelType::FISHEYE_THETA;
 
-  model.distortion.space = camxiom::DistortionSpace::ANGLE;
   model.distortion.coeffs.fill(0.0);
   model.distortion.is_rational = false;
   model.distortion.has_thin_prism = false;
@@ -139,7 +138,6 @@ camxiom::CameraModel64 makeSeedModel(
   {
     camxiom::DistortionModel dist32{};
     dist32.type = model.distortion.type;
-    dist32.space = camxiom::DistortionSpace::ANGLE;
     dist32.count = model.distortion.count;
     dist32.coeffs.fill(0.0f);
     for (int i = 0; i < 4; ++i)

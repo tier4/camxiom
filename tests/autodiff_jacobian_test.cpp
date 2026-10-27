@@ -120,7 +120,6 @@ CameraModel64 makePinholeNone()
   CameraModel64 m = makeIntrinsics();
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -130,7 +129,6 @@ CameraModel64 makePinholeRadtan5()
   CameraModel64 m = makeIntrinsics();
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.coeffs[0] = -0.28;
   m.distortion.coeffs[1] = 0.11;
   m.distortion.coeffs[2] = 0.0006;
@@ -145,7 +143,6 @@ CameraModel64 makePinholeRational8()
   CameraModel64 m = makeIntrinsics();
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::RATIONAL8;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.coeffs[0] = -0.30;
   m.distortion.coeffs[1] = 0.12;
   m.distortion.coeffs[2] = 0.0005;
@@ -164,7 +161,6 @@ CameraModel64 makePinholeThinPrism12()
   CameraModel64 m = makeIntrinsics();
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::THIN_PRISM12;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.coeffs[0] = -0.28;
   m.distortion.coeffs[1] = 0.11;
   m.distortion.coeffs[2] = 0.0006;
@@ -208,7 +204,6 @@ CameraModel64 makeFisheyeEquidistant()
   m.projection.type = ProjectionModelType::FISHEYE_THETA;
   m.projection.theta_max = static_cast<double>(camxiom::constants::kPiF) - 1e-4;
   m.distortion.type = DistortionModelType::EQUIDISTANT;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 0U;
   return m;
 }
@@ -263,7 +258,6 @@ CameraModel64 makeOmnidirectional()
   m.projection.theta_max = static_cast<double>(camxiom::constants::kPiF);
   m.projection.xi = 1.0;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -280,7 +274,6 @@ CameraModel64 makeDoubleSphere()
   m.projection.xi = 0.5;
   m.projection.alpha = 0.5;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -297,7 +290,6 @@ CameraModel64 makeEucm()
   m.projection.alpha = 0.6;
   m.projection.beta = 1.1;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -629,7 +621,6 @@ TEST(AutoDiffJacobian, AcceptsZeroPaddedIdealFisheyeCoefficients)
       model.projection.theta_max = 1.4;
       model.distortion = DistortionModel64{};
       model.distortion.type = type;
-      model.distortion.space = DistortionSpace::ANGLE;
       model.distortion.count = static_cast<std::uint8_t>(count);
       ASSERT_EQ(validateCameraModel64(model), StatusCode::OK);
       for (const auto &ray : sampleRays())

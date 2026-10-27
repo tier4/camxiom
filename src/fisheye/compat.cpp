@@ -75,9 +75,6 @@ StatusCode importFisheyeModelImpl(
       return status;
     }
     model_out.distortion.type = external_model.distortion_type;
-    model_out.distortion.space = (external_model.distortion_type == DistortionModelType::NONE)
-                                   ? DistortionSpace::NONE
-                                   : DistortionSpace::ANGLE;
     model_out.distortion.count = 0U;
     return validateCompatModel(model_out);
   }

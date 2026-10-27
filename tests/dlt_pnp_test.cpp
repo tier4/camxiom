@@ -75,7 +75,6 @@ CameraModel64 makePinhole64()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = camxiom::constants::kPi / 2.0;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -92,7 +91,6 @@ CameraModel64 makeFisheye64()
   m.projection.type = ProjectionModelType::FISHEYE_THETA;
   m.projection.theta_max = camxiom::constants::kPi - 1e-4;
   m.distortion.type = DistortionModelType::EQUIDISTANT;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 0U;
   return m;
 }
@@ -109,7 +107,6 @@ CameraModel64 makeOmni64()
   m.projection.theta_max = camxiom::constants::kPi;
   m.projection.xi = 1.0;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -127,7 +124,6 @@ CameraModel64 makeDoubleSphere64()
   m.projection.xi = 0.5;
   m.projection.alpha = 0.5;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -145,7 +141,6 @@ CameraModel64 makeEucm64()
   m.projection.alpha = 0.6;
   m.projection.beta = 1.1;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -1199,7 +1194,6 @@ camxiom::CameraModel makePinholeFloat()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi / 2.0);
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -1215,7 +1209,6 @@ camxiom::CameraModel makeFisheyeFloat()
   m.projection.type = ProjectionModelType::FISHEYE_THETA;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi) - 1e-4f;
   m.distortion.type = DistortionModelType::EQUIDISTANT;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 0U;
   return m;
 }

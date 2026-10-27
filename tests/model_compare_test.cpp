@@ -45,7 +45,6 @@ CameraModel makePinholeRadtan()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = 1.5f;
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.count = 5;
   m.distortion.coeffs = {-0.28f, 0.07f, 1e-4f, -2e-4f, 0.0f};
   return m;
@@ -141,11 +140,10 @@ TEST(ModelCompareApprox, DerivedStateIsIgnored)
 {
   const CameraModel a = makePinholeRadtan();
   CameraModel b = a;
-  // Aux flags / tilt cache / space are derived from type+coeffs; isApprox
+  // Aux flags / tilt cache are derived from type+coeffs; isApprox
   // must not look at them.
   b.distortion.has_thin_prism = !a.distortion.has_thin_prism;
   b.distortion.tilt_matrix[0] = 3.0f;
-  b.distortion.space = DistortionSpace::NONE;
   EXPECT_TRUE(camxiom::isApprox(a, b));
 }
 

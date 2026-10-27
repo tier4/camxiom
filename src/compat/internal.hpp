@@ -288,7 +288,7 @@ inline StatusCode validatePinholeModelForExport(const CameraModelT<T> &model)
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (model.distortion.space == DistortionSpace::ANGLE)
+  if (distortionSpaceOf(model.distortion.type) == DistortionSpace::ANGLE)
   {
     return StatusCode::INVALID_MODEL;
   }
@@ -307,7 +307,7 @@ inline StatusCode validateFisheyeModelForExport(const CameraModelT<T> &model)
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (model.distortion.space == DistortionSpace::PLANE)
+  if (distortionSpaceOf(model.distortion.type) == DistortionSpace::PLANE)
   {
     return StatusCode::INVALID_MODEL;
   }
@@ -326,7 +326,7 @@ inline StatusCode validateOmniModelForExport(const CameraModelT<T> &model)
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (model.distortion.space == DistortionSpace::ANGLE)
+  if (distortionSpaceOf(model.distortion.type) == DistortionSpace::ANGLE)
   {
     return StatusCode::INVALID_MODEL;
   }
@@ -345,7 +345,7 @@ inline StatusCode validateDoubleSphereModelForExport(const CameraModelT<T> &mode
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (model.distortion.space == DistortionSpace::ANGLE)
+  if (distortionSpaceOf(model.distortion.type) == DistortionSpace::ANGLE)
   {
     return StatusCode::INVALID_MODEL;
   }
@@ -364,7 +364,7 @@ inline StatusCode validateEucmModelForExport(const CameraModelT<T> &model)
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (model.distortion.space == DistortionSpace::ANGLE)
+  if (distortionSpaceOf(model.distortion.type) == DistortionSpace::ANGLE)
   {
     return StatusCode::INVALID_MODEL;
   }

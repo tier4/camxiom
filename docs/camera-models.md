@@ -51,7 +51,7 @@ ray and the optical axis.
 struct CameraModel {                 // = CameraModelT<float>; CameraModel64 = CameraModelT<double>
   IntrinsicsModel intrinsics;        // fx, fy, cx, cy, skew            (pixels)
   ProjectionModel projection;        // type, theta_max, xi, alpha, beta
-  DistortionModel distortion;        // type, space, coeffs[14], tilt matrices, count, flags
+  DistortionModel distortion;        // type, coeffs[14], tilt matrices, count, flags
 };
 ```
 
@@ -65,7 +65,7 @@ is the *composition* of three orthogonal parts:
   default π/2), `xi` (omnidirectional / double-sphere), `alpha`
   (double-sphere / EUCM), `beta` (EUCM).
 - **`DistortionModel`** — the distortion model applied in between: `type`,
-  `space` (`PLANE` or `ANGLE`), `coeffs[14]` (OpenCV-compatible layout,
+  `coeffs[14]` (OpenCV-compatible layout,
   `count` says how many leading entries are meaningful), precomputed tilt
   matrices for TILTED14, and derived flags (`is_rational`, `has_thin_prism`,
   `has_tilt`).
@@ -189,7 +189,9 @@ coefficient changes.
 
 ## Distortion models
 
-`DistortionSpace` divides distortion models into two families, and
+`DistortionSpace` divides distortion models into two families. It is not a
+field of `DistortionModel`: `distortionSpaceOf(type)` derives it from the
+distortion type, so a model cannot hold a type and a space that disagree.
 `validateCameraModel` rejects mismatched combinations (e.g. a pinhole
 projection with an angle-space distortion) instead of producing garbage:
 

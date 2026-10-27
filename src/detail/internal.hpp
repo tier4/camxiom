@@ -72,32 +72,6 @@ inline bool removeIntrinsics(
 // Distortion model consistency helpers (type-only, shared by float and double)
 // ---------------------------------------------------------------------------
 
-inline DistortionSpace expectedSpaceFromType(const DistortionModelType type)
-{
-  switch (type)
-  {
-    case DistortionModelType::NONE:
-      return DistortionSpace::NONE;
-    case DistortionModelType::RADTAN4:
-    case DistortionModelType::RADTAN5:
-    case DistortionModelType::RATIONAL8:
-    case DistortionModelType::THIN_PRISM12:
-    case DistortionModelType::TILTED14:
-      return DistortionSpace::PLANE;
-    case DistortionModelType::KB4:
-    case DistortionModelType::KB8:
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
-      return DistortionSpace::ANGLE;
-    case DistortionModelType::OMNIDIRECTIONAL:
-    case DistortionModelType::UNKNOWN:
-      break;
-  }
-  return DistortionSpace::NONE;
-}
-
 inline bool typeRequiresRational(const DistortionModelType type)
 {
   return type == DistortionModelType::RATIONAL8 || type == DistortionModelType::THIN_PRISM12 ||
@@ -224,8 +198,8 @@ inline std::size_t requiredFiniteCoefficientCount(const DistortionModelType type
 }
 
 inline StatusCode validateDistortionConsistency(
-  const DistortionModelType type, const DistortionSpace space, const std::uint8_t count,
-  const bool is_rational, const bool has_thin_prism, const bool has_tilt
+  const DistortionModelType type, const std::uint8_t count, const bool is_rational,
+  const bool has_thin_prism, const bool has_tilt
 )
 {
   if (type == DistortionModelType::UNKNOWN || type == DistortionModelType::OMNIDIRECTIONAL)
@@ -234,16 +208,11 @@ inline StatusCode validateDistortionConsistency(
   }
   if (type == DistortionModelType::NONE)
   {
-    if (space != DistortionSpace::NONE || count != 0U || is_rational || has_thin_prism || has_tilt)
+    if (count != 0U || is_rational || has_thin_prism || has_tilt)
     {
       return StatusCode::INVALID_MODEL;
     }
     return StatusCode::OK;
-  }
-  const DistortionSpace expected_space = expectedSpaceFromType(type);
-  if (expected_space != DistortionSpace::NONE && space != expected_space)
-  {
-    return StatusCode::INVALID_MODEL;
   }
   if (count < minimumCoefficientCountForType(type))
   {

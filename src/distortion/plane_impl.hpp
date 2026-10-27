@@ -269,7 +269,7 @@ inline StatusCode distortPlaneModel(
     return StatusCode::INVALID_INPUT;
   }
 
-  switch (model.space)
+  switch (distortionSpaceOf(model.type))
   {
     case DistortionSpace::NONE:
       out_xy = in_xy;
@@ -319,7 +319,7 @@ inline StatusCode distortPlaneModelWithJacobian(
     return StatusCode::INVALID_INPUT;
   }
 
-  switch (model.space)
+  switch (distortionSpaceOf(model.type))
   {
     case DistortionSpace::NONE:
       out_xy = in_xy;
@@ -569,7 +569,7 @@ inline StatusCode undistortPlaneModel(
   NormPointT<T> &undistorted_xy
 )
 {
-  switch (model.space)
+  switch (distortionSpaceOf(model.type))
   {
     case DistortionSpace::NONE:
       undistorted_xy = observed_xy;

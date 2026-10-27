@@ -86,7 +86,6 @@ CameraModelT<To> cameraModelCast(const CameraModelT<From> &m)
   out.projection.beta = static_cast<To>(m.projection.beta);
 
   out.distortion.type = m.distortion.type;
-  out.distortion.space = m.distortion.space;
   for (std::size_t i = 0; i < m.distortion.coeffs.size(); ++i)
   {
     out.distortion.coeffs[i] = static_cast<To>(m.distortion.coeffs[i]);

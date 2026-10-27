@@ -52,7 +52,6 @@ camxiom::CameraModel makePinhole()
   m.projection.type = camxiom::ProjectionModelType::PINHOLE;
   m.projection.theta_max = 1.5707f;  // unused for pinhole
   m.distortion.type = camxiom::DistortionModelType::NONE;
-  m.distortion.space = camxiom::DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }

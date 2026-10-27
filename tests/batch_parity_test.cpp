@@ -70,7 +70,6 @@ CameraModel makeBase(ProjectionModelType type, float fx)
   m.projection.type = type;
   m.projection.theta_max = static_cast<float>(constants::kPi) - 1e-4f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -82,7 +81,6 @@ std::vector<NamedModel> allModels()
   CameraModel pinhole = makeBase(ProjectionModelType::PINHOLE, 500.0f);
   pinhole.projection.theta_max = static_cast<float>(constants::kHalfPi);
   pinhole.distortion.type = DistortionModelType::RADTAN5;
-  pinhole.distortion.space = DistortionSpace::PLANE;
   pinhole.distortion.coeffs[0] = -0.05f;
   pinhole.distortion.coeffs[1] = 0.01f;
   pinhole.distortion.count = 5U;
@@ -90,7 +88,6 @@ std::vector<NamedModel> allModels()
 
   CameraModel fisheye = makeBase(ProjectionModelType::FISHEYE_THETA, 280.0f);
   fisheye.distortion.type = DistortionModelType::EQUIDISTANT;
-  fisheye.distortion.space = DistortionSpace::ANGLE;
   models.push_back({"fisheye+equidistant", fisheye});
 
   // KB4 is the one family the aarch64 dispatch keeps on the SCALAR inverse
@@ -101,7 +98,6 @@ std::vector<NamedModel> allModels()
   // branch run.
   CameraModel kb4 = makeBase(ProjectionModelType::FISHEYE_THETA, 280.0f);
   kb4.distortion.type = DistortionModelType::KB4;
-  kb4.distortion.space = DistortionSpace::ANGLE;
   kb4.distortion.count = 4U;
   kb4.distortion.coeffs[0] = 0.02f;
   kb4.distortion.coeffs[1] = -0.005f;

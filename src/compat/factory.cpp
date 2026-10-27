@@ -120,7 +120,6 @@ CameraModelT<T> makeCameraModelImpl(const CameraInfo &camera_info)
   }
 
   model.distortion.type = parsed_type;
-  model.distortion.space = detail::distortionSpaceFromType(parsed_type);
 
   const std::size_t effective_d_count =
     camera_info.d.size() > distortion_offset ? (camera_info.d.size() - distortion_offset) : 0U;
