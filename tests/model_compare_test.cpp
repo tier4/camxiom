@@ -132,7 +132,7 @@ TEST(ModelCompareApprox, TypeAndCountMustMatchExactly)
   EXPECT_FALSE(camxiom::isApprox(a, b));
 
   b = a;
-  b.projection.type = ProjectionModelType::FISHEYE_THETA;
+  b.projection.type = ProjectionModelType::EQUIDISTANT;
   EXPECT_FALSE(camxiom::isApprox(a, b));
 }
 

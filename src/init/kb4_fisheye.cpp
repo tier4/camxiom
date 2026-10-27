@@ -88,7 +88,7 @@ constexpr double kFxConvergenceTol = 1e-3;
 
 /// Build the camxiom CameraModel64 seed used during Phase A pose recovery.
 ///
-/// Bootstrap iteration 0 uses EQUIDISTANT distortion (k_i = 0 implicitly,
+/// Bootstrap iteration 0 uses the plain equidistant law (no correction,
 /// theta_d = theta) since we have no KB4 estimate yet. Subsequent
 /// iterations use KB4 with the current (k1, k2, 0, 0) Phase A estimate so
 /// the MS1-3 PnP sees a more accurate forward model and returns better
@@ -104,7 +104,7 @@ camxiom::CameraModel64 makeSeedModel(
   model.intrinsics.cy = cy;
   model.intrinsics.skew = 0.0;
 
-  model.projection.type = camxiom::ProjectionModelType::FISHEYE_THETA;
+  model.projection.type = camxiom::ProjectionModelType::EQUIDISTANT;
 
   model.distortion.coeffs.fill(0.0);
   model.distortion.is_rational = false;
@@ -124,7 +124,7 @@ camxiom::CameraModel64 makeSeedModel(
   }
   else
   {
-    model.distortion.type = camxiom::DistortionModelType::EQUIDISTANT;
+    model.distortion.type = camxiom::DistortionModelType::NONE;
     model.distortion.count = 0U;
   }
 
@@ -136,7 +136,9 @@ camxiom::CameraModel64 makeSeedModel(
   // same monotone-range rule as camxiom::updateThetaMax. (A pi/2 cap here
   // would instead reject peripheral / >180-deg-FOV observations outright.)
   {
-    camxiom::DistortionModel dist32{};
+    camxiom::CameraModel model32{};
+    model32.projection.type = model.projection.type;
+    camxiom::DistortionModel &dist32 = model32.distortion;
     dist32.type = model.distortion.type;
     dist32.count = model.distortion.count;
     dist32.coeffs.fill(0.0f);
@@ -146,7 +148,7 @@ camxiom::CameraModel64 makeSeedModel(
         static_cast<float>(model.distortion.coeffs[static_cast<std::size_t>(i)]);
     }
     model.projection.theta_max =
-      static_cast<double>(camxiom::detail::defaultFisheyeThetaMax(dist32));
+      static_cast<double>(camxiom::detail::defaultFisheyeThetaMax(model32));
   }
 
   return model;

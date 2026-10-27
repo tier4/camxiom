@@ -46,7 +46,7 @@ inline PixelResultT<T> rayToPixel(
   using detail_impl::invalidPixelResult;
   constexpr T kEpsilon = detail_impl::PlaneTraits<T>::kEpsilon;
 
-  if (model.projection.type != ProjectionModelType::FISHEYE_THETA)
+  if (!isFisheyeProjection(model.projection.type))
   {
     return invalidPixelResult<T>(StatusCode::INVALID_MODEL);
   }
@@ -77,7 +77,10 @@ inline PixelResultT<T> rayToPixel(
   }
 
   T theta_d = T(0);
-  const StatusCode theta_status = detail_impl::distortTheta<T>(model.distortion, theta, theta_d);
+  const StatusCode theta_status = detail_impl::distortTheta<T>(
+    detail_impl::angleLawOf(model.projection.type, model.distortion.type), model.distortion, theta,
+    theta_d
+  );
   if (theta_status != StatusCode::OK)
   {
     return invalidPixelResult<T>(theta_status);
@@ -111,7 +114,7 @@ inline RayResultT<T> pixelToRay(
   using detail_impl::invalidRayResult;
   constexpr T kEpsilon = detail_impl::PlaneTraits<T>::kEpsilon;
 
-  if (model.projection.type != ProjectionModelType::FISHEYE_THETA)
+  if (!isFisheyeProjection(model.projection.type))
   {
     return invalidRayResult<T>(StatusCode::INVALID_MODEL);
   }

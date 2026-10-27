@@ -120,15 +120,15 @@ CameraModel makeModel(Family fam, std::mt19937_64 &rng)
     }
     case Family::FisheyeEquidistant: {
       CameraModel m = makeCommonIntrinsics(rng, 160.0f, 340.0f);
-      m.projection.type = ProjectionModelType::FISHEYE_THETA;
-      m.distortion.type = DistortionModelType::EQUIDISTANT;
+      m.projection.type = ProjectionModelType::EQUIDISTANT;
+      m.distortion.type = DistortionModelType::NONE;
       m.distortion.count = 0U;
       m.projection.theta_max = static_cast<float>(kPi) - 1e-4f;
       return m;
     }
     case Family::FisheyeKB4: {
       CameraModel m = makeCommonIntrinsics(rng, 160.0f, 340.0f);
-      m.projection.type = ProjectionModelType::FISHEYE_THETA;
+      m.projection.type = ProjectionModelType::EQUIDISTANT;
       m.distortion.type = DistortionModelType::KB4;
       m.distortion.coeffs[0] = frand(rng, -0.03f, 0.03f);
       m.distortion.coeffs[1] = frand(rng, -0.01f, 0.01f);

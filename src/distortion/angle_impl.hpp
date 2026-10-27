@@ -30,6 +30,7 @@
 // and never tuned separately, so the divergence was unintentional rather than a
 // deliberate speed/precision trade-off.
 
+#include "camxiom/internal/angle_law.hpp"
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/types.hpp"
 #include "distortion/plane_impl.hpp"  // PlaneTraits<T>::kEpsilon (shared threshold)
@@ -41,8 +42,12 @@
 namespace camxiom::detail_impl
 {
 
+// `law` selects the radial function (see internal/angle_law.hpp); `model`
+// supplies the KB coefficients when the law has them.
 template <typename T>
-inline StatusCode distortTheta(const DistortionModelT<T> &model, const T theta, T &theta_d)
+inline StatusCode distortTheta(
+  const AngleLaw law, const DistortionModelT<T> &model, const T theta, T &theta_d
+)
 {
   if (!std::isfinite(theta))
   {
@@ -53,13 +58,12 @@ inline StatusCode distortTheta(const DistortionModelT<T> &model, const T theta, 
     return StatusCode::DOMAIN_ERROR;
   }
 
-  switch (model.type)
+  switch (law)
   {
-    case DistortionModelType::NONE:
-    case DistortionModelType::EQUIDISTANT:
+    case AngleLaw::EQUIDISTANT:
       theta_d = theta;
       break;
-    case DistortionModelType::KB4: {
+    case AngleLaw::KB4: {
       const T t2 = theta * theta;
       const T t3 = t2 * theta;
       const T t5 = t3 * t2;
@@ -69,7 +73,7 @@ inline StatusCode distortTheta(const DistortionModelT<T> &model, const T theta, 
       theta_d = theta + c[0] * t3 + c[1] * t5 + c[2] * t7 + c[3] * t9;
       break;
     }
-    case DistortionModelType::KB8: {
+    case AngleLaw::KB8: {
       const T t2 = theta * theta;
       const T t3 = t2 * theta;
       const T t5 = t3 * t2;
@@ -84,21 +88,16 @@ inline StatusCode distortTheta(const DistortionModelT<T> &model, const T theta, 
                 c[6] * t15 + c[7] * t17;
       break;
     }
-    case DistortionModelType::EQUISOLID:
+    case AngleLaw::EQUISOLID:
       theta_d = T(2) * std::sin(theta * T(0.5));
       break;
-    case DistortionModelType::STEREOGRAPHIC:
+    case AngleLaw::STEREOGRAPHIC:
       theta_d = T(2) * std::tan(theta * T(0.5));
       break;
-    case DistortionModelType::ORTHOGRAPHIC:
+    case AngleLaw::ORTHOGRAPHIC:
       theta_d = std::sin(theta);
       break;
-    case DistortionModelType::RADTAN4:
-    case DistortionModelType::RADTAN5:
-    case DistortionModelType::RATIONAL8:
-    case DistortionModelType::THIN_PRISM12:
-    case DistortionModelType::TILTED14:
-    case DistortionModelType::UNKNOWN:
+    case AngleLaw::INVALID:
       return StatusCode::INVALID_MODEL;
   }
 
@@ -111,7 +110,7 @@ inline StatusCode distortTheta(const DistortionModelT<T> &model, const T theta, 
 
 template <typename T>
 inline StatusCode distortThetaDerivative(
-  const DistortionModelT<T> &model, const T theta, T &derivative_out
+  const AngleLaw law, const DistortionModelT<T> &model, const T theta, T &derivative_out
 )
 {
   if (!std::isfinite(theta) || theta < T(0))
@@ -119,13 +118,12 @@ inline StatusCode distortThetaDerivative(
     return StatusCode::INVALID_INPUT;
   }
 
-  switch (model.type)
+  switch (law)
   {
-    case DistortionModelType::NONE:
-    case DistortionModelType::EQUIDISTANT:
+    case AngleLaw::EQUIDISTANT:
       derivative_out = T(1);
       break;
-    case DistortionModelType::KB4: {
+    case AngleLaw::KB4: {
       const T t2 = theta * theta;
       const T t4 = t2 * t2;
       const T t6 = t4 * t2;
@@ -135,7 +133,7 @@ inline StatusCode distortThetaDerivative(
         T(1) + T(3) * c[0] * t2 + T(5) * c[1] * t4 + T(7) * c[2] * t6 + T(9) * c[3] * t8;
       break;
     }
-    case DistortionModelType::KB8: {
+    case AngleLaw::KB8: {
       const T t2 = theta * theta;
       const T t4 = t2 * t2;
       const T t6 = t4 * t2;
@@ -150,23 +148,18 @@ inline StatusCode distortThetaDerivative(
                        T(15) * c[6] * t14 + T(17) * c[7] * t16;
       break;
     }
-    case DistortionModelType::EQUISOLID:
+    case AngleLaw::EQUISOLID:
       derivative_out = std::cos(theta * T(0.5));
       break;
-    case DistortionModelType::STEREOGRAPHIC: {
+    case AngleLaw::STEREOGRAPHIC: {
       const T c2 = std::cos(theta * T(0.5));
       derivative_out = T(1) / (c2 * c2);
       break;
     }
-    case DistortionModelType::ORTHOGRAPHIC:
+    case AngleLaw::ORTHOGRAPHIC:
       derivative_out = std::cos(theta);
       break;
-    case DistortionModelType::RADTAN4:
-    case DistortionModelType::RADTAN5:
-    case DistortionModelType::RATIONAL8:
-    case DistortionModelType::THIN_PRISM12:
-    case DistortionModelType::TILTED14:
-    case DistortionModelType::UNKNOWN:
+    case AngleLaw::INVALID:
       return StatusCode::INVALID_MODEL;
   }
 
@@ -206,9 +199,10 @@ inline StatusCode undistortThetaHybrid(
   {
     return StatusCode::INVALID_MODEL;
   }
+  const AngleLaw law = angleLawOf(projection.type, model.type);
 
   T f_min = T(0);
-  StatusCode status = distortTheta<T>(model, theta_min, f_min);
+  StatusCode status = distortTheta<T>(law, model, theta_min, f_min);
   if (status != StatusCode::OK)
   {
     return status;
@@ -216,7 +210,7 @@ inline StatusCode undistortThetaHybrid(
   f_min -= radius_d;
 
   T f_max = T(0);
-  status = distortTheta<T>(model, theta_max, f_max);
+  status = distortTheta<T>(law, model, theta_max, f_max);
   if (status != StatusCode::OK)
   {
     return status;
@@ -233,7 +227,7 @@ inline StatusCode undistortThetaHybrid(
   for (int iter = 0; iter < max_iter; ++iter)
   {
     T theta_d = T(0);
-    status = distortTheta<T>(model, theta, theta_d);
+    status = distortTheta<T>(law, model, theta, theta_d);
     if (status != StatusCode::OK)
     {
       return status;
@@ -257,7 +251,7 @@ inline StatusCode undistortThetaHybrid(
     }
 
     T derivative = T(0);
-    status = distortThetaDerivative<T>(model, theta, derivative);
+    status = distortThetaDerivative<T>(law, model, theta, derivative);
     if (status != StatusCode::OK)
     {
       return status;
@@ -282,7 +276,7 @@ inline StatusCode undistortThetaHybrid(
     if (step <= step_tolerance)
     {
       T theta_d_check = T(0);
-      status = distortTheta<T>(model, theta, theta_d_check);
+      status = distortTheta<T>(law, model, theta, theta_d_check);
       if (status != StatusCode::OK)
       {
         return status;
@@ -353,6 +347,8 @@ inline PolynomialFisheyeDomain<T> scanPolynomialFisheyeDomain(const DistortionMo
 {
   constexpr T theta_start = fisheyeThetaScanStart<T>();
   constexpr T theta_cap = fisheyeThetaScanCap<T>();
+  // The KB corrections only exist on top of the equidistant law.
+  const AngleLaw law = angleLawOf(ProjectionModelType::EQUIDISTANT, model.type);
 
   PolynomialFisheyeDomain<T> result;
   // Validate the starting sample too: blindly returning theta_start used to
@@ -364,7 +360,7 @@ inline PolynomialFisheyeDomain<T> scanPolynomialFisheyeDomain(const DistortionMo
     result.theta_limit = theta;
 
     T theta_d = T(0);
-    result.limit_status = distortTheta<T>(model, theta, theta_d);
+    result.limit_status = distortTheta<T>(law, model, theta, theta_d);
     if (result.limit_status != StatusCode::OK)
     {
       return result;
@@ -376,7 +372,7 @@ inline PolynomialFisheyeDomain<T> scanPolynomialFisheyeDomain(const DistortionMo
     }
 
     T derivative = T(0);
-    result.limit_status = distortThetaDerivative<T>(model, theta, derivative);
+    result.limit_status = distortThetaDerivative<T>(law, model, theta, derivative);
     if (result.limit_status != StatusCode::OK)
     {
       return result;

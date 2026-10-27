@@ -53,6 +53,14 @@ namespace camxiom
 //   the maximum accepted angle between a ray and the optical axis, in
 //   radians.
 //
+// Projection law and lens correction:
+//   ProjectionModelT::type names the law (pinhole, a fisheye law, or a
+//   sphere-based model); DistortionModelT::type names the correction applied
+//   on top of it. Plane corrections (radtan family) combine with PINHOLE,
+//   OMNIDIRECTIONAL, DOUBLE_SPHERE and EUCM; the angle corrections KB4/KB8
+//   combine with EQUIDISTANT only; EQUISOLID, STEREOGRAPHIC and ORTHOGRAPHIC
+//   take no correction. validateCameraModel rejects other combinations.
+//
 // Distortion coefficients (DistortionModelT::coeffs, OpenCV-compatible
 // ordering; `count` says how many leading entries are meaningful):
 //   PLANE space (pinhole-family), full TILTED14 layout:
@@ -60,9 +68,10 @@ namespace camxiom
 //     RADTAN4 uses the first 4, RADTAN5 the first 5, RATIONAL8 the first 8
 //     (k4..k6 form the denominator), THIN_PRISM12 the first 12, TILTED14
 //     all 14 (tau_x/tau_y in radians).
-//   ANGLE space (fisheye-family): [k1, k2, k3, k4] on the incidence angle,
-//     theta_d = theta * (1 + k1*theta^2 + k2*theta^4 + k3*theta^6
-//                          + k4*theta^8) (Kannala-Brandt / OpenCV fisheye).
+//   ANGLE space (on the equidistant law): KB4 [k1, k2, k3, k4] on the
+//     incidence angle, theta_d = theta * (1 + k1*theta^2 + k2*theta^4
+//     + k3*theta^6 + k4*theta^8) (Kannala-Brandt / OpenCV fisheye); KB8
+//     continues the series to k8*theta^16.
 //   Projection-level parameters (omnidirectional xi, double-sphere xi/alpha,
 //   EUCM alpha/beta) live in ProjectionModelT, NOT in coeffs. (Interchange
 //   formats that pack them into D — e.g. sensor_msgs — are unpacked by the
@@ -91,10 +100,6 @@ enum class DistortionModelType : std::uint8_t {
   TILTED14,
   KB4,
   KB8,
-  EQUIDISTANT,
-  EQUISOLID,
-  STEREOGRAPHIC,
-  ORTHOGRAPHIC,
   UNKNOWN
 };
 
@@ -102,8 +107,8 @@ enum class DistortionSpace : std::uint8_t { NONE = 0U, PLANE, ANGLE };
 
 /// The space a distortion model acts in. It is a property of the type, not a
 /// separate setting: the radtan family corrects the normalized image plane
-/// (PLANE), the Kannala-Brandt family corrects the incidence angle (ANGLE),
-/// and NONE (or an unusable type) corrects nothing.
+/// (PLANE), the Kannala-Brandt family corrects the incidence angle of the
+/// equidistant law (ANGLE), and NONE (or an unusable type) corrects nothing.
 constexpr DistortionSpace distortionSpaceOf(const DistortionModelType type) noexcept
 {
   switch (type)
@@ -116,10 +121,6 @@ constexpr DistortionSpace distortionSpaceOf(const DistortionModelType type) noex
       return DistortionSpace::PLANE;
     case DistortionModelType::KB4:
     case DistortionModelType::KB8:
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
       return DistortionSpace::ANGLE;
     case DistortionModelType::NONE:
     case DistortionModelType::UNKNOWN:
@@ -128,14 +129,32 @@ constexpr DistortionSpace distortionSpaceOf(const DistortionModelType type) noex
   return DistortionSpace::NONE;
 }
 
+/// The projection law: how a ray direction maps to the normalized image
+/// plane before any lens correction. Fisheye laws are functions of the angle
+/// theta between the ray and the optical axis (equidistant r = theta,
+/// equisolid r = 2 sin(theta/2), stereographic r = 2 tan(theta/2),
+/// orthographic r = sin(theta)); the others are pinhole and the sphere-based
+/// Mei, double-sphere and EUCM models. Lens corrections live in
+/// DistortionModelType.
 enum class ProjectionModelType : std::uint8_t {
   PINHOLE = 0U,
-  FISHEYE_THETA,
+  EQUIDISTANT,
+  EQUISOLID,
+  STEREOGRAPHIC,
+  ORTHOGRAPHIC,
   OMNIDIRECTIONAL,
   DOUBLE_SPHERE,
   EUCM,
   UNKNOWN
 };
+
+/// True for the fisheye laws, which map the angle theta to an image radius:
+/// EQUIDISTANT, EQUISOLID, STEREOGRAPHIC and ORTHOGRAPHIC.
+constexpr bool isFisheyeProjection(const ProjectionModelType type) noexcept
+{
+  return type == ProjectionModelType::EQUIDISTANT || type == ProjectionModelType::EQUISOLID ||
+         type == ProjectionModelType::STEREOGRAPHIC || type == ProjectionModelType::ORTHOGRAPHIC;
+}
 
 // ---------------------------------------------------------------------------
 // Scalar-templated geometry types (#1 float/double unification).

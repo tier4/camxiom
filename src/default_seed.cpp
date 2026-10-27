@@ -15,6 +15,9 @@
 #include "camxiom/default_seed.hpp"
 
 #include "camxiom/internal/constants.hpp"
+#include "camxiom/model.hpp"
+
+#include <cmath>
 
 namespace camxiom
 {
@@ -22,7 +25,7 @@ namespace camxiom
 namespace
 {
 
-/// Apply the common intrinsics shared by all five magic seeds:
+/// Apply the common intrinsics shared by all magic seeds:
 /// principal point at the image centre, zero skew. Computed in double
 /// then narrowed to the float intrinsics fields.
 void setCommonIntrinsics(CameraModel &model, int image_width, int image_height)
@@ -66,8 +69,8 @@ CameraModel getDefaultSeed(ProjectionModelType model_type, int image_width, int 
       break;
     }
 
-    case ProjectionModelType::FISHEYE_THETA: {
-      model.projection.type = ProjectionModelType::FISHEYE_THETA;
+    case ProjectionModelType::EQUIDISTANT: {
+      model.projection.type = ProjectionModelType::EQUIDISTANT;
       // theta_max = pi. constants::kPiF is bit-identical to detail::kPi
       // used by validateCameraModel, so theta_max <= detail::kPi holds
       // (the bound is inclusive).
@@ -83,6 +86,22 @@ CameraModel getDefaultSeed(ProjectionModelType model_type, int image_width, int 
       model.distortion.is_rational = false;
       model.distortion.has_thin_prism = false;
       model.distortion.has_tilt = false;
+      break;
+    }
+
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC: {
+      // The plain laws take no correction. Like the equidistant seed, the
+      // focal length puts a ray 90 degrees off axis at h/2, and theta_max is
+      // the law's own monotone range (updateThetaMax's rule).
+      model.projection.type = model_type;
+      setCommonIntrinsics(model, image_width, image_height);
+      const double r_at_90deg = model_type == ProjectionModelType::EQUISOLID       ? std::sqrt(2.0)
+                                : model_type == ProjectionModelType::STEREOGRAPHIC ? 2.0
+                                                                                   : 1.0;
+      setIsotropicFocal(model, h / (2.0 * r_at_90deg));
+      updateThetaMax(model);
       break;
     }
 

@@ -25,7 +25,7 @@
 // Precision-specific pieces fold into the template cleanly:
 //   - the focal-length floor uses PlaneTraits<T>::kEpsilon (float 1e-8f /
 //     double 1e-15), matching the old detail::kEpsilon / detail64::kEpsilon;
-//   - the FISHEYE_THETA theta_max upper bound compares against
+//   - the fisheye-law theta_max upper bound compares against
 //     static_cast<T>(constants::kPiF), i.e. the *float* pi at width T. This is
 //     the structural form of the D47 fix: theta_max originates as a float, so
 //     using the float pi (widened to double for the double path) makes the
@@ -78,7 +78,7 @@ inline StatusCode validateCameraModelQueryImpl(const CameraModelT<T> &model)
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (projection.type == ProjectionModelType::FISHEYE_THETA)
+  if (isFisheyeProjection(projection.type))
   {
     // theta_max compared against the float pi at width T (see header note: D47).
     if (!std::isfinite(projection.theta_max) || projection.theta_max <= T(0) || projection.theta_max > static_cast<T>(camxiom::constants::kPiF))
@@ -172,16 +172,15 @@ inline StatusCode validateCameraModelQueryImpl(const CameraModelT<T> &model)
       return StatusCode::INVALID_MODEL;
     }
   }
-  // Coefficient-free types (NONE and the ideal trig fisheye mappings) define
-  // ZERO meaningful entries: the scalar kernels ignore coeffs[] entirely,
-  // while the fixed-width bulk kernels read leading entries unconditionally
-  // (the SIMD fisheye forward applies coeffs[0..3] as a KB polynomial; the
-  // plane-space SIMD kernels apply the radtan tail). Requiring every entry to
-  // be zero makes the two readings coincide exactly — a zero polynomial IS
-  // the identity / ideal mapping — so a model carrying stale non-zero
-  // coefficients under one of these types is rejected instead of projecting
-  // differently per code path. Same contract-hardening rationale as the
-  // RADTAN4 rule above.
+  // The coefficient-free type (NONE) defines ZERO meaningful entries: the
+  // scalar kernels ignore coeffs[] entirely, while the fixed-width bulk
+  // kernels read leading entries unconditionally (the SIMD fisheye forward
+  // applies coeffs[0..3] as a KB polynomial; the plane-space SIMD kernels
+  // apply the radtan tail). Requiring every entry to be zero makes the two
+  // readings coincide exactly — a zero polynomial IS the uncorrected law —
+  // so a model carrying stale non-zero coefficients under NONE is rejected
+  // instead of projecting differently per code path. Same contract-hardening
+  // rationale as the RADTAN4 rule above.
   if (required_count == 0U)
   {
     for (const T value : distortion.coeffs)
@@ -193,17 +192,11 @@ inline StatusCode validateCameraModelQueryImpl(const CameraModelT<T> &model)
     }
   }
 
-  if (projection.type == ProjectionModelType::PINHOLE && distortionSpaceOf(distortion.type) == DistortionSpace::ANGLE)
+  if (!detail::isSupportedModelCombination(projection.type, distortion.type))
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (projection.type == ProjectionModelType::FISHEYE_THETA && distortionSpaceOf(distortion.type) == DistortionSpace::PLANE)
-  {
-    return StatusCode::INVALID_MODEL;
-  }
-  if (projection.type == ProjectionModelType::FISHEYE_THETA &&
-      distortion.type == DistortionModelType::ORTHOGRAPHIC &&
-      projection.theta_max > static_cast<T>(camxiom::constants::kHalfPiF))
+  if (projection.type == ProjectionModelType::ORTHOGRAPHIC && projection.theta_max > static_cast<T>(camxiom::constants::kHalfPiF))
   {
     // theta_d = sin(theta) folds over past pi/2; the inverse bracket assumes
     // monotonicity on [0, theta_max], so a wider cap silently turns solvable
@@ -212,7 +205,7 @@ inline StatusCode validateCameraModelQueryImpl(const CameraModelT<T> &model)
     // width T, same reasoning as the D47 pi bound above).
     return StatusCode::INVALID_MODEL;
   }
-  if (projection.type == ProjectionModelType::FISHEYE_THETA)
+  if (isFisheyeProjection(projection.type))
   {
     // The inverse bracket (undistortThetaHybrid) seeds its upper endpoint with
     // distortTheta(theta_max) and rejects EVERY query when that endpoint is
@@ -227,8 +220,9 @@ inline StatusCode validateCameraModelQueryImpl(const CameraModelT<T> &model)
     // coefficients; models built via detail::defaultFisheyeThetaMax /
     // updateThetaMax always pass (their caps stop short of the pole and
     // inside the polynomial's positive monotone range).
+    const AngleLaw law = angleLawOf(projection.type, distortion.type);
     T theta_d_at_cap = T(0);
-    if (distortTheta<T>(distortion, projection.theta_max, theta_d_at_cap) != StatusCode::OK || theta_d_at_cap <= T(0))
+    if (distortTheta<T>(law, distortion, projection.theta_max, theta_d_at_cap) != StatusCode::OK || theta_d_at_cap <= T(0))
     {
       return StatusCode::INVALID_MODEL;
     }
@@ -245,24 +239,14 @@ inline StatusCode validateCameraModelQueryImpl(const CameraModelT<T> &model)
     // Interior folds that recover by the cap (dip-and-recover polynomials)
     // are invisible to any endpoint test; the full-tier scan below catches
     // those.
-    if (detail::isPolynomialFisheyeDistortion(distortion.type))
+    if (isPolynomialAngleLaw(law))
     {
       T derivative_at_cap = T(0);
-      if (distortThetaDerivative<T>(distortion, projection.theta_max, derivative_at_cap) != StatusCode::OK || derivative_at_cap < T(0))
+      if (distortThetaDerivative<T>(law, distortion, projection.theta_max, derivative_at_cap) != StatusCode::OK || derivative_at_cap < T(0))
       {
         return StatusCode::INVALID_MODEL;
       }
     }
-  }
-  if (projection.type == ProjectionModelType::OMNIDIRECTIONAL && distortionSpaceOf(distortion.type) == DistortionSpace::ANGLE)
-  {
-    return StatusCode::INVALID_MODEL;
-  }
-  if ((projection.type == ProjectionModelType::DOUBLE_SPHERE ||
-       projection.type == ProjectionModelType::EUCM) &&
-      distortionSpaceOf(distortion.type) == DistortionSpace::ANGLE)
-  {
-    return StatusCode::INVALID_MODEL;
   }
 
   if (distortion.has_tilt)
@@ -313,7 +297,7 @@ inline StatusCode validateCameraModelImpl(const CameraModelT<T> &model)
     return query_status;
   }
 
-  if (model.projection.type == ProjectionModelType::FISHEYE_THETA &&
+  if (isFisheyeProjection(model.projection.type) &&
       detail::isPolynomialFisheyeDistortion(model.distortion.type))
   {
     const T safe = estimateSafeThetaMaxForPolynomialFisheye<T>(model.distortion);

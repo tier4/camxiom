@@ -74,7 +74,8 @@ StatusCode exportFisheyeCameraInfoImpl(
 
   if (profile == FisheyeCompatProfile::CANONICAL)
   {
-    camera_info_out.distortion_model = fisheyeDistortionModelString(external_model.distortion_type);
+    camera_info_out.distortion_model =
+      fisheyeDistortionModelString(external_model.projection_type, external_model.distortion_type);
   }
   else
   {

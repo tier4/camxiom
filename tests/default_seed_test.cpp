@@ -17,8 +17,8 @@
 // This is NOT an init estimator: no synthetic checkerboard, no noise, no
 // ground-truth recovery loop.  The three test families are:
 //   1. ExactFieldValues  — assert every seed field matches the documented
-//                          contract for each of the 5 projection models.
-//   2. ValidatesOk       — for all 5 models across a range of image sizes,
+//                          contract for each projection model.
+//   2. ValidatesOk       — for all models across a range of image sizes,
 //                          validateCameraModel(seed) == StatusCode::OK.
 //   3. InvalidInputSentinel — zero / negative dims and UNKNOWN model type
 //                             return a sentinel whose projection.type is
@@ -104,12 +104,12 @@ TEST(DefaultSeed, ExactFieldValuesPinholeNonSquare)
   }
 }
 
-TEST(DefaultSeed, ExactFieldValuesFisheyeThetaSquare)
+TEST(DefaultSeed, ExactFieldValuesEquidistantSquare)
 {
   const int w = 800, h = 800;
-  const CameraModel m = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, w, h);
+  const CameraModel m = getDefaultSeed(ProjectionModelType::EQUIDISTANT, w, h);
 
-  EXPECT_EQ(m.projection.type, ProjectionModelType::FISHEYE_THETA);
+  EXPECT_EQ(m.projection.type, ProjectionModelType::EQUIDISTANT);
   // theta_max == pi (inclusive bound in the validator; using kPiF exactly)
   EXPECT_FLOAT_EQ(m.projection.theta_max, camxiom::constants::kPiF);
 
@@ -134,12 +134,12 @@ TEST(DefaultSeed, ExactFieldValuesFisheyeThetaSquare)
   }
 }
 
-TEST(DefaultSeed, ExactFieldValuesFisheyeThetaNonSquare)
+TEST(DefaultSeed, ExactFieldValuesEquidistantNonSquare)
 {
   const int w = 1920, h = 1080;
-  const CameraModel m = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, w, h);
+  const CameraModel m = getDefaultSeed(ProjectionModelType::EQUIDISTANT, w, h);
 
-  EXPECT_EQ(m.projection.type, ProjectionModelType::FISHEYE_THETA);
+  EXPECT_EQ(m.projection.type, ProjectionModelType::EQUIDISTANT);
   EXPECT_FLOAT_EQ(m.projection.theta_max, camxiom::constants::kPiF);
 
   // cx from width, cy/fx/fy from height
@@ -299,14 +299,14 @@ TEST(DefaultSeed, ExactFieldValuesEucmNonSquare)
 }
 
 // Also exercise the representative 1280x960 size mentioned in the spec
-// for the FISHEYE_THETA model (non-power-of-2 height gives a non-trivial
+// for the EQUIDISTANT model (non-power-of-2 height gives a non-trivial
 // h/pi value, exposing float-narrowing issues if kPi precision is wrong).
-TEST(DefaultSeed, ExactFieldValuesFisheyeTheta1280x960)
+TEST(DefaultSeed, ExactFieldValuesEquidistant1280x960)
 {
   const int w = 1280, h = 960;
-  const CameraModel m = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, w, h);
+  const CameraModel m = getDefaultSeed(ProjectionModelType::EQUIDISTANT, w, h);
 
-  EXPECT_EQ(m.projection.type, ProjectionModelType::FISHEYE_THETA);
+  EXPECT_EQ(m.projection.type, ProjectionModelType::EQUIDISTANT);
   EXPECT_FLOAT_EQ(m.projection.theta_max, camxiom::constants::kPiF);
 
   // Mirror the impl: double division, then narrow.
@@ -328,7 +328,7 @@ TEST(DefaultSeed, ExactFieldValuesFisheyeTheta1280x960)
 // For every model, across a representative set of image sizes, the returned
 // seed must satisfy validateCameraModel() == StatusCode::OK.
 // This is the key correctness invariant: it exercises the validator's bounds
-// on theta_max (inclusive pi for FISHEYE_THETA), xi range (DS), etc.
+// on theta_max (inclusive pi for EQUIDISTANT), xi range (DS), etc.
 // ---------------------------------------------------------------------------
 
 namespace
@@ -352,7 +352,10 @@ constexpr SizeParam kTestSizes[] = {
 
 constexpr ProjectionModelType kAllModels[] = {
   ProjectionModelType::PINHOLE,
-  ProjectionModelType::FISHEYE_THETA,
+  ProjectionModelType::EQUIDISTANT,
+  ProjectionModelType::EQUISOLID,
+  ProjectionModelType::STEREOGRAPHIC,
+  ProjectionModelType::ORTHOGRAPHIC,
   ProjectionModelType::OMNIDIRECTIONAL,
   ProjectionModelType::DOUBLE_SPHERE,
   ProjectionModelType::EUCM,
@@ -410,6 +413,32 @@ TEST(DefaultSeed, InvalidInputUnknownModelValidDims)
   const CameraModel m = getDefaultSeed(ProjectionModelType::UNKNOWN, 640, 480);
   EXPECT_EQ(m.projection.type, ProjectionModelType::UNKNOWN);
   EXPECT_EQ(validateCameraModel(m), StatusCode::INVALID_MODEL);
+}
+
+TEST(DefaultSeed, PlainFisheyeLawsCarryNoDistortionAndMapNinetyDegreesToHalfHeight)
+{
+  const int w = 1280, h = 960;
+  for (const auto law :
+       {ProjectionModelType::EQUISOLID, ProjectionModelType::STEREOGRAPHIC,
+        ProjectionModelType::ORTHOGRAPHIC})
+  {
+    const CameraModel m = getDefaultSeed(law, w, h);
+    EXPECT_EQ(m.projection.type, law);
+    EXPECT_EQ(m.distortion.type, DistortionModelType::NONE);
+    EXPECT_EQ(m.distortion.count, 0U);
+    EXPECT_FLOAT_EQ(m.intrinsics.fx, m.intrinsics.fy);
+    EXPECT_FLOAT_EQ(m.intrinsics.cx, static_cast<float>(w / 2.0));
+    EXPECT_FLOAT_EQ(m.intrinsics.cy, static_cast<float>(h / 2.0));
+    const double r_at_90deg = law == ProjectionModelType::EQUISOLID       ? std::sqrt(2.0)
+                              : law == ProjectionModelType::STEREOGRAPHIC ? 2.0
+                                                                          : 1.0;
+    EXPECT_NEAR(m.intrinsics.fx * r_at_90deg, h / 2.0, 1e-3);
+    const float expected_cap = law == ProjectionModelType::ORTHOGRAPHIC
+                                 ? camxiom::constants::kHalfPiF - 1e-4f
+                                 : camxiom::constants::kPiF - 1e-4f;
+    EXPECT_FLOAT_EQ(m.projection.theta_max, expected_cap);
+    EXPECT_EQ(validateCameraModel(m), StatusCode::OK);
+  }
 }
 
 TEST(DefaultSeed, WideAngleModelsDoNotInheritThePinholeCap)

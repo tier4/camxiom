@@ -103,9 +103,9 @@ CameraModel makeFisheyeEquidistant()
   m.intrinsics.fy = 280.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi) - 1e-4f;
-  m.distortion.type = DistortionModelType::EQUIDISTANT;
+  m.distortion.type = DistortionModelType::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -621,7 +621,7 @@ TEST(ProjectionSmoke, ValidationRejectsOrthographicBeyondHalfPi)
   // monotonicity, so a wider cap silently turned solvable pixels into
   // OUT_OF_FOV and broke round-trips.
   CameraModel m = makeFisheyeEquidistant();
-  m.distortion.type = DistortionModelType::ORTHOGRAPHIC;
+  m.projection.type = ProjectionModelType::ORTHOGRAPHIC;
   m.projection.theta_max = 2.0f;
   EXPECT_EQ(validateCameraModel(m), StatusCode::INVALID_MODEL);
   m.projection.theta_max = static_cast<float>(camxiom::constants::kHalfPi) - 1e-4f;
@@ -636,7 +636,7 @@ TEST(ProjectionSmoke, ValidationRejectsStereographicAtThePiPole)
   // including the image centre — came back OUT_OF_FOV while the model still
   // validated OK. The endpoint check must reject it.
   CameraModel m = makeFisheyeEquidistant();
-  m.distortion.type = DistortionModelType::STEREOGRAPHIC;
+  m.projection.type = ProjectionModelType::STEREOGRAPHIC;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi);
   EXPECT_EQ(validateCameraModel(m), StatusCode::INVALID_MODEL);
 
@@ -683,8 +683,32 @@ TEST(ProjectionSmoke, ValidationRejectsPolynomialFisheyeFoldedBelowThetaMax)
 TEST(ProjectionSmoke, ValidationRejectsPinholeWithAngleDistortion)
 {
   CameraModel m = makePinhole(false);
-  m.distortion.type = DistortionModelType::EQUIDISTANT;
+  m.distortion.type = DistortionModelType::KB4;
+  m.distortion.count = 4U;
   EXPECT_EQ(validateCameraModel(m), StatusCode::INVALID_MODEL);
+}
+
+TEST(ProjectionSmoke, ValidationAllowsAngleDistortionOnTheEquidistantLawOnly)
+{
+  for (const ProjectionModelType law :
+       {ProjectionModelType::EQUISOLID, ProjectionModelType::STEREOGRAPHIC,
+        ProjectionModelType::ORTHOGRAPHIC})
+  {
+    CameraModel m = makeFisheyeEquidistant();
+    m.projection.type = law;
+    m.projection.theta_max = 1.5f;
+    ASSERT_EQ(validateCameraModel(m), StatusCode::OK) << toString(law);
+    m.distortion.type = DistortionModelType::KB4;
+    m.distortion.count = 4U;
+    EXPECT_EQ(validateCameraModel(m), StatusCode::INVALID_MODEL) << toString(law);
+    m.distortion.type = DistortionModelType::RADTAN5;
+    m.distortion.count = 5U;
+    EXPECT_EQ(validateCameraModel(m), StatusCode::INVALID_MODEL) << toString(law);
+  }
+  CameraModel m = makeFisheyeEquidistant();
+  m.distortion.type = DistortionModelType::KB4;
+  m.distortion.count = 4U;
+  EXPECT_EQ(validateCameraModel(m), StatusCode::OK);
 }
 
 TEST(ProjectionSmoke, IsRayProjectable)

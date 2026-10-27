@@ -17,8 +17,8 @@
 // Two invariants added after an external numerics audit demonstrated real
 // contract breaks with hand-mutated models:
 //
-//  1. Coefficient-free distortion types (NONE and the ideal trig fisheye
-//     mappings) must carry an all-zero coeffs array. The scalar kernels
+//  1. The coefficient-free distortion type (NONE, on any law including the
+//     plain fisheye laws) must carry an all-zero coeffs array. The scalar kernels
 //     ignore coeffs[] for these types while the fixed-width SIMD batch
 //     kernels apply leading entries unconditionally, so a model with stale
 //     non-zero coefficients used to validate OK yet project ~100 px apart
@@ -54,16 +54,16 @@ namespace
 
 using namespace camxiom;
 
-CameraModel makeIdealFisheye(const DistortionModelType type)
+CameraModel makePlainFisheye(const ProjectionModelType law)
 {
   CameraModel m;
   m.intrinsics.fx = 300.0f;
   m.intrinsics.fy = 300.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = law;
   m.projection.theta_max = static_cast<float>(constants::kPiF) - 1e-4f;
-  m.distortion.type = type;
+  m.distortion.type = DistortionModelType::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -90,7 +90,7 @@ CameraModel makeKb4(
   m.intrinsics.fy = 300.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = theta_max;
   m.distortion.type = DistortionModelType::KB4;
   m.distortion.count = 4U;
@@ -102,28 +102,29 @@ CameraModel makeKb4(
 // 1. Coefficient-free types: all coeffs entries must be zero
 // ---------------------------------------------------------------------------
 
-TEST(ValidateCoeffFree, IdealTrigTypesWithZeroCoeffsStayValid)
+TEST(ValidateCoeffFree, PlainFisheyeLawsWithoutCoeffsStayValid)
 {
-  for (const DistortionModelType type :
-       {DistortionModelType::EQUIDISTANT, DistortionModelType::EQUISOLID,
-        DistortionModelType::STEREOGRAPHIC})
+  for (const ProjectionModelType law :
+       {ProjectionModelType::EQUIDISTANT, ProjectionModelType::EQUISOLID,
+        ProjectionModelType::STEREOGRAPHIC})
   {
-    const CameraModel m = makeIdealFisheye(type);
-    EXPECT_EQ(validateCameraModel(m), StatusCode::OK) << "type=" << static_cast<int>(type);
+    const CameraModel m = makePlainFisheye(law);
+    EXPECT_EQ(validateCameraModel(m), StatusCode::OK) << "law=" << toString(law);
     EXPECT_EQ(validateCameraModel64(toCameraModel64(m)), StatusCode::OK);
   }
-  CameraModel ortho = makeIdealFisheye(DistortionModelType::ORTHOGRAPHIC);
+  CameraModel ortho = makePlainFisheye(ProjectionModelType::ORTHOGRAPHIC);
   ortho.projection.theta_max = static_cast<float>(constants::kHalfPiF) - 1e-4f;
   EXPECT_EQ(validateCameraModel(ortho), StatusCode::OK);
 }
 
-TEST(ValidateCoeffFree, DeclaredCountWithAllZeroCoeffsStaysValid)
+TEST(ValidateCoeffFree, DeclaredCountIsRejectedEvenWhenZero)
 {
-  // A count > 0 is legal for the trig types (e.g. a CameraInfo carrying
-  // d = [0, 0, 0, 0]); only non-zero values are contradictory.
-  CameraModel m = makeIdealFisheye(DistortionModelType::EQUIDISTANT);
+  // NONE has no coefficients on any law, as on pinhole. Readers that meet a
+  // zero-padded D for a plain law (e.g. a CameraInfo carrying d = [0, 0, 0,
+  // 0]) drop it before building the model.
+  CameraModel m = makePlainFisheye(ProjectionModelType::EQUIDISTANT);
   m.distortion.count = 4U;
-  EXPECT_EQ(validateCameraModel(m), StatusCode::OK);
+  EXPECT_EQ(validateCameraModel(m), StatusCode::INVALID_MODEL);
 }
 
 TEST(ValidateCoeffFree, EquidistantWithStaleKb4CoeffsIsRejectedEverywhere)
@@ -131,7 +132,7 @@ TEST(ValidateCoeffFree, EquidistantWithStaleKb4CoeffsIsRejectedEverywhere)
   // The audit scenario: an EQUIDISTANT model carrying stale KB4 coefficients
   // validated OK, then rayToPixel (ignores coeffs) and rayToPixelBatch (SIMD
   // applies coeffs[0..3]) disagreed by ~98 px with both reporting OK.
-  CameraModel m = makeIdealFisheye(DistortionModelType::EQUIDISTANT);
+  CameraModel m = makePlainFisheye(ProjectionModelType::EQUIDISTANT);
   m.distortion.count = 4U;
   m.distortion.coeffs = {-0.02f, 0.005f, -0.001f, 0.0002f};
 

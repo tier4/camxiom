@@ -168,7 +168,7 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobian(
   using detail_impl::invalidJacobian;
   constexpr T kEpsilon = detail_impl::PlaneTraits<T>::kEpsilon;
 
-  if (model.projection.type != ProjectionModelType::FISHEYE_THETA)
+  if (!isFisheyeProjection(model.projection.type))
   {
     return invalidJacobian<T>(StatusCode::INVALID_MODEL);
   }
@@ -202,8 +202,10 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobian(
     return invalidJacobian<T>(StatusCode::DOMAIN_ERROR);
   }
 
+  const detail_impl::AngleLaw law =
+    detail_impl::angleLawOf(model.projection.type, model.distortion.type);
   T theta_d = T(0);
-  const StatusCode td_status = detail_impl::distortTheta<T>(model.distortion, theta, theta_d);
+  const StatusCode td_status = detail_impl::distortTheta<T>(law, model.distortion, theta, theta_d);
   if (td_status != StatusCode::OK)
   {
     return invalidJacobian<T>(td_status);
@@ -211,7 +213,7 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobian(
 
   T dtheta_d_dtheta = T(0);
   const StatusCode dd_status =
-    detail_impl::distortThetaDerivative<T>(model.distortion, theta, dtheta_d_dtheta);
+    detail_impl::distortThetaDerivative<T>(law, model.distortion, theta, dtheta_d_dtheta);
   if (dd_status != StatusCode::OK)
   {
     return invalidJacobian<T>(dd_status);
@@ -643,7 +645,10 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobianDispatch(
   {
     case ProjectionModelType::PINHOLE:
       return pinhole::impl::rayToPixelWithJacobian<T>(model, ray_direction);
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return fisheye::impl::rayToPixelWithJacobian<T>(model, ray_direction);
     case ProjectionModelType::OMNIDIRECTIONAL:
       return omnidirectional::impl::rayToPixelWithJacobian<T>(model, ray_direction);

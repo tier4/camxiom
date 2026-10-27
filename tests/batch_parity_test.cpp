@@ -86,8 +86,8 @@ std::vector<NamedModel> allModels()
   pinhole.distortion.count = 5U;
   models.push_back({"pinhole+radtan5", pinhole});
 
-  CameraModel fisheye = makeBase(ProjectionModelType::FISHEYE_THETA, 280.0f);
-  fisheye.distortion.type = DistortionModelType::EQUIDISTANT;
+  CameraModel fisheye = makeBase(ProjectionModelType::EQUIDISTANT, 280.0f);
+  fisheye.distortion.type = DistortionModelType::NONE;
   models.push_back({"fisheye+equidistant", fisheye});
 
   // KB4 is the one family the aarch64 dispatch keeps on the SCALAR inverse
@@ -96,7 +96,7 @@ std::vector<NamedModel> allModels()
   // including across OpenMP chunks in the large-N tests below. EQUIDISTANT
   // above is deliberately NOT in that opt-out list, so both sides of the
   // branch run.
-  CameraModel kb4 = makeBase(ProjectionModelType::FISHEYE_THETA, 280.0f);
+  CameraModel kb4 = makeBase(ProjectionModelType::EQUIDISTANT, 280.0f);
   kb4.distortion.type = DistortionModelType::KB4;
   kb4.distortion.count = 4U;
   kb4.distortion.coeffs[0] = 0.02f;

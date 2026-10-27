@@ -38,6 +38,7 @@
 // intentional; do NOT add a float variant unless a genuine float consumer of
 // the parameter Jacobian appears. See ARCHITECTURE.md §4.
 
+#include "camxiom/internal/angle_law.hpp"
 #include "camxiom/jacobian_with_distortion_deriv64.hpp"
 #include "camxiom/model.hpp"  // validateCameraModel64
 #include "camxiom/projection64.hpp"
@@ -350,8 +351,7 @@ namespace fisheye
 
 static FullProjectionJacobian64 fullJ64(const CameraModel64 &model, const Eigen::Vector3d &ray)
 {
-  if (model.projection.type != ProjectionModelType::FISHEYE_THETA)
-    return invalidFJ64(StatusCode::INVALID_MODEL);
+  if (!isFisheyeProjection(model.projection.type)) return invalidFJ64(StatusCode::INVALID_MODEL);
   if (!isFinite3d(ray.x(), ray.y(), ray.z())) return invalidFJ64(StatusCode::INVALID_INPUT);
 
   const double X = ray.x(), Y = ray.y(), Z = ray.z();
@@ -372,14 +372,14 @@ static FullProjectionJacobian64 fullJ64(const CameraModel64 &model, const Eigen:
     const auto &dm = model.distortion;
     const auto &c = dm.coeffs;
     const double t2 = theta * theta, t4 = t2 * t2, t6 = t4 * t2, t8 = t4 * t4;
-    switch (dm.type)
+    using detail_impl::AngleLaw;
+    switch (detail_impl::angleLawOf(model.projection.type, dm.type))
     {
-      case DistortionModelType::NONE:
-      case DistortionModelType::EQUIDISTANT:
+      case AngleLaw::EQUIDISTANT:
         theta_d = theta;
         dtheta_d = 1.0;
         break;
-      case DistortionModelType::KB4: {
+      case AngleLaw::KB4: {
         theta_d =
           theta + c[0] * theta * t2 + c[1] * theta * t4 + c[2] * theta * t6 + c[3] * theta * t8;
         dtheta_d = 1.0 + 3.0 * c[0] * t2 + 5.0 * c[1] * t4 + 7.0 * c[2] * t6 + 9.0 * c[3] * t8;
@@ -389,7 +389,7 @@ static FullProjectionJacobian64 fullJ64(const CameraModel64 &model, const Eigen:
         dthetad_dc[3] = theta * t8;
         break;
       }
-      case DistortionModelType::KB8: {
+      case AngleLaw::KB8: {
         const double t10 = t8 * t2, t12 = t8 * t4, t14 = t8 * t6, t16 = t8 * t8;
         theta_d = theta + c[0] * theta * t2 + c[1] * theta * t4 + c[2] * theta * t6 +
                   c[3] * theta * t8 + c[4] * theta * t10 + c[5] * theta * t12 + c[6] * theta * t14 +
@@ -406,26 +406,21 @@ static FullProjectionJacobian64 fullJ64(const CameraModel64 &model, const Eigen:
         dthetad_dc[7] = theta * t16;
         break;
       }
-      case DistortionModelType::EQUISOLID:
+      case AngleLaw::EQUISOLID:
         theta_d = 2.0 * std::sin(theta * 0.5);
         dtheta_d = std::cos(theta * 0.5);
         break;
-      case DistortionModelType::STEREOGRAPHIC: {
+      case AngleLaw::STEREOGRAPHIC: {
         theta_d = 2.0 * std::tan(theta * 0.5);
         const double c2 = std::cos(theta * 0.5);
         dtheta_d = 1.0 / (c2 * c2);
         break;
       }
-      case DistortionModelType::ORTHOGRAPHIC:
+      case AngleLaw::ORTHOGRAPHIC:
         theta_d = std::sin(theta);
         dtheta_d = std::cos(theta);
         break;
-      case DistortionModelType::RADTAN4:
-      case DistortionModelType::RADTAN5:
-      case DistortionModelType::RATIONAL8:
-      case DistortionModelType::THIN_PRISM12:
-      case DistortionModelType::TILTED14:
-      case DistortionModelType::UNKNOWN:
+      case AngleLaw::INVALID:
         return invalidFJ64(StatusCode::INVALID_MODEL);
     }
   }
@@ -748,7 +743,10 @@ FullProjectionJacobian64 rayToPixelWithFullJacobian64Unchecked(
   {
     case ProjectionModelType::PINHOLE:
       return pinhole::fullJ64(model, ray);
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return fisheye::fullJ64(model, ray);
     case ProjectionModelType::OMNIDIRECTIONAL:
       return omnidirectional::fullJ64(model, ray);

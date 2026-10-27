@@ -22,19 +22,24 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <string>
+#include <utility>
 
 namespace
 {
 using namespace camxiom;
 
-CameraModel64 fisheye(DistortionModelType type = DistortionModelType::KB4)
+CameraModel64 fisheye(
+  DistortionModelType type = DistortionModelType::KB4,
+  ProjectionModelType law = ProjectionModelType::EQUIDISTANT
+)
 {
   CameraModel64 model;
   model.intrinsics.fx = 300.123456789123;
   model.intrinsics.fy = 305.987654321987;
   model.intrinsics.cx = 320.0;
   model.intrinsics.cy = 240.0;
-  model.projection.type = ProjectionModelType::FISHEYE_THETA;
+  model.projection.type = law;
   model.projection.theta_max = 1.0;
   model.distortion.type = type;
   if (type == DistortionModelType::KB8)
@@ -80,18 +85,22 @@ TEST(FisheyeDomain64, PolynomialLimitBracketsAnAnalyticFold)
 
 TEST(FisheyeDomain64, ReportsGeometricEndpointsForEveryIdealFamily)
 {
-  for (auto type :
-       {DistortionModelType::NONE, DistortionModelType::EQUIDISTANT, DistortionModelType::EQUISOLID,
-        DistortionModelType::STEREOGRAPHIC, DistortionModelType::ORTHOGRAPHIC,
-        DistortionModelType::KB4, DistortionModelType::KB8})
+  const std::pair<ProjectionModelType, DistortionModelType> families[] = {
+    {ProjectionModelType::EQUIDISTANT, DistortionModelType::NONE},
+    {ProjectionModelType::EQUISOLID, DistortionModelType::NONE},
+    {ProjectionModelType::STEREOGRAPHIC, DistortionModelType::NONE},
+    {ProjectionModelType::ORTHOGRAPHIC, DistortionModelType::NONE},
+    {ProjectionModelType::EQUIDISTANT, DistortionModelType::KB4},
+    {ProjectionModelType::EQUIDISTANT, DistortionModelType::KB8}};
+  for (const auto &[law, type] : families)
   {
-    SCOPED_TRACE(static_cast<int>(type));
-    auto model = fisheye(type);
+    SCOPED_TRACE(std::string(toString(law)) + "+" + toString(type));
+    auto model = fisheye(type, law);
     const auto domain = getFisheyeDomain64(model);
     ASSERT_TRUE(domain.ok());
     EXPECT_EQ(domain.limit, FisheyeDomainLimit::ANGULAR_LIMIT);
     const double endpoint =
-      type == DistortionModelType::ORTHOGRAPHIC ? constants::kHalfPi : constants::kPi;
+      law == ProjectionModelType::ORTHOGRAPHIC ? constants::kHalfPi : constants::kPi;
     EXPECT_EQ(domain.theta_limit, endpoint);
     EXPECT_NEAR(domain.safe_theta_max, endpoint - 1e-4, 1e-7);
     updateThetaMax64(model);
@@ -244,8 +253,10 @@ TEST(FisheyeDomain64, RejectsNonFisheyeAndMalformedModels)
   model = fisheye();
   model.distortion.is_rational = true;
   expectFailure(model);
-  model = fisheye(DistortionModelType::EQUIDISTANT);
+  model = fisheye(DistortionModelType::NONE);
   model.distortion.coeffs[0] = 0.1;
+  expectFailure(model);
+  model = fisheye(DistortionModelType::KB4, ProjectionModelType::EQUISOLID);
   expectFailure(model);
   model = fisheye();
   model.intrinsics.fx = std::numeric_limits<double>::quiet_NaN();

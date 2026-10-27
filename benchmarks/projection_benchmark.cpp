@@ -146,7 +146,7 @@ camxiom::CameraModel makeFisheyeKb4()
   m.intrinsics.fy = 285.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = camxiom::ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = camxiom::ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = 3.1415926f - 1e-3f;
   m.distortion.type = camxiom::DistortionModelType::KB4;
   m.distortion.coeffs[0] = -0.012f;   // k1

@@ -59,7 +59,7 @@ CameraModel makeKB4(const float fx, const float k1, const float k2)
   m.intrinsics.fy = fx;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = static_cast<float>(constants::kHalfPi);
   m.distortion.type = DistortionModelType::KB4;
   m.distortion.count = 4U;

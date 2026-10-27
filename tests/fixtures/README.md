@@ -16,7 +16,7 @@ appear in this order (with the view blocks at the end):
 
 ```
 # Model names are lowercase (matching camxiom::toString output); uppercase also accepted.
-model: <pinhole|fisheye_theta|omnidirectional|double_sphere|eucm>
+model: <pinhole|equidistant|omnidirectional|double_sphere|eucm>
 image_size: <w> <h>
 
 # optional: pinhole distortion family to fit from zero coefficients
@@ -55,7 +55,7 @@ Both lowercase and uppercase are accepted by the parser.
 
 ```
 # Example fixture — fisheye camera, 640x480
-model: fisheye_theta
+model: equidistant
 image_size: 640 480
 
 # Intrinsic regression expectations
@@ -159,8 +159,8 @@ test) once you have real fixtures and can characterise the noise floor.
 
 ## Notes
 
-- All five projection models are supported: `PINHOLE`, `FISHEYE_THETA`,
-  `OMNIDIRECTIONAL`, `DOUBLE_SPHERE`, `EUCM`.
+- Five projection models are supported: `PINHOLE`, `EQUIDISTANT` (seeded
+  with a zero KB4 correction), `OMNIDIRECTIONAL`, `DOUBLE_SPHERE`, `EUCM`.
 - The calibration seed starts from `getDefaultSeed(model, w, h)`, with the
   optional `pinhole_distortion` family and zero coefficients. For pinhole
   this is a cold start (fx = h/2); for fisheye models projection/distortion

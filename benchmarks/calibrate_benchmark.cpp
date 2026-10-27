@@ -217,7 +217,7 @@ CameraModel64 makeGtKb4()
   m.intrinsics.cx = 320.0;
   m.intrinsics.cy = 240.0;
   m.intrinsics.skew = 0.0;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = kPi;
   m.distortion.type = DistortionModelType::KB4;
   m.distortion.count = 4U;
@@ -319,7 +319,7 @@ int main()
   const CameraModel64 gt_pin = makeGtPinholeRadtan5();
   const CameraModel seed_pin = makeSeedPinholeRadtan5();
   const CameraModel64 gt_kb4 = makeGtKb4();
-  const CameraModel seed_kb4 = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed_kb4 = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
 
   const int reps = 15;
   for (std::size_t m : {std::size_t{5}, std::size_t{20}, std::size_t{50}})

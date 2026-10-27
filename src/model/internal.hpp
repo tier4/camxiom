@@ -37,6 +37,19 @@ inline std::string toLowerCopy(const std::string &input)
   return lower;
 }
 
+/// The projection law and correction an interchange `distortion_model` name
+/// (ROS CameraInfo, OpenCV, camxiom's own names) stands for. Defined in
+/// model/parse.cpp. Names of the sphere-based models (omnidirectional,
+/// double sphere, EUCM) are read by the CameraInfo factory itself, because
+/// their D vectors also carry projection parameters.
+struct InterchangeModel
+{
+  ProjectionModelType projection{ProjectionModelType::UNKNOWN};
+  DistortionModelType distortion{DistortionModelType::UNKNOWN};
+};
+
+InterchangeModel readInterchangeModelName(const std::string &model_name);
+
 // hasAnyNonZero / setIdentity3x3 / computeTiltMatrices moved to the
 // precision-agnostic model/distortion_aux.hpp (single source shared with the
 // PnP solver write-back and the analytical double cost), together with
@@ -105,7 +118,7 @@ inline float estimateSafeThetaMaxForPolynomialFisheye(const DistortionModel &mod
 template <typename T>
 bool shrinkThetaMaxToPolynomialMonotoneRange(CameraModelT<T> &model)
 {
-  if (model.projection.type != ProjectionModelType::FISHEYE_THETA)
+  if (!isFisheyeProjection(model.projection.type))
   {
     return false;
   }
@@ -122,27 +135,21 @@ bool shrinkThetaMaxToPolynomialMonotoneRange(CameraModelT<T> &model)
   return false;
 }
 
-inline float defaultFisheyeThetaMax(const DistortionModel &model)
+inline float defaultFisheyeThetaMax(const CameraModel &model)
 {
-  switch (model.type)
+  switch (detail_impl::angleLawOf(model.projection.type, model.distortion.type))
   {
-    case DistortionModelType::ORTHOGRAPHIC:
+    case detail_impl::AngleLaw::ORTHOGRAPHIC:
       // theta->sin(theta) is monotonic only on [0, pi/2].
       return kHalfPi - 1e-4f;
-    case DistortionModelType::KB4:
-    case DistortionModelType::KB8:
-      return estimateSafeThetaMaxForPolynomialFisheye(model);
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
+    case detail_impl::AngleLaw::KB4:
+    case detail_impl::AngleLaw::KB8:
+      return estimateSafeThetaMaxForPolynomialFisheye(model.distortion);
+    case detail_impl::AngleLaw::EQUIDISTANT:
+    case detail_impl::AngleLaw::EQUISOLID:
+    case detail_impl::AngleLaw::STEREOGRAPHIC:
       return kPi - 1e-4f;
-    case DistortionModelType::NONE:
-    case DistortionModelType::RADTAN4:
-    case DistortionModelType::RADTAN5:
-    case DistortionModelType::RATIONAL8:
-    case DistortionModelType::THIN_PRISM12:
-    case DistortionModelType::TILTED14:
-    case DistortionModelType::UNKNOWN:
+    case detail_impl::AngleLaw::INVALID:
       break;
   }
   return kHalfPi - 1e-4f;

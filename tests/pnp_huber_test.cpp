@@ -268,9 +268,9 @@ TEST(PnpHuber, GaussNewtonRecoversWhenSeedLeavesFov)
   model.intrinsics.fy = 280.0f;
   model.intrinsics.cx = 320.0f;
   model.intrinsics.cy = 240.0f;
-  model.projection.type = ProjectionModelType::FISHEYE_THETA;
+  model.projection.type = ProjectionModelType::EQUIDISTANT;
   model.projection.theta_max = 1.2f;
-  model.distortion.type = DistortionModelType::EQUIDISTANT;
+  model.distortion.type = DistortionModelType::NONE;
   model.distortion.count = 0U;
   ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
   const CameraModel64 m64 = toCameraModel64(model);
@@ -512,9 +512,9 @@ TEST(PnpSolverValidity, CeresBestEffortRemainsDistinctFromConvergence)
 TEST(PnpSolverValidity, ProjectableRearFisheyePointsRemainUsable)
 {
   CameraModel model = makePinholeModel();
-  model.projection.type = ProjectionModelType::FISHEYE_THETA;
+  model.projection.type = ProjectionModelType::EQUIDISTANT;
   model.projection.theta_max = 2.0f;
-  model.distortion.type = DistortionModelType::EQUIDISTANT;
+  model.distortion.type = DistortionModelType::NONE;
   ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
   // All bearings lie behind z=0, within this fisheye's angular domain.
   const ObjectPoints points{{1, -0.2, -0.1},   {1, 0, -0.2},   {1, 0.2, -0.1},

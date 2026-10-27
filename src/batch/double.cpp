@@ -271,7 +271,10 @@ PixelFn64 resolveForwardFn64(const ProjectionModelType type)
   {
     case ProjectionModelType::PINHOLE:
       return &pinhole::rayToPixel64;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return &fisheye::rayToPixel64;
     case ProjectionModelType::OMNIDIRECTIONAL:
       return &omnidirectional::rayToPixel64;
@@ -291,7 +294,10 @@ RayFn64 resolveInverseFn64(const ProjectionModelType type)
   {
     case ProjectionModelType::PINHOLE:
       return &pinhole::pixelToRay64;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return &fisheye::pixelToRay64;
     case ProjectionModelType::OMNIDIRECTIONAL:
       return &omnidirectional::pixelToRay64;

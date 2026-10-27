@@ -88,9 +88,9 @@ CameraModel64 makeFisheye64()
   m.intrinsics.fy = 280.0;
   m.intrinsics.cx = 320.0;
   m.intrinsics.cy = 240.0;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = camxiom::constants::kPi - 1e-4;
-  m.distortion.type = DistortionModelType::EQUIDISTANT;
+  m.distortion.type = DistortionModelType::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -1206,9 +1206,9 @@ camxiom::CameraModel makeFisheyeFloat()
   m.intrinsics.fy = 280.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi) - 1e-4f;
-  m.distortion.type = DistortionModelType::EQUIDISTANT;
+  m.distortion.type = DistortionModelType::NONE;
   m.distortion.count = 0U;
   return m;
 }

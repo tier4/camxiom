@@ -51,7 +51,7 @@
 //
 // LOCK TABLE (mandatory per-model, D29/D30):
 //   PINHOLE:         PnpFlag::NONE
-//   FISHEYE_THETA:   PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3
+//   EQUIDISTANT:   PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3
 //   OMNIDIRECTIONAL: PnpFlag::FIX_PROJECTION_PARAMS
 //   DOUBLE_SPHERE:   PnpFlag::FIX_PROJECTION_PARAMS
 //   EUCM:            PnpFlag::FIX_PROJECTION_PARAMS
@@ -161,7 +161,7 @@ CameraModel64 buildGTKB4()
   m.intrinsics.cx = 320.0;
   m.intrinsics.cy = 240.0;
   m.intrinsics.skew = 0.0;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = 2.6;  // inside the polynomial's monotone range
   m.distortion.type = DistortionModelType::KB4;
   m.distortion.count = 4U;
@@ -477,7 +477,7 @@ TEST(Ms2Integration, KB4NoiseFree)
   // Require at least 8 valid views (some may be skipped for out-of-domain corners).
   ASSERT_GE(views.size(), 8u) << "Too few valid views built for KB4 noise-free";
 
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
   ASSERT_EQ(validateCameraModel(seed), StatusCode::OK);
 
   // KB4 lock: k3=k4=0 (= seed; high-order terms non-identifiable, D29).
@@ -506,7 +506,7 @@ TEST(Ms2Integration, KB4NoisySigma03)
   const auto views = makeRicherViews(gt, wpts, 0.3, rng);
   ASSERT_GE(views.size(), 8u) << "Too few valid views for KB4 sigma=0.3";
 
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
   const PnpFlag lock_flags = PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3;
   const CalibrationResult res = calibrate(views, seed, lock_flags, makeDefaultOptions());
 
@@ -533,7 +533,7 @@ TEST(Ms2Integration, KB4NoisySigma05)
   const auto views = makeRicherViews(gt, wpts, 0.5, rng);
   ASSERT_GE(views.size(), 8u) << "Too few valid views for KB4 sigma=0.5";
 
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
   const PnpFlag lock_flags = PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3;
   const CalibrationResult res = calibrate(views, seed, lock_flags, makeDefaultOptions());
 
@@ -983,7 +983,7 @@ TEST(Ms2Integration, PinholeDefaultSeedNoisySigma05)
 //
 // Calibration pipeline reuse:
 //   Pinhole: getDefaultSeed (PINHOLE, 640, 480) → calibrate(PnpFlag::NONE)
-//   KB4:     getDefaultSeed (FISHEYE_THETA, …) → calibrate(FIX_DIST_2|FIX_DIST_3)
+//   KB4:     getDefaultSeed (EQUIDISTANT, …) → calibrate(FIX_DIST_2|FIX_DIST_3)
 //   MEI:     getDefaultSeed (OMNIDIRECTIONAL, …) → calibrate(FIX_PROJECTION_PARAMS)
 //   DS:      getDefaultSeed (DOUBLE_SPHERE, …)   → calibrate(FIX_PROJECTION_PARAMS)
 //   EUCM:    getDefaultSeed (EUCM, …)             → calibrate(FIX_PROJECTION_PARAMS)
@@ -1228,7 +1228,7 @@ TEST(Ms2Integration, RectifyRoundTripKB4Alpha0)
 {
   const auto wpts = makeCheckerboard3D(8, 6, 0.05);
   const CalibrateSpec spec{
-    ProjectionModelType::FISHEYE_THETA, PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3};
+    ProjectionModelType::EQUIDISTANT, PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3};
   const CameraModel calibrated = runNoiseFreePipeline(buildGTKB4(), wpts, spec);
   ASSERT_EQ(validateCameraModel(calibrated), StatusCode::OK)
     << "KB4 calibration failed; cannot test rectification";
@@ -1370,7 +1370,7 @@ TEST(Ms2Integration, RectifyAlpha1SmokeKB4)
 {
   const auto wpts = makeCheckerboard3D(8, 6, 0.05);
   const CalibrateSpec spec{
-    ProjectionModelType::FISHEYE_THETA, PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3};
+    ProjectionModelType::EQUIDISTANT, PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3};
   const CameraModel calibrated = runNoiseFreePipeline(buildGTKB4(), wpts, spec);
   ASSERT_EQ(validateCameraModel(calibrated), StatusCode::OK);
 
@@ -1577,7 +1577,7 @@ TEST(Ms2Integration, RemapImageSmokeKB4)
 {
   const auto wpts = makeCheckerboard3D(8, 6, 0.05);
   const CalibrateSpec spec{
-    ProjectionModelType::FISHEYE_THETA, PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3};
+    ProjectionModelType::EQUIDISTANT, PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3};
   const CameraModel calibrated = runNoiseFreePipeline(buildGTKB4(), wpts, spec);
   ASSERT_EQ(validateCameraModel(calibrated), StatusCode::OK);
 
@@ -1768,7 +1768,7 @@ TEST(Ms2Integration, RemapImageSmokeEUCM)
 //
 // Fixture text format (documented in tests/fixtures/README.md):
 //   Lines starting with '#' and blank lines are ignored.
-//   model: <pinhole|fisheye_theta|omnidirectional|double_sphere|eucm>
+//   model: <pinhole|equidistant|omnidirectional|double_sphere|eucm>
 //          (lowercase = toString() output; uppercase also accepted)
 //   image_size: <w> <h>
 //   # optional regression expectations (checked only when present):
@@ -1783,7 +1783,7 @@ TEST(Ms2Integration, RemapImageSmokeEUCM)
 //
 // LOCK TABLE (per-model, D29/D30):
 //   PINHOLE:         PnpFlag::NONE
-//   FISHEYE_THETA:   PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3
+//   EQUIDISTANT:   PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3
 //   OMNIDIRECTIONAL: PnpFlag::FIX_PROJECTION_PARAMS
 //   DOUBLE_SPHERE:   PnpFlag::FIX_PROJECTION_PARAMS
 //   EUCM:            PnpFlag::FIX_PROJECTION_PARAMS
@@ -1890,9 +1890,9 @@ bool parseFixture(std::istream &in, ParsedFixture &out, std::string &err)
       {
         out.model = ProjectionModelType::PINHOLE;
       }
-      else if (model_str == "fisheye_theta" || model_str == "FISHEYE_THETA")
+      else if (model_str == "equidistant" || model_str == "EQUIDISTANT")
       {
-        out.model = ProjectionModelType::FISHEYE_THETA;
+        out.model = ProjectionModelType::EQUIDISTANT;
       }
       else if (model_str == "omnidirectional" || model_str == "OMNIDIRECTIONAL")
       {
@@ -1909,7 +1909,7 @@ bool parseFixture(std::istream &in, ParsedFixture &out, std::string &err)
       else
       {
         err = "line " + std::to_string(lineno) + ": unknown model '" + model_str +
-              "'; expected one of: pinhole, fisheye_theta, omnidirectional, "
+              "'; expected one of: pinhole, equidistant, omnidirectional, "
               "double_sphere, eucm (case-insensitive)";
         return false;
       }
@@ -2136,7 +2136,7 @@ bool parseFixture(std::istream &in, ParsedFixture &out, std::string &err)
 // ---------------------------------------------------------------------------
 // lockFor — per-model D29/D30 Ceres lock flags.
 // PINHOLE:         PnpFlag::NONE
-// FISHEYE_THETA:   FIX_DIST_2 | FIX_DIST_3   (k3=k4=0 locked)
+// EQUIDISTANT:   FIX_DIST_2 | FIX_DIST_3   (k3=k4=0 locked)
 // OMNI/DS/EUCM:   FIX_PROJECTION_PARAMS       (xi, alpha, beta locked at seed)
 // ---------------------------------------------------------------------------
 
@@ -2146,7 +2146,10 @@ PnpFlag lockFor(ProjectionModelType model)
   {
     case ProjectionModelType::PINHOLE:
       return PnpFlag::NONE;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3;
     case ProjectionModelType::OMNIDIRECTIONAL:
     case ProjectionModelType::DOUBLE_SPHERE:
@@ -2290,7 +2293,7 @@ TEST(Ms2IntegrationFixture, ParserRoundTripSynthetic)
   // --- Serialise to fixture text ---
   std::ostringstream oss;
   writeFixture(
-    oss, ProjectionModelType::FISHEYE_THETA, 640, 480, views,
+    oss, ProjectionModelType::EQUIDISTANT, 640, 480, views,
     /*include_expected=*/true, gt_fx, gt_fy, gt_cx, gt_cy
   );
 
@@ -2304,7 +2307,7 @@ TEST(Ms2IntegrationFixture, ParserRoundTripSynthetic)
   ASSERT_TRUE(parseFixture(iss, parsed, parse_err)) << "parseFixture failed: " << parse_err;
 
   // --- Assert model / image_size ---
-  EXPECT_EQ(parsed.model, ProjectionModelType::FISHEYE_THETA) << "Parsed model mismatch";
+  EXPECT_EQ(parsed.model, ProjectionModelType::EQUIDISTANT) << "Parsed model mismatch";
   EXPECT_EQ(parsed.w, 640) << "Parsed image width mismatch";
   EXPECT_EQ(parsed.h, 480) << "Parsed image height mismatch";
 
@@ -2340,9 +2343,9 @@ TEST(Ms2IntegrationFixture, ParserRoundTripSynthetic)
   }
 
   // --- Run getDefaultSeed → calibrate on the parsed views ---
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, parsed.w, parsed.h);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, parsed.w, parsed.h);
   ASSERT_EQ(validateCameraModel(seed), StatusCode::OK)
-    << "getDefaultSeed(FISHEYE_THETA) returned invalid model";
+    << "getDefaultSeed(EQUIDISTANT) returned invalid model";
 
   const CalibrationResult res =
     calibrate(parsed.views, seed, lockFor(parsed.model), makeDefaultOptions(parsed.w, parsed.h));
@@ -2351,7 +2354,7 @@ TEST(Ms2IntegrationFixture, ParserRoundTripSynthetic)
     << "calibrate failed on parsed fixture views; rms=" << res.rms_reprojection_error_px;
 
   // Noise-free RMS < 1e-3 px: same basis as Section A KB4NoiseFree.
-  // Justification: noise=0, FISHEYE_THETA seed + calibrate should reach
+  // Justification: noise=0, EQUIDISTANT seed + calibrate should reach
   // machine precision for consistent geometry.
   EXPECT_LT(res.rms_reprojection_error_px, 1e-3)
     << "ParserRoundTrip noise-free RMS=" << res.rms_reprojection_error_px

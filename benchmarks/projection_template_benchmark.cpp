@@ -39,7 +39,7 @@ void run(bool fisheye)
   model.intrinsics.cx = Scalar(320);
   model.intrinsics.cy = Scalar(240);
   model.projection.type =
-    fisheye ? camxiom::ProjectionModelType::FISHEYE_THETA : camxiom::ProjectionModelType::PINHOLE;
+    fisheye ? camxiom::ProjectionModelType::EQUIDISTANT : camxiom::ProjectionModelType::PINHOLE;
   model.projection.theta_max = Scalar(2.0);
   model.distortion.type =
     fisheye ? camxiom::DistortionModelType::KB4 : camxiom::DistortionModelType::RADTAN5;

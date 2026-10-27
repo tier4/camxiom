@@ -108,7 +108,7 @@ CameraModel64 buildGTKB4()
   m.intrinsics.cx = 320.0;
   m.intrinsics.cy = 240.0;
   m.intrinsics.skew = 0.0;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   // Inside the polynomial's monotone range (k1=0.01/k2=-0.005 folds at
   // ~2.64); the validator certifies the cap, see calib_intrinsics_test.
   m.projection.theta_max = 2.6;
@@ -329,7 +329,7 @@ TEST(CalibUncertainty, LockedDistortionParamsNotListed)
   const auto views = makeDiverseViews(gt, world, 0.3, rng);
   ASSERT_FALSE(views.empty());
 
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
   // KB4 identifiability lock: k3=k4 fixed (FIX_DIST_2 | FIX_DIST_3).
   const PnpFlag flags = PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3;
   const CalibrationResult res = calibrate(views, seed, flags, makeDefaultOptions());

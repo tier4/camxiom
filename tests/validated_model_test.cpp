@@ -80,9 +80,9 @@ CameraModel makeFisheyeEquidistant()
   m.intrinsics.fy = 280.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi) - 1e-4f;
-  m.distortion.type = DistortionModelType::EQUIDISTANT;
+  m.distortion.type = DistortionModelType::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -94,7 +94,7 @@ CameraModel makeFisheyeKb4()
   m.intrinsics.fy = 285.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi) - 1e-3f;
   m.distortion.type = DistortionModelType::KB4;
   m.distortion.coeffs[0] = -0.012f;
@@ -254,7 +254,8 @@ TEST(ValidatedCameraModel, TryMakeRejectsInvalidModels)
   EXPECT_FALSE(ValidatedCameraModel::tryMake(bad_ds).has_value());
 
   CameraModel pinhole_angle = makePinhole(false);
-  pinhole_angle.distortion.type = DistortionModelType::EQUIDISTANT;
+  pinhole_angle.distortion.type = DistortionModelType::KB4;
+  pinhole_angle.distortion.count = 4U;
   ASSERT_NE(validateCameraModel(pinhole_angle), StatusCode::OK);
   EXPECT_FALSE(ValidatedCameraModel::tryMake(pinhole_angle).has_value());
 }
