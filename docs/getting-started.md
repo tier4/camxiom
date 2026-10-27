@@ -52,7 +52,7 @@ cmake -S camxiom -B build -DCMAKE_BUILD_TYPE=Release -DCAMXIOM_WITH_CERES=OFF
 | Option | Default | Effect |
 |---|---|---|
 | `CAMXIOM_WITH_CERES` | auto (`ON` when Ceres ≥ 2.0 is found) | Build `camxiom::calib` and add it to the umbrella target. `OFF` gives a core-only build. |
-| `CAMXIOM_BUILD_BENCHMARKS` | `OFF` | Build the projection benchmark (and the calibrate benchmark when Ceres is enabled). Use with `CMAKE_BUILD_TYPE=Release`. |
+| `CAMXIOM_BUILD_BENCHMARKS` | `OFF` | Build the projection and projection-template benchmarks (and the calibrate benchmark when Ceres is enabled). Use with `CMAKE_BUILD_TYPE=Release`. |
 | `BUILD_TESTING` | (CTest default; colcon sets it ON) | Build the GoogleTest suite. In standalone mode tests additionally require a findable GTest package. |
 
 ## Linking

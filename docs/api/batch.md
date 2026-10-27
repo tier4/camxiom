@@ -69,12 +69,11 @@ capacity planning, not something to program against.
   scalar per-point code under OpenMP.
 - **Vectorized (float32)**: pinhole, the equidistant fisheye law (without
   correction or with KB4; the inverse also covers the equisolid,
-  stereographic and orthographic laws), omnidirectional, double sphere,
-  EUCM — 8-wide on
-  AVX2, 4-wide on SSE2. The latitude-longitude projections (equirectangular,
-  cylindrical) run the scalar code under OpenMP. On aarch64 the same 4-wide
-  kernels run through a minimal NEON compatibility layer (AArch64 only; 32-bit
-  ARM stays scalar).
+  stereographic and orthographic laws, while KB8 runs the scalar inverse),
+  omnidirectional, double sphere, EUCM — 8-wide on AVX2, 4-wide on SSE2. The
+  latitude-longitude projections (equirectangular, cylindrical) run the scalar
+  code under OpenMP. On aarch64 the same 4-wide kernels run through a minimal
+  NEON compatibility layer (AArch64 only; 32-bit ARM stays scalar).
 - **Vectorized (float64)**: only the undistorted-pinhole fast path (4-wide
   AVX on x86, 2-wide NEON on aarch64); everything else is scalar + OpenMP.
   This asymmetry is deliberate: float is the real-time API, double is the
