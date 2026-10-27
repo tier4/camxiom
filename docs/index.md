@@ -4,8 +4,10 @@
 whole spectrum of camera models — **pinhole**, the **fisheye laws**
 (equidistant with Kannala–Brandt, equisolid, stereographic, orthographic),
 **omnidirectional (Mei)**, **double sphere**, and **EUCM**, each with the lens
-corrections it takes — plus a Ceres-based PnP / intrinsic-calibration layer
-and ROS 2 / OpenCV interfaces built on the same model set.
+corrections it takes, and the **equirectangular** and **cylindrical**
+latitude-longitude projections as output and remap targets — plus a Ceres-based
+PnP / intrinsic-calibration layer and ROS 2 / OpenCV interfaces built on the
+same model set.
 
 Eigen is the only hard dependency of the runtime core. Everything else —
 Ceres, OpenCV, ROS 2, OpenMP — is optional and detected at configure time.

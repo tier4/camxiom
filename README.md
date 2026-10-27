@@ -3,8 +3,11 @@
 
 **Unified C++17 camera-geometry library** — one API across the whole
 spectrum of camera models, from narrow-FOV pinhole to 180°+ fisheye and
-catadioptric: **pinhole, fisheye (Kannala–Brandt), omnidirectional (Mei),
-double sphere, and EUCM**, each with its full distortion catalogue.
+catadioptric: **pinhole, the fisheye laws (equidistant with Kannala–Brandt,
+equisolid, stereographic, orthographic), omnidirectional (Mei), double
+sphere, and EUCM**, each with the lens corrections it takes, plus
+the **latitude-longitude projections** (equirectangular and cylindrical) as
+output and remap targets.
 On top of the same model set: a Ceres-based intrinsic calibrator and
 ROS 2 / OpenCV interfaces.
 
