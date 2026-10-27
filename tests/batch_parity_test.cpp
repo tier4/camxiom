@@ -215,6 +215,62 @@ TEST(BatchParity, RayToPixelBatchMatchesScalar)
   }
 }
 
+// Rays a hair off the optical axis, unnormalized, so the off-axis distance
+// falls in the band where a clamped SIMD divisor used to shrink the pixel
+// offset. Thirteen copies put each ray in an AVX2 group, an SSE group and the
+// scalar tail, and every lane must agree with the scalar projection.
+TEST(BatchParity, NearAxisRaysMatchScalarInEveryLane)
+{
+  CameraModel equidistant = makeBase(ProjectionModelType::EQUIDISTANT, 1000.0f);
+  equidistant.intrinsics.cx = 0.0f;
+  equidistant.intrinsics.cy = 0.0f;
+  equidistant.projection.theta_max = 2.0f;
+  CameraModel kb4 = equidistant;
+  kb4.distortion.type = DistortionModelType::KB4;
+  kb4.distortion.count = 4U;
+  kb4.distortion.coeffs[0] = 0.02f;
+  kb4.distortion.coeffs[1] = -0.005f;
+  kb4.distortion.coeffs[2] = 0.001f;
+  kb4.distortion.coeffs[3] = -0.0002f;
+  updateThetaMax(kb4);
+
+  const std::vector<Eigen::Vector3f> near_axis{
+    {5e-8f, 0.0f, 4e-4f},
+    {0.0f, -3e-8f, 1e-3f},
+    {4e-8f, 4e-8f, 2e-4f},
+    {5e-9f, 0.0f, 1.0f},
+    {0.0f, 0.0f, 1.0f}};
+  constexpr int kLanes = 13;  // one AVX2 group, one SSE group, one scalar lane
+
+  for (const NamedModel &nm : {NamedModel{"equidistant", equidistant}, NamedModel{"kb4", kb4}})
+  {
+    ASSERT_EQ(validateCameraModel(nm.model), StatusCode::OK) << nm.name;
+    for (const Eigen::Vector3f &ray : near_axis)
+    {
+      const PixelResult scalar = rayToPixel(nm.model, ray);
+      ASSERT_EQ(scalar.status, StatusCode::OK) << nm.name;
+      float rays_xyz[3 * kLanes];
+      for (int i = 0; i < kLanes; ++i)
+      {
+        rays_xyz[3 * i + 0] = ray.x();
+        rays_xyz[3 * i + 1] = ray.y();
+        rays_xyz[3 * i + 2] = ray.z();
+      }
+      float u_out[kLanes];
+      float v_out[kLanes];
+      StatusCode statuses[kLanes];
+      ASSERT_EQ(rayToPixelBatch(nm.model, rays_xyz, kLanes, u_out, v_out, statuses), kLanes)
+        << nm.name;
+      for (int i = 0; i < kLanes; ++i)
+      {
+        EXPECT_EQ(statuses[i], StatusCode::OK) << nm.name << " lane " << i;
+        EXPECT_NEAR(u_out[i], scalar.pixel.u, 1e-5f) << nm.name << " lane " << i;
+        EXPECT_NEAR(v_out[i], scalar.pixel.v, 1e-5f) << nm.name << " lane " << i;
+      }
+    }
+  }
+}
+
 TEST(BatchParity, PixelToRayBatchMatchesScalar)
 {
   const auto pixels = makeTestPixels();
