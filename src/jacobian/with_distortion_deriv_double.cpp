@@ -45,6 +45,7 @@
 #include "detail/projection_common.hpp"  // DeriveAtUseT / withinThetaMaxCos
 #include "jacobian/full_jacobian64_internal.hpp"
 
+#include <array>
 #include <cmath>
 
 namespace camxiom
@@ -58,6 +59,45 @@ inline bool isFinite2d(double x, double y) { return std::isfinite(x) && std::isf
 inline bool isFinite3d(double x, double y, double z)
 {
   return std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
+}
+
+// d(tilt)/d(tau_x) and d(tilt)/d(tau_y), row-major 3x3, for the tilt matrix
+// built in computeTiltMatrices: tilt = P(R) * R with R = Ry(tau_y) * Rx(tau_x)
+// and P(R) = [[r22, 0, -r02], [0, r22, -r12], [0, 0, 1]].
+void tiltMatrixDerivatives(
+  const double tau_x, const double tau_y, std::array<double, 9> &d_tau_x,
+  std::array<double, 9> &d_tau_y
+)
+{
+  const double c_tx = std::cos(tau_x);
+  const double s_tx = std::sin(tau_x);
+  const double c_ty = std::cos(tau_y);
+  const double s_ty = std::sin(tau_y);
+  const std::array<double, 9> r{c_ty, s_ty * s_tx, -s_ty * c_tx, 0.0,        c_tx,
+                                s_tx, s_ty,        -c_ty * s_tx, c_ty * c_tx};
+  const std::array<double, 9> dr_tau_x{0.0,  s_ty * c_tx, s_ty * s_tx,  0.0,         -s_tx,
+                                       c_tx, 0.0,         -c_ty * c_tx, -c_ty * s_tx};
+  const std::array<double, 9> dr_tau_y{-s_ty, c_ty * s_tx, -c_ty * c_tx, 0.0,         0.0,
+                                       0.0,   c_ty,        s_ty * s_tx,  -s_ty * c_tx};
+  const std::array<double, 9> p{r[8], 0.0, -r[2], 0.0, r[8], -r[5], 0.0, 0.0, 1.0};
+
+  const auto derive = [&](const std::array<double, 9> &dr, std::array<double, 9> &d_tilt) {
+    const std::array<double, 9> dp{dr[8], 0.0, -dr[2], 0.0, dr[8], -dr[5], 0.0, 0.0, 0.0};
+    for (int row = 0; row < 3; ++row)
+    {
+      for (int col = 0; col < 3; ++col)
+      {
+        double value = 0.0;
+        for (int mid = 0; mid < 3; ++mid)
+        {
+          value += dp[row * 3 + mid] * r[mid * 3 + col] + p[row * 3 + mid] * dr[mid * 3 + col];
+        }
+        d_tilt[row * 3 + col] = value;
+      }
+    }
+  };
+  derive(dr_tau_x, d_tau_x);
+  derive(dr_tau_y, d_tau_y);
 }
 
 FullProjectionJacobian64 invalidFJ64(StatusCode s)
@@ -178,7 +218,12 @@ StatusCode distortPlaneNoTiltWithFullJ64(
     out.dyd_dc[7] = neg_y_num * r6;
   }
 
-  if (model.has_thin_prism)
+  // The prism derivatives are needed whenever the model carries the prism
+  // terms, not only when their current values are non-zero: a calibration that
+  // starts them at zero must still see which way to move them.
+  const bool has_prism_terms =
+    model.type == DistortionModelType::THIN_PRISM12 || model.type == DistortionModelType::TILTED14;
+  if (has_prism_terms)
   {
     const double s1 = c[8], s2 = c[9], s3 = c[10], s4 = c[11];
     xd += s1 * r2 + s2 * r4;
@@ -225,7 +270,13 @@ StatusCode distortPlaneWithFullJ64(
   StatusCode s = distortPlaneNoTiltWithFullJ64(model, xin, yin, xnt, ynt, j_no_tilt);
   if (s != StatusCode::OK) return s;
 
-  if (!model.has_tilt)
+  // A TILTED14 model whose angles are exactly zero has no active tilt (the
+  // tilt matrix is the identity), but the angles' derivatives are still
+  // non-zero there, so it takes the tilt path below. A tilt that the model
+  // dropped as degenerate stays on the untilted path, like the forward model.
+  const bool tilt_at_zero = model.type == DistortionModelType::TILTED14 && model.count >= 14U &&
+                            !model.has_tilt && model.coeffs[12] == 0.0 && model.coeffs[13] == 0.0;
+  if (!model.has_tilt && !tilt_at_zero)
   {
     xout = xnt;
     yout = ynt;
@@ -233,7 +284,10 @@ StatusCode distortPlaneWithFullJ64(
     return StatusCode::OK;
   }
 
-  const auto &T = model.tilt_matrix;
+  // Without an active tilt the forward model ignores the cached matrix, so
+  // the zero-angle path uses the identity rather than whatever it holds.
+  static constexpr std::array<double, 9> kIdentity{{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}};
+  const auto &T = model.has_tilt ? model.tilt_matrix : kIdentity;
   const double mx = T[0] * xnt + T[1] * ynt + T[2];
   const double my = T[3] * xnt + T[4] * ynt + T[5];
   const double mz = T[6] * xnt + T[7] * ynt + T[8];
@@ -268,6 +322,25 @@ StatusCode distortPlaneWithFullJ64(
   {
     out.dxd_dc[static_cast<std::size_t>(i)] = 0.0;
     out.dyd_dc[static_cast<std::size_t>(i)] = 0.0;
+  }
+
+  // The tilt angles (coeffs 12, 13) act through the tilt matrix itself, which
+  // the chain above does not cover: d(m / mz) = (dm - out * dmz) / mz.
+  if (model.type == DistortionModelType::TILTED14 && nc >= 14)
+  {
+    std::array<double, 9> d_tau_x{};
+    std::array<double, 9> d_tau_y{};
+    tiltMatrixDerivatives(model.coeffs[12], model.coeffs[13], d_tau_x, d_tau_y);
+    const std::array<const std::array<double, 9> *, 2> d_tilts{&d_tau_x, &d_tau_y};
+    for (std::size_t k = 0; k < d_tilts.size(); ++k)
+    {
+      const auto &dT = *d_tilts[k];
+      const double dmx = dT[0] * xnt + dT[1] * ynt + dT[2];
+      const double dmy = dT[3] * xnt + dT[4] * ynt + dT[5];
+      const double dmz = dT[6] * xnt + dT[7] * ynt + dT[8];
+      out.dxd_dc[12 + k] = (dmx - xout * dmz) * inv_mz;
+      out.dyd_dc[12 + k] = (dmy - yout * dmz) * inv_mz;
+    }
   }
   return StatusCode::OK;
 }
