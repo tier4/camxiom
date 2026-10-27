@@ -759,8 +759,7 @@ camxiom::DistortionModelType | #008 EQUIDISTANT
 camxiom::DistortionModelType | #009 EQUISOLID
 camxiom::DistortionModelType | #010 STEREOGRAPHIC
 camxiom::DistortionModelType | #011 ORTHOGRAPHIC
-camxiom::DistortionModelType | #012 OMNIDIRECTIONAL
-camxiom::DistortionModelType | #013 UNKNOWN
+camxiom::DistortionModelType | #012 UNKNOWN
 camxiom::DistortionSpace | #000 NONE = 0U
 camxiom::DistortionSpace | #001 PLANE
 camxiom::DistortionSpace | #002 ANGLE

@@ -49,7 +49,6 @@ TEST(Types, DistortionModelTypeToString)
   EXPECT_STREQ(toString(DistortionModelType::KB4), "kb4");
   EXPECT_STREQ(toString(DistortionModelType::KB8), "kb8");
   EXPECT_STREQ(toString(DistortionModelType::EQUIDISTANT), "ideal_equidistant");
-  EXPECT_STREQ(toString(DistortionModelType::OMNIDIRECTIONAL), "omnidirectional");
   EXPECT_STREQ(toString(DistortionModelType::UNKNOWN), "unknown");
 }
 
@@ -73,7 +72,6 @@ TEST(Types, DistortionModelToStringRoundTripsThroughParse)
     DistortionModelType::EQUISOLID,
     DistortionModelType::STEREOGRAPHIC,
     DistortionModelType::ORTHOGRAPHIC,
-    DistortionModelType::OMNIDIRECTIONAL,
   };
   for (const DistortionModelType type : all)
   {

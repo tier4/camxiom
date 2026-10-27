@@ -77,8 +77,6 @@ const char *toString(const DistortionModelType model_type)
       return "stereographic";
     case DistortionModelType::ORTHOGRAPHIC:
       return "orthographic";
-    case DistortionModelType::OMNIDIRECTIONAL:
-      return "omnidirectional";
     case DistortionModelType::UNKNOWN:
       break;
   }

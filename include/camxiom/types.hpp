@@ -95,7 +95,6 @@ enum class DistortionModelType : std::uint8_t {
   EQUISOLID,
   STEREOGRAPHIC,
   ORTHOGRAPHIC,
-  OMNIDIRECTIONAL,
   UNKNOWN
 };
 
@@ -123,7 +122,6 @@ constexpr DistortionSpace distortionSpaceOf(const DistortionModelType type) noex
     case DistortionModelType::ORTHOGRAPHIC:
       return DistortionSpace::ANGLE;
     case DistortionModelType::NONE:
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       break;
   }

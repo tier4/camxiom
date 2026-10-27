@@ -425,7 +425,6 @@ static FullProjectionJacobian64 fullJ64(const CameraModel64 &model, const Eigen:
       case DistortionModelType::RATIONAL8:
       case DistortionModelType::THIN_PRISM12:
       case DistortionModelType::TILTED14:
-      case DistortionModelType::OMNIDIRECTIONAL:
       case DistortionModelType::UNKNOWN:
         return invalidFJ64(StatusCode::INVALID_MODEL);
     }

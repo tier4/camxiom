@@ -58,7 +58,6 @@ inline bool fisheyeSseForwardSupports(const DistortionModelType type)
     case DistortionModelType::EQUISOLID:
     case DistortionModelType::STEREOGRAPHIC:
     case DistortionModelType::ORTHOGRAPHIC:
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       break;
   }

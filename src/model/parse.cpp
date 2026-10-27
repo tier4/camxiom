@@ -42,8 +42,8 @@ DistortionModelType parseDistortionModelType(const std::string &model_name)
   // Canonical camxiom names first: every toString(DistortionModelType)
   // output must parse back to the same enum so persisted model strings
   // survive a round trip. (The remaining canonical names — radtan4/5, kb4,
-  // kb8, equisolid, stereographic, orthographic, omnidirectional — are
-  // already covered by the compatibility aliases below.) Note the ROS name
+  // kb8, equisolid, stereographic, orthographic — are already covered by the
+  // compatibility aliases below.) Note the ROS name
   // "equidistant" denotes the 4-coefficient fisheye polynomial (KB4), so the
   // coefficient-free ideal mapping uses the distinct canonical name
   // "ideal_equidistant".
@@ -120,10 +120,6 @@ DistortionModelType parseDistortionModelType(const std::string &model_name)
   {
     return DistortionModelType::ORTHOGRAPHIC;
   }
-  if (model == "omnidirectional" || model == "omni")
-  {
-    return DistortionModelType::OMNIDIRECTIONAL;
-  }
   return DistortionModelType::UNKNOWN;
 }
 
@@ -145,8 +141,6 @@ ProjectionModelType chooseProjectionModelType(const DistortionModelType distorti
     case DistortionModelType::TILTED14:
     case DistortionModelType::NONE:
       return ProjectionModelType::PINHOLE;
-    case DistortionModelType::OMNIDIRECTIONAL:
-      return ProjectionModelType::OMNIDIRECTIONAL;
     case DistortionModelType::UNKNOWN:
       break;
   }

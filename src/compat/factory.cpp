@@ -41,13 +41,13 @@ CameraModelT<T> makeCameraModelImpl(const CameraInfo &camera_info)
   detail::setIdentity3x3(model.distortion.inv_tilt_matrix);
 
   DistortionModelType parsed_type = parseDistortionModelType(camera_info.distortion_model);
-  const bool is_omni = parsed_type == DistortionModelType::OMNIDIRECTIONAL;
 
   const std::string model_lower = detail::toLowerCopy(camera_info.distortion_model);
+  const bool is_omni = (model_lower == "omnidirectional" || model_lower == "omni");
   const bool is_ds = (model_lower == "double_sphere" || model_lower == "ds");
   const bool is_eucm = (model_lower == "eucm");
 
-  if (parsed_type == DistortionModelType::UNKNOWN && !is_ds && !is_eucm)
+  if (parsed_type == DistortionModelType::UNKNOWN && !is_omni && !is_ds && !is_eucm)
   {
     if (camera_info.distortion_model.empty())
     {

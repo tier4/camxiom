@@ -756,7 +756,6 @@ template <typename T>
         case DistortionModelType::EQUISOLID:
         case DistortionModelType::STEREOGRAPHIC:
         case DistortionModelType::ORTHOGRAPHIC:
-        case DistortionModelType::OMNIDIRECTIONAL:
         case DistortionModelType::UNKNOWN:
           break;
       }
@@ -798,7 +797,6 @@ template <typename T>
         case DistortionModelType::RATIONAL8:
         case DistortionModelType::THIN_PRISM12:
         case DistortionModelType::TILTED14:
-        case DistortionModelType::OMNIDIRECTIONAL:
         case DistortionModelType::UNKNOWN:
           break;
       }
@@ -874,7 +872,6 @@ bool validParameters(
     case DistortionModelType::STEREOGRAPHIC:
     case DistortionModelType::ORTHOGRAPHIC:
       break;
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       return false;
   }

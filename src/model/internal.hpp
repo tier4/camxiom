@@ -142,7 +142,6 @@ inline float defaultFisheyeThetaMax(const DistortionModel &model)
     case DistortionModelType::RATIONAL8:
     case DistortionModelType::THIN_PRISM12:
     case DistortionModelType::TILTED14:
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       break;
   }

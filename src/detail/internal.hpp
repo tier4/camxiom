@@ -123,7 +123,6 @@ inline std::uint8_t minimumCoefficientCountForType(const DistortionModelType typ
     case DistortionModelType::STEREOGRAPHIC:
     case DistortionModelType::ORTHOGRAPHIC:
       return 0U;
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       break;
   }
@@ -154,7 +153,6 @@ inline std::uint8_t maximumCoefficientCountForType(const DistortionModelType typ
     case DistortionModelType::STEREOGRAPHIC:
     case DistortionModelType::ORTHOGRAPHIC:
       return 14U;
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       break;
   }
@@ -190,7 +188,6 @@ inline std::size_t requiredFiniteCoefficientCount(const DistortionModelType type
       return 4U;
     case DistortionModelType::KB8:
       return 8U;
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       break;
   }
@@ -202,7 +199,7 @@ inline StatusCode validateDistortionConsistency(
   const bool has_thin_prism, const bool has_tilt
 )
 {
-  if (type == DistortionModelType::UNKNOWN || type == DistortionModelType::OMNIDIRECTIONAL)
+  if (type == DistortionModelType::UNKNOWN)
   {
     return StatusCode::INVALID_MODEL;
   }

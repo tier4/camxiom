@@ -204,7 +204,6 @@ inline std::string pinholeDistortionModelByType(const DistortionModelType model_
     case DistortionModelType::EQUISOLID:
     case DistortionModelType::STEREOGRAPHIC:
     case DistortionModelType::ORTHOGRAPHIC:
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       break;
   }
@@ -238,7 +237,6 @@ inline std::string fisheyeDistortionModelString(const DistortionModelType model_
     case DistortionModelType::RATIONAL8:
     case DistortionModelType::THIN_PRISM12:
     case DistortionModelType::TILTED14:
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       break;
   }

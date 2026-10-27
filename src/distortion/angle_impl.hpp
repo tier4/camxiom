@@ -98,7 +98,6 @@ inline StatusCode distortTheta(const DistortionModelT<T> &model, const T theta, 
     case DistortionModelType::RATIONAL8:
     case DistortionModelType::THIN_PRISM12:
     case DistortionModelType::TILTED14:
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       return StatusCode::INVALID_MODEL;
   }
@@ -167,7 +166,6 @@ inline StatusCode distortThetaDerivative(
     case DistortionModelType::RATIONAL8:
     case DistortionModelType::THIN_PRISM12:
     case DistortionModelType::TILTED14:
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       return StatusCode::INVALID_MODEL;
   }
