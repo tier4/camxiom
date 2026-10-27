@@ -193,6 +193,15 @@ constexpr bool isLatLongProjection(const ProjectionModelType type) noexcept
   return type == ProjectionModelType::EQUIRECTANGULAR || type == ProjectionModelType::CYLINDRICAL;
 }
 
+/// Image dimensions in pixels.
+struct ImageSize
+{
+  int width{0};
+  int height{0};
+
+  constexpr bool isValid() const { return width > 0 && height > 0; }
+};
+
 // ---------------------------------------------------------------------------
 // Scalar-templated geometry types (#1 float/double unification).
 //

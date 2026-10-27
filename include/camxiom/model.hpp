@@ -69,6 +69,36 @@ namespace camxiom
 /// equidistant law.
 [[nodiscard]] CameraModel makeDistortionFree(const CameraModel &model);
 
+/// An equirectangular model whose image covers the whole sphere:
+/// fx = W / (2 pi), fy = H / pi, cx = (W - 1) / 2, cy = (H - 1) / 2, skew 0.
+/// The left edge of column 0 is longitude -pi (directly behind the camera),
+/// the right edge of the last column +pi; the top edge of row 0 is latitude
+/// -pi/2 (straight up), the bottom edge of the last row +pi/2. INVALID_INPUT
+/// for a non-positive size; `model_out` is then reset to CameraModel{}.
+[[nodiscard]] StatusCode makeEquirectangularModel(ImageSize image_size, CameraModel &model_out);
+
+/// An equirectangular model whose image covers longitudes [lon_min, lon_max]
+/// and latitudes [lat_min, lat_max] (radians, conventions in types.hpp),
+/// edge to edge: the left edge of column 0 is lon_min, the right edge of the
+/// last column lon_max, and likewise for the rows. Requires
+/// -pi <= lon_min < lon_max <= pi and -pi/2 <= lat_min < lat_max <= pi/2;
+/// INVALID_INPUT otherwise, with `model_out` reset to CameraModel{}.
+[[nodiscard]] StatusCode makeEquirectangularModel(
+  ImageSize image_size, double lon_min, double lon_max, double lat_min, double lat_max,
+  CameraModel &model_out
+);
+
+/// A cylindrical model whose image covers longitudes [lon_min, lon_max] and
+/// latitudes [lat_min, lat_max], edge to edge as for the equirectangular
+/// factory. Rows are spaced evenly in tan(latitude), so the poles cannot be
+/// reached: requires -pi <= lon_min < lon_max <= pi and
+/// -pi/2 < lat_min < lat_max < pi/2; INVALID_INPUT otherwise, with
+/// `model_out` reset to CameraModel{}.
+[[nodiscard]] StatusCode makeCylindricalModel(
+  ImageSize image_size, double lon_min, double lon_max, double lat_min, double lat_max,
+  CameraModel &model_out
+);
+
 /// What bounds the usable angular range, independently of a declared FOV.
 enum class FisheyeDomainLimit : std::uint8_t {
   UNKNOWN = 0U,

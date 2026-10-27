@@ -31,6 +31,7 @@
 #include "camxiom/projection.hpp"
 #include "camxiom/projection64.hpp"
 #include "camxiom/projection_template.hpp"
+#include "camxiom/remap.hpp"
 #include "camxiom/types.hpp"
 #include "camxiom/types64.hpp"
 #include "camxiom/validated_model.hpp"
@@ -656,4 +657,142 @@ TEST(LatLongProjection, NotCalibrationModels)
     updateThetaMax64(updated);
     EXPECT_EQ(updated.projection.theta_max, kPi);
   }
+}
+
+TEST(LatLongFactory, FullSphereEquirectangular)
+{
+  CameraModel m;
+  ASSERT_EQ(makeEquirectangularModel(ImageSize{2048, 1024}, m), StatusCode::OK);
+  EXPECT_EQ(m.projection.type, ProjectionModelType::EQUIRECTANGULAR);
+  EXPECT_EQ(m.distortion.type, DistortionModelType::NONE);
+  EXPECT_FLOAT_EQ(m.intrinsics.fx, static_cast<float>(2048.0 / (2.0 * kPi)));
+  EXPECT_FLOAT_EQ(m.intrinsics.fy, static_cast<float>(1024.0 / kPi));
+  EXPECT_FLOAT_EQ(m.intrinsics.cx, 1023.5f);
+  EXPECT_FLOAT_EQ(m.intrinsics.cy, 511.5f);
+  EXPECT_EQ(m.intrinsics.skew, 0.0f);
+  EXPECT_EQ(validateCameraModel(m), StatusCode::OK);
+
+  // Every pixel centre unprojects; the centre column looks straight ahead.
+  for (int v = 0; v < 1024; v += 31)
+  {
+    for (int u = 0; u < 2048; u += 37)
+    {
+      ASSERT_EQ(
+        pixelToRay(m, Pixel2{static_cast<float>(u), static_cast<float>(v)}).status, StatusCode::OK
+      );
+    }
+    ASSERT_EQ(pixelToRay(m, Pixel2{2047.0f, static_cast<float>(v)}).status, StatusCode::OK);
+  }
+
+  const FovResult fov = computeFov(m, ImageSize{2048, 1024});
+  ASSERT_EQ(fov.status, StatusCode::OK);
+  EXPECT_NEAR(fov.horizontal_fov_deg, 360.0f, 1e-3f);
+  EXPECT_NEAR(fov.vertical_fov_deg, 180.0f, 1e-3f);
+  EXPECT_EQ(fov.diagonal_fov_deg, 0.0f);
+}
+
+TEST(LatLongFactory, PartialRangesSpanTheImageEdgeToEdge)
+{
+  const double lon_min = -kPi / 2;
+  const double lon_max = kPi / 3;
+  const double lat_min = -kPi / 6;
+  const double lat_max = kPi / 4;
+  for (const auto type : kTypes)
+  {
+    CameraModel m;
+    const StatusCode status =
+      type == ProjectionModelType::EQUIRECTANGULAR
+        ? makeEquirectangularModel(ImageSize{1200, 600}, lon_min, lon_max, lat_min, lat_max, m)
+        : makeCylindricalModel(ImageSize{1200, 600}, lon_min, lon_max, lat_min, lat_max, m);
+    ASSERT_EQ(status, StatusCode::OK);
+    EXPECT_EQ(m.projection.type, type);
+    const CameraModel64 m64 = toCameraModel64(m);
+
+    // The corners of the image (pixel edges) are the range corners.
+    const auto lonLat = [&](const double u, const double v) {
+      const RayResult64 r = pixelToRay64(m64, Pixel2d{u, v});
+      EXPECT_EQ(r.status, StatusCode::OK);
+      const Eigen::Vector3d d = r.ray.direction;
+      return Eigen::Vector2d(std::atan2(d.x(), d.z()), std::atan2(d.y(), std::hypot(d.x(), d.z())));
+    };
+    const Eigen::Vector2d top_left = lonLat(-0.5, -0.5);
+    const Eigen::Vector2d bottom_right = lonLat(1199.5, 599.5);
+    EXPECT_NEAR(top_left.x(), lon_min, 1e-6);
+    EXPECT_NEAR(top_left.y(), lat_min, 1e-6);
+    EXPECT_NEAR(bottom_right.x(), lon_max, 1e-6);
+    EXPECT_NEAR(bottom_right.y(), lat_max, 1e-6);
+
+    const FovResult fov = computeFov(m, ImageSize{1200, 600});
+    ASSERT_EQ(fov.status, StatusCode::OK);
+    EXPECT_NEAR(fov.horizontal_fov_deg, 150.0f, 1e-3f);
+    EXPECT_NEAR(fov.vertical_fov_deg, 75.0f, 1e-3f);
+    EXPECT_EQ(fov.diagonal_fov_deg, 0.0f);
+  }
+}
+
+TEST(LatLongFactory, FovIsClippedToTheSphere)
+{
+  // fx half of the full-sphere value: the image would span 720 degrees, but
+  // only the 360 degrees of the sphere are covered.
+  CameraModel m = latLongModel<float>(ProjectionModelType::EQUIRECTANGULAR);
+  m.intrinsics.fx *= 0.5f;
+  m.intrinsics.fy *= 0.5f;
+  const FovResult fov = computeFov(m, ImageSize{2048, 1024});
+  ASSERT_EQ(fov.status, StatusCode::OK);
+  EXPECT_NEAR(fov.horizontal_fov_deg, 360.0f, 1e-3f);
+  EXPECT_NEAR(fov.vertical_fov_deg, 180.0f, 1e-3f);
+}
+
+TEST(LatLongFactory, FovCountsOnlyValidPixelsUnderSkew)
+{
+  // With skew the principal column runs across longitudes: lambda =
+  // -skew * y / fx. Here only |y| <= pi / 100 keeps it within [-pi, pi],
+  // a 3.6 degree latitude span, although the rows reach |y| = 1.005.
+  for (const auto type : kTypes)
+  {
+    CameraModel m = latLongModel<float>(type);
+    m.intrinsics.fx = 100.0f;
+    m.intrinsics.fy = 100.0f;
+    m.intrinsics.cx = 100.0f;
+    m.intrinsics.cy = 100.0f;
+    m.intrinsics.skew = 10000.0f;
+    ASSERT_EQ(validateCameraModel(m), StatusCode::OK);
+    const FovResult fov = computeFov(m, ImageSize{201, 201});
+    ASSERT_EQ(fov.status, StatusCode::OK);
+    const double y_seam = kPi / 100.0;
+    const double expected =
+      type == ProjectionModelType::EQUIRECTANGULAR ? 2.0 * y_seam : 2.0 * std::atan(y_seam);
+    EXPECT_NEAR(fov.vertical_fov_deg, expected * 180.0 / kPi, 1e-3) << toString(type);
+    EXPECT_NEAR(fov.horizontal_fov_deg, 201.0 / 100.0 * 180.0 / kPi, 1e-3) << toString(type);
+
+    // The rows counted are exactly the valid ones: just inside the limit
+    // unprojects, just past it does not.
+    const float v_in = 100.0f + 100.0f * static_cast<float>(y_seam) * 0.999f;
+    const float v_out = 100.0f + 100.0f * static_cast<float>(y_seam) * 1.001f;
+    EXPECT_EQ(pixelToRay(m, Pixel2{100.0f, v_in}).status, StatusCode::OK);
+    EXPECT_EQ(pixelToRay(m, Pixel2{100.0f, v_out}).status, StatusCode::OUT_OF_FOV);
+  }
+}
+
+TEST(LatLongFactory, RejectsBadRanges)
+{
+  CameraModel m;
+  m.projection.type = ProjectionModelType::PINHOLE;
+  EXPECT_EQ(makeEquirectangularModel(ImageSize{0, 10}, m), StatusCode::INVALID_INPUT);
+  EXPECT_EQ(m.projection.type, ProjectionModelType::UNKNOWN);
+
+  const ImageSize size{100, 50};
+  EXPECT_EQ(makeEquirectangularModel(size, 0.5, 0.5, -0.1, 0.1, m), StatusCode::INVALID_INPUT);
+  EXPECT_EQ(makeEquirectangularModel(size, -4.0, 0.5, -0.1, 0.1, m), StatusCode::INVALID_INPUT);
+  EXPECT_EQ(makeEquirectangularModel(size, -0.5, 0.5, -1.6, 0.1, m), StatusCode::INVALID_INPUT);
+  EXPECT_EQ(makeEquirectangularModel(size, -0.5, 0.5, 0.2, 0.1, m), StatusCode::INVALID_INPUT);
+  EXPECT_EQ(
+    makeEquirectangularModel(size, -0.5, std::nan(""), -0.1, 0.1, m), StatusCode::INVALID_INPUT
+  );
+  EXPECT_EQ(makeEquirectangularModel(size, -kPi, kPi, -kPi / 2, kPi / 2, m), StatusCode::OK);
+
+  // The cylinder cannot reach the poles.
+  EXPECT_EQ(makeCylindricalModel(size, -kPi, kPi, -kPi / 2, 0.1, m), StatusCode::INVALID_INPUT);
+  EXPECT_EQ(makeCylindricalModel(size, -kPi, kPi, -0.1, kPi / 2, m), StatusCode::INVALID_INPUT);
+  EXPECT_EQ(makeCylindricalModel(size, -kPi, kPi, -1.5, 1.5, m), StatusCode::OK);
 }

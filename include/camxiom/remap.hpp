@@ -70,14 +70,6 @@ RemapResult buildUndistortRemapMap(
 // Image-aware remap
 // ===========================================================================
 
-struct ImageSize
-{
-  int width{0};
-  int height{0};
-
-  constexpr bool isValid() const { return width > 0 && height > 0; }
-};
-
 enum class InvalidPixelPolicy : std::uint8_t { WRITE_NEGATIVE_ONE = 0U, WRITE_RAW_COORDINATE };
 
 struct ImageRemapOptions
@@ -147,13 +139,24 @@ struct [[nodiscard]] FovResult
 
 /// Field of view of `model` over an image of `image_size`, in degrees.
 ///
-/// Works for ANY camera model (pinhole, fisheye, omnidirectional, double
-/// sphere, EUCM): each angle is measured between the unprojected rays of two
-/// boundary pixels (pixelToRay), the same computation the rectify APIs use to
-/// fill their *_fov_deg fields.
+/// Works for ANY camera model. For pinhole, the fisheye laws,
+/// omnidirectional, double sphere and EUCM, each angle is measured between
+/// the unprojected rays of two boundary pixels (pixelToRay), the same
+/// computation the rectify APIs use to fill their *_fov_deg fields.
 ///   * horizontal: (0, cy) .. (width-1, cy) along the principal-point row
 ///   * vertical:   (cx, 0) .. (cx, height-1) along the principal-point column
 ///   * diagonal:   (0, 0) .. (width-1, height-1)
+///
+/// For the lat-long projections (EQUIRECTANGULAR, CYLINDRICAL), whose field
+/// can exceed 180 degrees, the values are angular spans of valid pixels,
+/// edge to edge, clipped to the sphere:
+///   * horizontal: the longitude span of the principal-point row, from the
+///     left edge of column 0 (u = -0.5) to the right edge of the last column
+///   * vertical:   the latitude span of the principal-point column (u = cx),
+///     top edge to bottom edge. With skew that column's longitude changes
+///     from row to row; rows where it passes the seam are not counted.
+/// A full equirectangular image reports 360 x 180. A lat-long model has no
+/// diagonal angle; diagonal_fov_deg is 0.
 ///
 /// Returns INVALID_INPUT for an invalid size and the validation status for an
 /// invalid model. When a boundary pixel cannot be unprojected (e.g. outside
