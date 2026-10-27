@@ -3,24 +3,28 @@
 The design decisions behind camxiom's numerics — what a user should know to
 trust (and correctly interpret) the results.
 
-## Forward-only authoring, shared inverse solvers
+## Shared inverse solvers
 
-Each camera model implements only its **forward** projection (plus
-analytical Jacobians). The inverse (`pixelToRay`) is numerical, through two
-shared solvers:
+Each projection law implements its forward projection, its analytical
+Jacobians, and a closed-form back-projection from undistorted normalized
+coordinates where one exists (pinhole, Mei, double sphere, EUCM,
+equirectangular, cylindrical, and the four ideal fisheye laws: equidistant
+`θ = r`, equisolid `θ = 2·asin(r/2)`, stereographic `θ = 2·atan(r/2)`,
+orthographic `θ = asin(r)`). What has no closed form is inverted by two
+shared numerical solvers:
 
 - **Plane solver** — 2D Newton iteration with a Levenberg–Marquardt
-  fallback (~3–8 iterations typical) for the pinhole-family distortions
-  (radtan / rational / thin-prism / tilted), and for Mei / DS / EUCM after
-  their model-specific back-projection.
+  fallback (~3–8 iterations typical) that removes the plane corrections
+  (radtan / rational / thin-prism / tilted) of pinhole, Mei, DS and EUCM
+  before their back-projection.
 - **Angle solver** — 1D hybrid of bisection and Newton (~5–15 iterations)
   solving `θ_d(θ) = r/f` over the monotonic range `[0, theta_max]` for the
-  fisheye laws, where `θ_d` is the law's radial function with its KB
-  correction, if any, applied.
+  equidistant law with a KB4 / KB8 correction, where `θ_d` is the
+  Kannala–Brandt polynomial.
 
-This is why adding a model is cheap and why inverse behaviour is uniform:
-convergence policy, tolerances, and failure reporting (`NON_CONVERGED`)
-live in one place, controlled by `SolverOptions`.
+This keeps inverse behaviour uniform: convergence policy, tolerances, and
+failure reporting (`NON_CONVERGED`) live in one place, controlled by
+`SolverOptions`.
 
 ### Per-precision solver defaults are intentional
 
@@ -76,9 +80,9 @@ per precision). Float and double behaviour can no longer drift apart —
 the property is enforced by code shape, not by a comment asking two
 implementations to stay in sync.
 
-The same review pass fixed the double-sphere `ξ` range: real DS cameras
-have `ξ ∈ (−1, 0)` (typically around −0.2), so validators and solver
-bounds accept the open interval `(−1, 1)` rather than `ξ ≥ 0`.
+The double-sphere `ξ` range follows the cameras, not a convention: real DS
+cameras have `ξ ∈ (−1, 0)` (typically around −0.2), so validators and
+solver bounds accept the open interval `(−1, 1)` rather than `ξ ≥ 0`.
 
 ## Identifiability and the lock-flag philosophy
 
@@ -114,9 +118,9 @@ only comparable relatively.
 
 ## SIMD strategy (why float and double differ)
 
-Float is the throughput API: every model family has vectorized batch kernels
-(8-wide AVX2 / 4-wide SSE2, run on aarch64 through a minimal NEON
-compatibility layer). Double is the accuracy API: only the undistorted
+Float is the throughput API: the common model families have vectorized
+batch kernels (8-wide AVX2 / 4-wide SSE2, run on aarch64 through a minimal
+NEON compatibility layer; the list is in [Batch projection](../api/batch.md#performance-characteristics)). Double is the accuracy API: only the undistorted
 pinhole fast path is vectorized; the rest is scalar under OpenMP. The
 asymmetry is a deliberate optimization-target split, not drift — the two
 precisions share their scalar math sources.

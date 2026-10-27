@@ -29,6 +29,9 @@ per-thread instances scale without contention.
 
 ## Global state
 
-There is none: no singletons, no global caches, no lazily-initialized
-tables. Library behaviour is a pure function of the arguments (plus OpenMP's
-thread pool for the parallel loops).
+No singletons, no global caches, no lazily-initialized tables. The one
+process-wide value is the choice of the AVX2 batch kernels on x86, made
+once (thread-safely) from the CPU and the `CAMXIOM_DISABLE_AVX2`
+environment variable; see [Architecture](architecture.md#public-api-design).
+Otherwise library behaviour is a pure function of the arguments (plus
+OpenMP's thread pool for the parallel loops).
