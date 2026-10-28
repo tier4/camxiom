@@ -47,42 +47,42 @@ StatusCode importFisheyeModelImpl(
   }
 
   CameraInfo camera_info;
-  if (profile == FisheyeCompatProfile::CANONICAL && external_model.distortion_type != DistortionModelType::UNKNOWN)
-  {
-    camera_info.distortion_model = fisheyeDistortionModelString(external_model.distortion_type);
-  }
-  else
-  {
-    camera_info.distortion_model = "equidistant";
-  }
   camera_info.k = external_model.K;
   camera_info.d = external_model.D;
-
-  if (profile == FisheyeCompatProfile::CANONICAL &&
-      (external_model.distortion_type == DistortionModelType::EQUIDISTANT ||
-       external_model.distortion_type == DistortionModelType::NONE))
+  if (profile != FisheyeCompatProfile::CANONICAL)
   {
+    // The OpenCV and ROS profiles carry the KB4 polynomial under its ROS name.
+    camera_info.distortion_model = "equidistant";
+    return makeAndValidateProjectionModel(camera_info, ProjectionModelType::EQUIDISTANT, model_out);
+  }
+
+  if (!isFisheyeProjection(external_model.projection_type))
+  {
+    return StatusCode::INVALID_INPUT;
+  }
+  if (external_model.distortion_type == DistortionModelType::NONE)
+  {
+    // A law without a correction has no coefficients to read.
     if (!external_model.D.empty())
     {
       return StatusCode::INVALID_INPUT;
     }
-    camera_info.distortion_model = "equidistant";
-    camera_info.d = {0.0, 0.0, 0.0, 0.0};
-    const StatusCode status =
-      makeAndValidateProjectionModel(camera_info, ProjectionModelType::FISHEYE_THETA, model_out);
-    if (status != StatusCode::OK)
-    {
-      return status;
-    }
-    model_out.distortion.type = external_model.distortion_type;
-    model_out.distortion.space = (external_model.distortion_type == DistortionModelType::NONE)
-                                   ? DistortionSpace::NONE
-                                   : DistortionSpace::ANGLE;
-    model_out.distortion.count = 0U;
-    return validateCompatModel(model_out);
+    camera_info.distortion_model = fisheyeLawName(external_model.projection_type);
   }
-
-  return makeAndValidateProjectionModel(camera_info, ProjectionModelType::FISHEYE_THETA, model_out);
+  else if (external_model.distortion_type == DistortionModelType::UNKNOWN)
+  {
+    camera_info.distortion_model = "equidistant";
+  }
+  else
+  {
+    camera_info.distortion_model =
+      fisheyeDistortionModelString(external_model.projection_type, external_model.distortion_type);
+    if (camera_info.distortion_model.empty())
+    {
+      return StatusCode::INVALID_INPUT;
+    }
+  }
+  return makeAndValidateProjectionModel(camera_info, external_model.projection_type, model_out);
 }
 
 template <typename T>
@@ -104,6 +104,7 @@ StatusCode exportFisheyeModelImpl(
   }
 
   fillProjectionFromIntrinsics(model.intrinsics, external_model_out.K);
+  external_model_out.projection_type = model.projection.type;
   external_model_out.distortion_type = model.distortion.type;
   std::size_t export_count = model.distortion.count;
   if (expected_count >= 0)

@@ -34,7 +34,10 @@ PixelResult rayToPixel(const CameraModel &model, const Eigen::Vector3f &ray_dire
   {
     case ProjectionModelType::PINHOLE:
       return pinhole::rayToPixel(model, ray_direction);
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return fisheye::rayToPixel(model, ray_direction);
     case ProjectionModelType::OMNIDIRECTIONAL:
       return omnidirectional::rayToPixel(model, ray_direction);
@@ -83,7 +86,10 @@ RayResult pixelToRay(
   {
     case ProjectionModelType::PINHOLE:
       return pinhole::pixelToRay(model, pixel, solver_options);
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return fisheye::pixelToRay(model, pixel, solver_options);
     case ProjectionModelType::OMNIDIRECTIONAL:
       return omnidirectional::pixelToRay(model, pixel, solver_options);

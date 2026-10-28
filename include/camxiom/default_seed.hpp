@@ -35,8 +35,13 @@ namespace camxiom
 ///   - common to all models: cx = w/2, cy = h/2, skew = 0
 ///   - wide-angle families: theta_max = pi; projection-specific validity applies
 ///   - PINHOLE          : fx = fy = h/2; no projection params; no distortion
-///   - FISHEYE_THETA    : fx = fy = h/pi; theta_max = pi;
+///   - EQUIDISTANT      : fx = fy = h/pi; theta_max = pi;
 ///                        KB4 angle distortion, k1..k4 = 0
+///   - EQUISOLID        : fx = fy = h/(2 sqrt 2); theta_max = pi - 1e-4;
+///                        no distortion
+///   - STEREOGRAPHIC    : fx = fy = h/4; theta_max = pi - 1e-4; no distortion
+///   - ORTHOGRAPHIC     : fx = fy = h/2; theta_max = pi/2 - 1e-4; no distortion
+///   (every fisheye seed maps a ray 90 degrees off axis to radius h/2)
 ///   - OMNIDIRECTIONAL  : fx = fy = h/2; xi = 1.0; no distortion
 ///   - DOUBLE_SPHERE    : fx = fy = h/2; xi = -0.2, alpha = 0.5; no distortion
 ///   - EUCM             : fx = fy = h/2; alpha = 0.5, beta = 1.0; no distortion
@@ -46,7 +51,7 @@ namespace camxiom
 /// validateCameraModel(model) == StatusCode::OK.
 ///
 /// Invalid input handling: if image_width <= 0, image_height <= 0, or
-/// model_type is not one of the five valid projection types (i.e. UNKNOWN
+/// model_type is not one of the valid projection types (i.e. UNKNOWN
 /// or any out-of-range value), a default-constructed CameraModel{} is
 /// returned. Its projection.type is ProjectionModelType::UNKNOWN, which
 /// validateCameraModel rejects (StatusCode::INVALID_MODEL), giving callers

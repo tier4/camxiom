@@ -29,7 +29,7 @@
 // policy is the caller's strategy decision; calibrate() only applies the
 // flags it is given. D29/D30 record the aliasing background):
 //   PINHOLE:         PnpFlag::NONE
-//   FISHEYE_THETA:   PnpFlag::FIX_DIST_2 | FIX_DIST_3  (k3=k4=0 == seed)
+//   EQUIDISTANT:   PnpFlag::FIX_DIST_2 | FIX_DIST_3  (k3=k4=0 == seed)
 //   OMNIDIRECTIONAL: PnpFlag::FIX_PROJECTION_PARAMS      (xi=1.0 == seed)
 //   DOUBLE_SPHERE:   PnpFlag::FIX_PROJECTION_PARAMS      (xi=-0.2, alpha=0.5 == seed)
 //   EUCM:            PnpFlag::FIX_PROJECTION_PARAMS      (alpha=0.5, beta=1.0 == seed)
@@ -197,7 +197,6 @@ CameraModel64 buildGTPinhole()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -219,10 +218,9 @@ CameraModel64 buildGTKB4()
   m.intrinsics.cx = 320.0;
   m.intrinsics.cy = 240.0;
   m.intrinsics.skew = 0.0;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = 2.6;  // inside the polynomial's monotone range
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 4U;
   m.distortion.coeffs.fill(0.0);
   m.distortion.coeffs[0] = 0.01;    // k1 — free in Ceres
@@ -251,7 +249,6 @@ CameraModel64 buildGTMEI()
   m.projection.xi = 1.0;  // = seed, LOCKED by FIX_PROJECTION_PARAMS
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -276,7 +273,6 @@ CameraModel64 buildGTDS()
   m.projection.alpha = 0.5;  // = seed, LOCKED by FIX_PROJECTION_PARAMS
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -301,7 +297,6 @@ CameraModel64 buildGTEUCM()
   m.projection.beta = 1.0;   // = seed, LOCKED by FIX_PROJECTION_PARAMS
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -466,7 +461,7 @@ TEST(CalibIntrinsics, AcceptsUltraNarrowInitialFocalAboveImageBasedDefaultBound)
 
 TEST(CalibIntrinsics, NoNoiseRecoveryKB4)
 {
-  // Uses getDefaultSeed(FISHEYE_THETA, 640, 480): fx=fy=h/pi≈153, k=0,
+  // Uses getDefaultSeed(EQUIDISTANT, 640, 480): fx=fy=h/pi≈153, k=0,
   // theta_max=pi. GT fx=fy=200, k1=0.01, k2=-0.005, k3=k4=0 (locked).
   // Ceres must close the ~24% focal gap and recover k1/k2 from zero start.
   // The MS0 D47 validator fix allows the DLT-PnP lift from the magic seed
@@ -478,7 +473,7 @@ TEST(CalibIntrinsics, NoNoiseRecoveryKB4)
   const auto views = makeCanonicalViews(gt_model, world_pts, 0.0, &dummy_rng);
   ASSERT_FALSE(views.empty()) << "View setup failed";
 
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
   ASSERT_EQ(validateCameraModel(seed), StatusCode::OK);
 
   // Lock k3=k4=0 (= seed value, high-order distortion not identifiable from
@@ -525,7 +520,7 @@ TEST(CalibIntrinsics, WideAngleKb4WithFoldingPolynomialStillCalibrates)
   // data polynomial that happens NOT to fold before pi — making the test
   // pass or fail by luck. Locking pins the cost-zero solution to the GT
   // coefficients, which do fold.
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
   CameraModel64 gt_model = buildGTKB4();
   gt_model.intrinsics.fx = static_cast<double>(seed.intrinsics.fx);
   gt_model.intrinsics.fy = static_cast<double>(seed.intrinsics.fy);
@@ -594,7 +589,7 @@ TEST(CalibIntrinsics, WideAngleKb4WithFoldingPolynomialStillCalibrates)
 TEST(CalibIntrinsics, NoisyRecoveryKB4)
 {
   // Same magic seed as NoNoiseRecoveryKB4, but with N(0, 0.3 px) Gaussian
-  // noise on projected corners. getDefaultSeed(FISHEYE_THETA): fx=h/pi≈153.
+  // noise on projected corners. getDefaultSeed(EQUIDISTANT): fx=h/pi≈153.
   const CameraModel64 gt_model = buildGTKB4();
   const auto world_pts = makeCheckerboard3D(8, 6, 0.05);
 
@@ -602,7 +597,7 @@ TEST(CalibIntrinsics, NoisyRecoveryKB4)
   const auto views = makeCanonicalViews(gt_model, world_pts, 0.3, &rng);
   ASSERT_FALSE(views.empty()) << "View setup failed";
 
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
   ASSERT_EQ(validateCameraModel(seed), StatusCode::OK);
 
   const PnpFlag lock_flags = PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3;
@@ -737,7 +732,7 @@ TEST(CalibIntrinsics, NoNoiseRecoveryEUCM)
 //   PINHOLE:  3% — no distortion, single-pass from far-from-GT seed (240->500)
 //   KB4:      2% — MS1-4 IMPLEMENTATION_NOTES ~1.1% at sigma=0.5 with k3,k4
 //             locked; 2% at sigma=0.3 from magic seed (h/pi≈153->GT 200) with
-//             safety margin. Uses getDefaultSeed(FISHEYE_THETA) (D47 fix).
+//             safety margin. Uses getDefaultSeed(EQUIDISTANT) (D47 fix).
 //   MEI:      2% — MS1-5 reported ~0.6% at sigma=0.5; scaled to sigma=0.3 is ~0.4%,
 //             2% gives 5x margin
 //   DS:       2% — MS1-6 reported ~0.24-0.48% at sigma=0.5; 2% is 5-8x margin
@@ -1124,7 +1119,6 @@ TEST(CalibIntrinsics, ComputeReprojErrorsNoiseFree)
   gt_model.intrinsics.cy = static_cast<float>(gt_m64.intrinsics.cy);
   gt_model.intrinsics.skew = 0.0f;
   gt_model.distortion.type = DistortionModelType::NONE;
-  gt_model.distortion.space = DistortionSpace::NONE;
   gt_model.distortion.count = 0U;
 
   std::vector<double> per_view_rms;
@@ -1393,7 +1387,6 @@ buildRadtan5Model(float fx, float fy, float cx, float cy, float k1, float k2, fl
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = static_cast<float>(constants::kHalfPi);
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.count = 5U;
   m.distortion.coeffs.fill(0.0f);
   // RADTAN5 layout: k1, k2, p1, p2, k3  (indices 0-4).

@@ -193,7 +193,10 @@ std::vector<FreeParam> enumerateFreeParams(
         free_slots = {1, 2};
         break;
       case camxiom::ProjectionModelType::PINHOLE:
-      case camxiom::ProjectionModelType::FISHEYE_THETA:
+      case camxiom::ProjectionModelType::EQUIDISTANT:
+      case camxiom::ProjectionModelType::EQUISOLID:
+      case camxiom::ProjectionModelType::STEREOGRAPHIC:
+      case camxiom::ProjectionModelType::ORTHOGRAPHIC:
       case camxiom::ProjectionModelType::UNKNOWN:
         break;
     }

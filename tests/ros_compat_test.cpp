@@ -199,8 +199,8 @@ TEST(RosCompatRoundTrip, FisheyeOpencvD4)
   ASSERT_EQ(
     importFisheyeCameraInfo(msg, FisheyeCompatProfile::OPENCV_FISHEYE_D4, model), StatusCode::OK
   );
-  EXPECT_EQ(model.projection.type, ProjectionModelType::FISHEYE_THETA);
-  EXPECT_EQ(model.distortion.space, DistortionSpace::ANGLE);
+  EXPECT_EQ(model.projection.type, ProjectionModelType::EQUIDISTANT);
+  EXPECT_EQ(camxiom::distortionSpaceOf(model.distortion.type), DistortionSpace::ANGLE);
   EXPECT_EQ(validateCameraModel(model), StatusCode::OK);
 
   RosCameraInfo out;

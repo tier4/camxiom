@@ -67,7 +67,6 @@ camxiom::CameraModel64 makeEUCMModel(
   model.projection.beta = kBetaSeed;
 
   model.distortion.type = camxiom::DistortionModelType::NONE;
-  model.distortion.space = camxiom::DistortionSpace::NONE;
   model.distortion.count = 0U;
 
   return model;

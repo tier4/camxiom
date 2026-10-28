@@ -157,7 +157,10 @@ std::vector<int> fixedProjectionParamIndices(camxiom::ProjectionModelType type)
     case camxiom::ProjectionModelType::EUCM:
       return {0};
     case camxiom::ProjectionModelType::PINHOLE:
-    case camxiom::ProjectionModelType::FISHEYE_THETA:
+    case camxiom::ProjectionModelType::EQUIDISTANT:
+    case camxiom::ProjectionModelType::EQUISOLID:
+    case camxiom::ProjectionModelType::STEREOGRAPHIC:
+    case camxiom::ProjectionModelType::ORTHOGRAPHIC:
     case camxiom::ProjectionModelType::UNKNOWN:
       break;
   }

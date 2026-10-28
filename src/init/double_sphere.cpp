@@ -60,7 +60,6 @@ camxiom::CameraModel64 makeDSModel(
   model.projection.alpha = kAlphaSeed;
 
   model.distortion.type = camxiom::DistortionModelType::NONE;
-  model.distortion.space = camxiom::DistortionSpace::NONE;
   model.distortion.count = 0U;
 
   return model;

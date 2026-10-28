@@ -1,9 +1,10 @@
 # camxiom
 
 **camxiom** is a unified C++17 camera-geometry library: one API across the
-whole spectrum of camera models — **pinhole**, **fisheye (Kannala–Brandt)**,
-**omnidirectional (Mei)**, **double sphere**, and **EUCM**, each with its full
-distortion catalogue — plus a Ceres-based PnP / intrinsic-calibration layer
+whole spectrum of camera models — **pinhole**, the **fisheye laws**
+(equidistant with Kannala–Brandt, equisolid, stereographic, orthographic),
+**omnidirectional (Mei)**, **double sphere**, and **EUCM**, each with the lens
+corrections it takes — plus a Ceres-based PnP / intrinsic-calibration layer
 and ROS 2 / OpenCV interfaces built on the same model set.
 
 Eigen is the only hard dependency of the runtime core. Everything else —
@@ -20,7 +21,7 @@ camxiom collapses that into one model set handled uniformly everywhere:
 - **One API for every model.** The primary API is two functions —
   `rayToPixel()` and `pixelToRay()`. Forward projection, undistortion,
   rectification, Jacobians, PnP, and calibration behave identically across
-  the five projection families; adding a camera model never grows the API
+  the projection families; adding a camera model never grows the API
   surface, and supporting a new camera downstream never means a new code
   path.
 - **A calibrator with the same breadth.** The calibration layer
@@ -41,7 +42,7 @@ camxiom collapses that into one model set handled uniformly everywhere:
 
 | Area | What you get |
 |---|---|
-| [Projection](api/projection.md) | Generic `rayToPixel` / `pixelToRay` over all five models, float32 and float64 variants, `ValidatedCameraModel` for validated hot loops, Ceres-`Jet`-ready projection templates |
+| [Projection](api/projection.md) | Generic `rayToPixel` / `pixelToRay` over every model, float32 and float64 variants, `ValidatedCameraModel` for validated hot loops, Ceres-`Jet`-ready projection templates |
 | [Batch projection](api/batch.md) | Bulk ray↔pixel APIs (Eigen and raw-pointer overloads) with SIMD (AVX2 / SSE2 / NEON) and OpenMP acceleration |
 | [Jacobians](api/jacobians.md) | Analytical 2×3 point Jacobians, batch variants, and full parameter Jacobians (intrinsics / distortion / projection parameters) for optimization |
 | [Inverse LUT](api/lut.md) | Precomputed grid + bilinear interpolation for O(1) approximate `pixelToRay` |

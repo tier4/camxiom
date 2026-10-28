@@ -179,7 +179,6 @@ CameraModel64 makeGtPinholeRadtan5()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = kPi / 2.0;
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.count = 5U;
   m.distortion.coeffs.fill(0.0);
   m.distortion.coeffs[0] = -0.10;
@@ -203,7 +202,6 @@ CameraModel makeSeedPinholeRadtan5()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = static_cast<float>(kPi / 2.0);
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.count = 5U;
   m.distortion.coeffs.fill(0.0f);
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -219,10 +217,9 @@ CameraModel64 makeGtKb4()
   m.intrinsics.cx = 320.0;
   m.intrinsics.cy = 240.0;
   m.intrinsics.skew = 0.0;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = kPi;
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 4U;
   m.distortion.coeffs.fill(0.0);
   m.distortion.coeffs[0] = 0.01;
@@ -322,7 +319,7 @@ int main()
   const CameraModel64 gt_pin = makeGtPinholeRadtan5();
   const CameraModel seed_pin = makeSeedPinholeRadtan5();
   const CameraModel64 gt_kb4 = makeGtKb4();
-  const CameraModel seed_kb4 = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed_kb4 = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
 
   const int reps = 15;
   for (std::size_t m : {std::size_t{5}, std::size_t{20}, std::size_t{50}})

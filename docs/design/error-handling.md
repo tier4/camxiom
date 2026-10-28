@@ -45,8 +45,9 @@ it warns when the result is dropped — intentional discards must be written
   returns failure for an unrecognized projection/distortion type instead of
   silently projecting distortion-free — a silent fallback would bias any
   optimizer sitting on top.
-- **Type/space mismatches are caught at validation:** `DistortionSpace`
-  (PLANE vs ANGLE) makes "pinhole + Kannala-Brandt coefficients" an
+- **Type/space mismatches are caught at validation:** the distortion space
+  derived from the type (`distortionSpaceOf`, PLANE vs ANGLE) makes
+  "pinhole + Kannala-Brandt coefficients" an
   `INVALID_MODEL` at `validateCameraModel` time rather than silent garbage
   at projection time. Validation is two-tier: the public
   `validateCameraModel`/`64` oracle additionally certifies (by sampled scan)

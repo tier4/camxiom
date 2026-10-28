@@ -23,12 +23,19 @@
 namespace camxiom
 {
 
+/// True when an interchange distortion_model name (e.g. ROS CameraInfo)
+/// denotes a fisheye law: the KB names ("equidistant", "fisheye", "kb4",
+/// "kb8", ...) and the plain law names ("ideal_equidistant", "equisolid",
+/// "stereographic", "orthographic").
 [[nodiscard]] bool isFisheyeDistortionModel(const std::string &model_name);
 [[nodiscard]] bool isRationalDistortionModel(const std::string &model_name);
+/// Distortion (lens correction) names: the canonical toString spellings plus
+/// the interchange aliases ("plumb_bob", "rational_polynomial", and the ROS /
+/// OpenCV names of KB4: "equidistant", "fisheye"). Projection-law names such
+/// as "equisolid" are not distortions and parse to UNKNOWN.
 [[nodiscard]] DistortionModelType parseDistortionModelType(const std::string &model_name);
-[[nodiscard]] ProjectionModelType chooseProjectionModelType(
-  DistortionModelType distortion_model_type
-);
+/// Inverse of toString(ProjectionModelType); anything else parses to UNKNOWN.
+[[nodiscard]] ProjectionModelType parseProjectionModelType(const std::string &model_name);
 
 /// Full model-invariant check: structural consistency (types, spaces, counts,
 /// flags, finiteness, per-model parameter ranges) PLUS certification that a
@@ -55,7 +62,11 @@ namespace camxiom
 /// helpers).
 [[nodiscard]] StatusCode validateCameraModel64(const CameraModel64 &model);
 
-/// Create a copy of the model with distortion removed (coeffs zeroed, type=NONE).
+/// Create a copy of the model with its lens correction removed: distortion
+/// type NONE, coefficients zeroed, and the projection law (including xi,
+/// alpha, beta and theta_max) unchanged. A stereographic model stays
+/// stereographic; an equidistant model with KB4 becomes the plain
+/// equidistant law.
 [[nodiscard]] CameraModel makeDistortionFree(const CameraModel &model);
 
 /// What bounds the usable angular range, independently of a declared FOV.
@@ -76,7 +87,7 @@ struct FisheyeDomain64
   constexpr bool ok() const { return status == StatusCode::OK; }
 };
 
-/// Inspect a FISHEYE_THETA model without changing it. The declared theta_max
+/// Inspect a fisheye-law model (isFisheyeProjection) without changing it. The declared theta_max
 /// is ignored, even if non-finite or outside the current monotone range.
 /// All other model invariants must hold; errors leave both angles zero and
 /// limit UNKNOWN. Non-fisheye models return INVALID_MODEL.
@@ -85,8 +96,8 @@ struct FisheyeDomain64
 /// 1e-3 to approximately pi - 1e-4 radians, including the start sample.
 /// safe_theta_max is the last finite, non-negative, positive-slope sample;
 /// theta_limit is the first failing sample, NOT an exact polynomial root.
-/// Without a failing sample the limit is ANGULAR_LIMIT at pi. Ideal models
-/// use their geometric endpoint with a 1e-4 rad inset for safe_theta_max.
+/// Without a failing sample the limit is ANGULAR_LIMIT at pi. Coefficient-free
+/// laws use their geometric endpoint with a 1e-4 rad inset for safe_theta_max.
 /// This is a sampled estimate: folds narrower than a scan step or below
 /// the start sample can be missed. No usable positive sample is an error.
 /// Recompute after changing coefficients; observation gates and evaluation

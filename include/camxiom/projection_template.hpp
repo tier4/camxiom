@@ -45,6 +45,7 @@
 ///   }
 /// @endcode
 
+#include "camxiom/internal/angle_law.hpp"
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/types.hpp"
 
@@ -125,7 +126,7 @@ bool withinTheta(ProjectionModelType type, const T &x, const T &y, const T &z, d
   const auto sx = scalarValue(x), sy = scalarValue(y), sz = scalarValue(z);
   // The fisheye kernel checks the cap against the angle it computes for
   // projection, so it does not need a second atan2 here.
-  if (type == ProjectionModelType::FISHEYE_THETA) return true;
+  if (isFisheyeProjection(type)) return true;
   if (cap >= constants::kPi) return true;
   return sz >= std::sqrt(sx * sx + sy * sy + sz * sz) * std::cos(cap);
 }
@@ -441,7 +442,7 @@ fisheyeCoordinates(const T &x, const T &y, const T &z, double cap, T &xy_norm, T
   return true;
 }
 
-template <DistortionModelType Type, bool CheckTheta, typename T>
+template <detail_impl::AngleLaw Law, bool CheckTheta, typename T>
 #if defined(__GNUC__) || defined(__clang__)
 [[gnu::always_inline]]
 #endif
@@ -457,7 +458,8 @@ projectFisheye(
   if (!fisheyeCoordinates<T, CheckTheta>(x_cam, y_cam, z_cam, cap, xy_norm, theta))
     return reject(u_out, v_out);
   T theta_d;
-  if constexpr (Type == DistortionModelType::KB4 || Type == DistortionModelType::KB8)
+  using detail_impl::AngleLaw;
+  if constexpr (Law == AngleLaw::KB4 || Law == AngleLaw::KB8)
   {
     const T t2 = theta * theta;
     const T t3 = t2 * theta;
@@ -465,7 +467,7 @@ projectFisheye(
     const T t7 = t5 * t2;
     const T t9 = t7 * t2;
     theta_d = theta + dist[0] * t3 + dist[1] * t5 + dist[2] * t7 + dist[3] * t9;
-    if constexpr (Type == DistortionModelType::KB8)
+    if constexpr (Law == AngleLaw::KB8)
     {
       const T t11 = t9 * t2;
       const T t13 = t11 * t2;
@@ -474,11 +476,11 @@ projectFisheye(
       theta_d = theta_d + dist[4] * t11 + dist[5] * t13 + dist[6] * t15 + dist[7] * t17;
     }
   }
-  else if constexpr (Type == DistortionModelType::EQUISOLID)
+  else if constexpr (Law == AngleLaw::EQUISOLID)
     theta_d = T(2.0) * sin(theta * T(0.5));
-  else if constexpr (Type == DistortionModelType::STEREOGRAPHIC)
+  else if constexpr (Law == AngleLaw::STEREOGRAPHIC)
     theta_d = T(2.0) * tan(theta * T(0.5));
-  else if constexpr (Type == DistortionModelType::ORTHOGRAPHIC)
+  else if constexpr (Law == AngleLaw::ORTHOGRAPHIC)
   {
     if (z_cam < T(0)) return reject(u_out, v_out);
     theta_d = sin(theta);
@@ -498,7 +500,7 @@ template <typename T>
   T &v_out
 )
 {
-  return detail::projectFisheye<DistortionModelType::KB4, false>(
+  return detail::projectFisheye<detail_impl::AngleLaw::KB4, false>(
     intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
   );
 }
@@ -509,7 +511,7 @@ template <typename T>
   T &v_out
 )
 {
-  return detail::projectFisheye<DistortionModelType::KB8, false>(
+  return detail::projectFisheye<detail_impl::AngleLaw::KB8, false>(
     intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
   );
 }
@@ -519,7 +521,7 @@ template <typename T>
   const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out
 )
 {
-  return detail::projectFisheye<DistortionModelType::EQUIDISTANT, false>(
+  return detail::projectFisheye<detail_impl::AngleLaw::EQUIDISTANT, false>(
     intrinsics, static_cast<const T *>(nullptr), x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
   );
 }
@@ -529,7 +531,7 @@ template <typename T>
   const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out
 )
 {
-  return detail::projectFisheye<DistortionModelType::EQUISOLID, false>(
+  return detail::projectFisheye<detail_impl::AngleLaw::EQUISOLID, false>(
     intrinsics, static_cast<const T *>(nullptr), x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
   );
 }
@@ -539,7 +541,7 @@ template <typename T>
   const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out
 )
 {
-  return detail::projectFisheye<DistortionModelType::STEREOGRAPHIC, false>(
+  return detail::projectFisheye<detail_impl::AngleLaw::STEREOGRAPHIC, false>(
     intrinsics, static_cast<const T *>(nullptr), x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
   );
 }
@@ -549,7 +551,7 @@ template <typename T>
   const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out
 )
 {
-  return detail::projectFisheye<DistortionModelType::ORTHOGRAPHIC, false>(
+  return detail::projectFisheye<detail_impl::AngleLaw::ORTHOGRAPHIC, false>(
     intrinsics, static_cast<const T *>(nullptr), x_cam, y_cam, z_cam, u_out, v_out, constants::kPi
   );
 }
@@ -752,11 +754,6 @@ template <typename T>
           return projectRadtan5(intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out);
         case DistortionModelType::KB4:
         case DistortionModelType::KB8:
-        case DistortionModelType::EQUIDISTANT:
-        case DistortionModelType::EQUISOLID:
-        case DistortionModelType::STEREOGRAPHIC:
-        case DistortionModelType::ORTHOGRAPHIC:
-        case DistortionModelType::OMNIDIRECTIONAL:
         case DistortionModelType::UNKNOWN:
           break;
       }
@@ -765,41 +762,38 @@ template <typename T>
       return detail::reject(u_out, v_out);
     }
 
-    case ProjectionModelType::FISHEYE_THETA: {
-      switch (dist_type)
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC: {
+      using detail_impl::AngleLaw;
+      switch (detail_impl::angleLawOf(proj_type, dist_type))
       {
-        case DistortionModelType::NONE:
-        case DistortionModelType::EQUIDISTANT:
-          return detail::projectFisheye<DistortionModelType::EQUIDISTANT, true>(
+        case AngleLaw::EQUIDISTANT:
+          return detail::projectFisheye<AngleLaw::EQUIDISTANT, true>(
             intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
           );
-        case DistortionModelType::KB4:
-          return detail::projectFisheye<DistortionModelType::KB4, true>(
+        case AngleLaw::KB4:
+          return detail::projectFisheye<AngleLaw::KB4, true>(
             intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
           );
-        case DistortionModelType::KB8:
-          return detail::projectFisheye<DistortionModelType::KB8, true>(
+        case AngleLaw::KB8:
+          return detail::projectFisheye<AngleLaw::KB8, true>(
             intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
           );
-        case DistortionModelType::EQUISOLID:
-          return detail::projectFisheye<DistortionModelType::EQUISOLID, true>(
+        case AngleLaw::EQUISOLID:
+          return detail::projectFisheye<AngleLaw::EQUISOLID, true>(
             intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
           );
-        case DistortionModelType::STEREOGRAPHIC:
-          return detail::projectFisheye<DistortionModelType::STEREOGRAPHIC, true>(
+        case AngleLaw::STEREOGRAPHIC:
+          return detail::projectFisheye<AngleLaw::STEREOGRAPHIC, true>(
             intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
           );
-        case DistortionModelType::ORTHOGRAPHIC:
-          return detail::projectFisheye<DistortionModelType::ORTHOGRAPHIC, true>(
+        case AngleLaw::ORTHOGRAPHIC:
+          return detail::projectFisheye<AngleLaw::ORTHOGRAPHIC, true>(
             intrinsics, dist, x_cam, y_cam, z_cam, u_out, v_out, theta_max
           );
-        case DistortionModelType::RADTAN4:
-        case DistortionModelType::RADTAN5:
-        case DistortionModelType::RATIONAL8:
-        case DistortionModelType::THIN_PRISM12:
-        case DistortionModelType::TILTED14:
-        case DistortionModelType::OMNIDIRECTIONAL:
-        case DistortionModelType::UNKNOWN:
+        case AngleLaw::INVALID:
           break;
       }
       // See the model-based dispatch: silently projecting an unknown
@@ -839,11 +833,11 @@ namespace detail
 // Every active intrinsic/distortion coefficient participates in arithmetic:
 // NaN/Inf necessarily reaches an output or a checked intermediate (norm,
 // rational/tilt denominator), and finish() rejects it. Do not scan those
-// inputs again. Ignored ideal-fisheye padding still needs an explicit check.
+// inputs again.
 template <typename T>
 bool validParameters(
-  ProjectionModelType proj_type, DistortionModelType dist_type, const T *intrinsics, const T *dist,
-  int dist_count, const T &proj_xi, const T &proj_alpha, const T &proj_beta, double eps
+  ProjectionModelType proj_type, DistortionModelType dist_type, const T *intrinsics, int dist_count,
+  const T &proj_xi, const T &proj_alpha, const T &proj_beta, double eps
 )
 {
   if (std::abs(detail::scalarValue(intrinsics[0])) <= eps || std::abs(detail::scalarValue(intrinsics[1])) <= eps)
@@ -869,28 +863,14 @@ bool validParameters(
       required = 14;
       break;
     case DistortionModelType::NONE:
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
       break;
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       return false;
   }
   if (dist_count != required)
   {
     const bool legacy_radtan4 = dist_type == DistortionModelType::RADTAN4 && dist_count == 5;
-    const bool padded_ideal = dist_type == DistortionModelType::EQUIDISTANT ||
-                              dist_type == DistortionModelType::EQUISOLID ||
-                              dist_type == DistortionModelType::STEREOGRAPHIC ||
-                              dist_type == DistortionModelType::ORTHOGRAPHIC;
-    if (!legacy_radtan4 && !padded_ideal) return false;
-    // Ideal mappings may carry zero padding, as accepted by the runtime
-    // validator. Non-zero values would disagree with fixed-width kernels.
-    if (padded_ideal)
-      for (int i = 0; i < dist_count; ++i)
-        if (detail::scalarValue(dist[i]) != 0) return false;
+    if (!legacy_radtan4) return false;
   }
   if (proj_type == ProjectionModelType::OMNIDIRECTIONAL || proj_type == ProjectionModelType::DOUBLE_SPHERE || proj_type == ProjectionModelType::EUCM)
   {
@@ -931,7 +911,7 @@ template <typename T>
   if (!intrinsics || dist_count < 0 || dist_count > 14 || (dist_count && !dist) || !detail::withinTheta(proj_type, x_cam, y_cam, z_cam, theta_max))
     return detail::reject(u_out, v_out);
   if (!detail::validParameters(
-        proj_type, dist_type, intrinsics, dist, dist_count, proj_xi, proj_alpha, proj_beta,
+        proj_type, dist_type, intrinsics, dist_count, proj_xi, proj_alpha, proj_beta,
         detail::epsilon<T>()
       ))
     return detail::reject(u_out, v_out);
@@ -952,11 +932,8 @@ bool projectModel(
   T &v
 )
 {
-  constexpr bool ideal =
-    Type == DistortionModelType::EQUIDISTANT || Type == DistortionModelType::EQUISOLID ||
-    Type == DistortionModelType::STEREOGRAPHIC || Type == DistortionModelType::ORTHOGRAPHIC;
-  constexpr bool fish =
-    ideal || Type == DistortionModelType::KB4 || Type == DistortionModelType::KB8;
+  using detail_impl::AngleLaw;
+  constexpr bool kb = Type == DistortionModelType::KB4 || Type == DistortionModelType::KB8;
   constexpr int count =
     (Type == DistortionModelType::RADTAN4 || Type == DistortionModelType::RADTAN5) ? 5
     : Type == DistortionModelType::KB4                                             ? 4
@@ -965,12 +942,7 @@ bool projectModel(
     : Type == DistortionModelType::TILTED14                                        ? 14
                                                                                    : 0;
   const int size = model.distortion.count;
-  if constexpr (ideal)
-  {
-    for (int i = 0; i < size; ++i)
-      if (scalarValue(T(model.distortion.coeffs[i])) != 0) return reject(u, v);
-  }
-  else if constexpr (Type == DistortionModelType::RADTAN4)
+  if constexpr (Type == DistortionModelType::RADTAN4)
   {
     if (size != 4 && size != 5) return reject(u, v);
   }
@@ -978,17 +950,28 @@ bool projectModel(
     return reject(u, v);
   T dist[count ? count : 1];
   for (int i = 0; i < count; ++i) dist[i] = i < size ? T(model.distortion.coeffs[i]) : T(0);
-  if constexpr (fish)
+  if constexpr (kb)
   {
-    if (model.projection.type != ProjectionModelType::FISHEYE_THETA) return reject(u, v);
-    return projectFisheye<Type, true>(intrinsics, dist, x, y, z, u, v, model.projection.theta_max);
+    if (model.projection.type != ProjectionModelType::EQUIDISTANT) return reject(u, v);
+    constexpr AngleLaw law = Type == DistortionModelType::KB4 ? AngleLaw::KB4 : AngleLaw::KB8;
+    return projectFisheye<law, true>(intrinsics, dist, x, y, z, u, v, model.projection.theta_max);
   }
   else if constexpr (Type == DistortionModelType::NONE)
   {
-    if (model.projection.type == ProjectionModelType::FISHEYE_THETA)
-      return projectFisheye<DistortionModelType::EQUIDISTANT, true>(
-        intrinsics, dist, x, y, z, u, v, model.projection.theta_max
-      );
+    const double cap = model.projection.theta_max;
+    switch (model.projection.type)
+    {
+      case ProjectionModelType::EQUIDISTANT:
+        return projectFisheye<AngleLaw::EQUIDISTANT, true>(intrinsics, dist, x, y, z, u, v, cap);
+      case ProjectionModelType::EQUISOLID:
+        return projectFisheye<AngleLaw::EQUISOLID, true>(intrinsics, dist, x, y, z, u, v, cap);
+      case ProjectionModelType::STEREOGRAPHIC:
+        return projectFisheye<AngleLaw::STEREOGRAPHIC, true>(intrinsics, dist, x, y, z, u, v, cap);
+      case ProjectionModelType::ORTHOGRAPHIC:
+        return projectFisheye<AngleLaw::ORTHOGRAPHIC, true>(intrinsics, dist, x, y, z, u, v, cap);
+      default:
+        break;
+    }
     if (!std::isfinite(scalarValue(z)) || !(z > T(0))) return reject(u, v);
     u = intrinsics[0] * (x / z) + intrinsics[2];
     v = intrinsics[1] * (y / z) + intrinsics[3];
@@ -1026,7 +1009,7 @@ projectGeneric(
     T(model.intrinsics.fx), T(model.intrinsics.fy), T(model.intrinsics.cx), T(model.intrinsics.cy)};
   if (std::abs(detail::scalarValue(intrinsics[0])) <= detail::epsilon<T>() || std::abs(detail::scalarValue(intrinsics[1])) <= detail::epsilon<T>())
     return detail::reject(u_out, v_out);
-  if (model.projection.type == ProjectionModelType::PINHOLE || model.projection.type == ProjectionModelType::FISHEYE_THETA)
+  if (model.projection.type == ProjectionModelType::PINHOLE || isFisheyeProjection(model.projection.type))
   {
     switch (model.distortion.type)
     {
@@ -1060,22 +1043,6 @@ projectGeneric(
         );
       case DistortionModelType::KB8:
         return detail::projectModel<DistortionModelType::KB8>(
-          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
-        );
-      case DistortionModelType::EQUIDISTANT:
-        return detail::projectModel<DistortionModelType::EQUIDISTANT>(
-          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
-        );
-      case DistortionModelType::EQUISOLID:
-        return detail::projectModel<DistortionModelType::EQUISOLID>(
-          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
-        );
-      case DistortionModelType::STEREOGRAPHIC:
-        return detail::projectModel<DistortionModelType::STEREOGRAPHIC>(
-          model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
-        );
-      case DistortionModelType::ORTHOGRAPHIC:
-        return detail::projectModel<DistortionModelType::ORTHOGRAPHIC>(
           model, intrinsics, x_cam, y_cam, z_cam, u_out, v_out
         );
       default:

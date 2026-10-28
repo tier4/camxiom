@@ -36,30 +36,39 @@ Builds a `CameraModel` from K / D / `distortion_model`. Parsing is
 case-insensitive and accepts both camxiom's canonical names and the common
 ROS / OpenCV / third-party spellings:
 
-| Input string(s) | Distortion model | Projection family |
+The name selects both slots of the model — the projection law and the
+correction on top of it (see
+[Projection law and lens correction](../camera-models.md#projection-law-and-lens-correction)):
+
+| Input string(s) | Projection law | Distortion |
 |---|---|---|
-| `none` (or empty string + empty `d`) | `NONE` | pinhole |
-| `radtan4` | `RADTAN4` | pinhole |
-| `radtan5`, `plumb_bob`, `brown_conrady` | `RADTAN5` | pinhole |
-| `rational8`, `rational_polynomial` | `RATIONAL8` | pinhole |
-| `thin_prism12`, `thin_prism_fisheye` | `THIN_PRISM12` | pinhole |
-| `tilted14`, `tilted` | `TILTED14` | pinhole |
-| `kb4`, `kannala_brandt`, `kannala-brandt`, `equidistant`, `fisheye`, `opencv_fisheye4` | `KB4` | fisheye |
-| `kb8`, `kannala_brandt8`, `kannala-brandt8` | `KB8` | fisheye |
-| `ideal_equidistant` | `EQUIDISTANT` (coefficient-free) | fisheye |
-| `equisolid[_angle]`, `stereographic[_angle]`, `orthographic[_angle]` | trigonometric fisheye variants | fisheye |
-| `omnidirectional`, `omni` | — | Mei; `d = [xi, plane coeffs...]` |
-| `double_sphere`, `ds` | — | double sphere; `d = [xi, alpha, plane coeffs...]` |
-| `eucm` | — | EUCM; `d = [alpha, beta, plane coeffs...]` |
+| `none` (or empty string + empty `d`) | `PINHOLE` | `NONE` |
+| `radtan4` | `PINHOLE` | `RADTAN4` |
+| `radtan5`, `plumb_bob`, `brown_conrady` | `PINHOLE` | `RADTAN5` |
+| `rational8`, `rational_polynomial` | `PINHOLE` | `RATIONAL8` |
+| `thin_prism12`, `thin_prism_fisheye` | `PINHOLE` | `THIN_PRISM12` |
+| `tilted14`, `tilted` | `PINHOLE` | `TILTED14` |
+| `kb4`, `kannala_brandt`, `kannala-brandt`, `equidistant`, `fisheye`, `opencv_fisheye4` | `EQUIDISTANT` | `KB4` |
+| `kb8`, `kannala_brandt8`, `kannala-brandt8` | `EQUIDISTANT` | `KB8` |
+| `ideal_equidistant` | `EQUIDISTANT` | `NONE` |
+| `equisolid[_angle]`, `stereographic[_angle]`, `orthographic[_angle]` | `EQUISOLID`, `STEREOGRAPHIC`, `ORTHOGRAPHIC` | `NONE` |
+| `omnidirectional`, `omni` | `OMNIDIRECTIONAL`; `d = [xi, plane coeffs...]` | by the remaining count |
+| `double_sphere`, `ds` | `DOUBLE_SPHERE`; `d = [xi, alpha, plane coeffs...]` | by the remaining count |
+| `eucm` | `EUCM`; `d = [alpha, beta, plane coeffs...]` | by the remaining count |
 | anything else | `UNKNOWN` (rejected by `validateCameraModel`) | — |
+
+The laws without a correction take no coefficients: an all-zero `d` (as
+some writers pad it) is read as none, and any non-zero entry yields a model
+that `validateCameraModel` rejects.
 
 Two pitfalls worth knowing:
 
 - ROS's `equidistant` means the **4-coefficient fisheye polynomial**
   (OpenCV's fisheye model, which is the same function as KB4), not the
-  ideal equidistant mapping. camxiom reads it as `KB4`, writes `KB4` back
-  under that name, and provides `ideal_equidistant` for the
-  coefficient-free model.
+  plain equidistant law. camxiom reads it as `EQUIDISTANT` + `KB4`, writes
+  `KB4` back under that name, and reads `ideal_equidistant` as the plain
+  law (`NONE`). ROS has no name for the plain law, so the fisheye exporters
+  write it under `equidistant` with an empty `D`.
 - For Mei / DS / EUCM, the projection-level parameters ride in the *front*
   of `d` (see the table). They are unpacked into
   `CameraModel::projection`, not kept as distortion coefficients.
@@ -77,7 +86,7 @@ and validate the result, returning a `StatusCode`.
 | Family | External struct | Profiles |
 |---|---|---|
 | pinhole | `PinholeExternalModel{K, D}` | `CANONICAL`, `OPENCV_CALIB3D_D4/D5/D8/D12/D14`, `ROS_CAMERA_INFO_RAW` |
-| fisheye | `FisheyeExternalModel{K, D, distortion_type}` | `CANONICAL`, `OPENCV_FISHEYE_D4`, `ROS_CAMERA_INFO_EQUIDISTANT` |
+| fisheye | `FisheyeExternalModel{K, D, distortion_type, projection_type}` | `CANONICAL`, `OPENCV_FISHEYE_D4`, `ROS_CAMERA_INFO_EQUIDISTANT` |
 | omnidirectional | `OmnidirectionalExternalModel{K, D, xi}` | `CANONICAL`, `OPENCV_OMNIDIR_D4/D5/D8` |
 | double sphere | `DoubleSphereExternalModel{K, D, xi, alpha}` | `CANONICAL`, `BASALT_D0`, `BASALT_D4` |
 | EUCM | `EucmExternalModel{K, D, alpha, beta}` | `CANONICAL`, `KALIBR_D0`, `KALIBR_D4` |
@@ -91,7 +100,11 @@ StatusCode exportPinholeModel(const CameraModel &, PinholeCompatProfile, Pinhole
 
 In the external structs, `xi` / `alpha` / `beta` are **named fields** and `D`
 carries only the plane/angle coefficients — the prefix packing only happens
-in the `CameraInfo` POD / ROS-message direction. `toString()` overloads
+in the `CameraInfo` POD / ROS-message direction. `FisheyeExternalModel`
+names the fisheye law in `projection_type` (default `EQUIDISTANT`) and the
+correction in `distortion_type` (`NONE` with an empty `D`, `KB4`, `KB8`;
+`UNKNOWN` reads `D` as KB4); the `CANONICAL` profile reads both, the OpenCV
+and ROS profiles always mean `EQUIDISTANT` + `KB4`. `toString()` overloads
 exist for every profile enum.
 
 ### Exporting to a `CameraInfo` POD

@@ -144,7 +144,7 @@ using camxiom::calib::CalibrationView;
 std::vector<CalibrationView> views = /* detected corners: world (Z=0) + pixels */;
 
 camxiom::CameraModel seed = camxiom::getDefaultSeed(
-    camxiom::ProjectionModelType::FISHEYE_THETA, 1280, 960);
+    camxiom::ProjectionModelType::EQUIDISTANT, 1280, 960);
 
 camxiom::calib::CalibrationOptions opts;
 opts.image_width = 1280;

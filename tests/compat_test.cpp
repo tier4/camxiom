@@ -125,9 +125,9 @@ TEST(CompatRoundTrip, FisheyeKB4)
 
   CameraModel model;
   ASSERT_EQ(importFisheyeModel(ext, FisheyeCompatProfile::CANONICAL, model), StatusCode::OK);
-  EXPECT_EQ(model.projection.type, ProjectionModelType::FISHEYE_THETA);
+  EXPECT_EQ(model.projection.type, ProjectionModelType::EQUIDISTANT);
   EXPECT_EQ(model.distortion.type, DistortionModelType::KB4);
-  EXPECT_EQ(model.distortion.space, DistortionSpace::ANGLE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(model.distortion.type), DistortionSpace::ANGLE);
 
   FisheyeExternalModel out;
   ASSERT_EQ(exportFisheyeModel(model, FisheyeCompatProfile::CANONICAL, out), StatusCode::OK);
@@ -251,8 +251,164 @@ TEST(CompatMakeCameraModel, EquidistantFisheye)
 
   const CameraModel model = makeCameraModel(info);
   EXPECT_EQ(validateCameraModel(model), StatusCode::OK);
-  EXPECT_EQ(model.projection.type, ProjectionModelType::FISHEYE_THETA);
-  EXPECT_EQ(model.distortion.space, DistortionSpace::ANGLE);
+  EXPECT_EQ(model.projection.type, ProjectionModelType::EQUIDISTANT);
+  EXPECT_EQ(camxiom::distortionSpaceOf(model.distortion.type), DistortionSpace::ANGLE);
+}
+
+TEST(CompatMakeCameraModel, NamesSelectTheLawAndTheCorrection)
+{
+  struct Case
+  {
+    const char *name;
+    std::vector<double> d;
+    ProjectionModelType law;
+    DistortionModelType distortion;
+  };
+  const std::vector<double> kb4 = {0.01, 0.001, 0.0001, -0.0002};
+  const std::vector<double> kb8 = {0.01, 0.001, 0.0001, -0.0002, 0, 0, 0, 0};
+  const Case cases[] = {
+    {"equidistant", kb4, ProjectionModelType::EQUIDISTANT, DistortionModelType::KB4},
+    {"fisheye", kb4, ProjectionModelType::EQUIDISTANT, DistortionModelType::KB4},
+    {"opencv_fisheye4", kb4, ProjectionModelType::EQUIDISTANT, DistortionModelType::KB4},
+    {"kb4", kb4, ProjectionModelType::EQUIDISTANT, DistortionModelType::KB4},
+    {"kannala_brandt", kb4, ProjectionModelType::EQUIDISTANT, DistortionModelType::KB4},
+    {"kb8", kb8, ProjectionModelType::EQUIDISTANT, DistortionModelType::KB8},
+    {"kannala_brandt8", kb8, ProjectionModelType::EQUIDISTANT, DistortionModelType::KB8},
+    {"ideal_equidistant", {}, ProjectionModelType::EQUIDISTANT, DistortionModelType::NONE},
+    {"equisolid", {}, ProjectionModelType::EQUISOLID, DistortionModelType::NONE},
+    {"equisolid_angle", {}, ProjectionModelType::EQUISOLID, DistortionModelType::NONE},
+    {"stereographic", {}, ProjectionModelType::STEREOGRAPHIC, DistortionModelType::NONE},
+    {"stereographic_angle", {}, ProjectionModelType::STEREOGRAPHIC, DistortionModelType::NONE},
+    {"orthographic", {}, ProjectionModelType::ORTHOGRAPHIC, DistortionModelType::NONE},
+    {"orthographic_angle", {}, ProjectionModelType::ORTHOGRAPHIC, DistortionModelType::NONE},
+    {"plumb_bob",
+     {-0.1, 0.01, 0, 0, 0},
+     ProjectionModelType::PINHOLE,
+     DistortionModelType::RADTAN5},
+  };
+  for (const Case &c : cases)
+  {
+    CameraInfo info;
+    info.k = makeK(300.0, 300.0, 320.0, 240.0);
+    info.distortion_model = c.name;
+    info.d = c.d;
+    const CameraModel model = makeCameraModel(info);
+    EXPECT_EQ(validateCameraModel(model), StatusCode::OK) << c.name;
+    EXPECT_EQ(model.projection.type, c.law) << c.name;
+    EXPECT_EQ(model.distortion.type, c.distortion) << c.name;
+    EXPECT_EQ(model.distortion.count, c.d.size()) << c.name;
+  }
+}
+
+TEST(CompatMakeCameraModel, ZeroKb4StaysKb4)
+{
+  // A zero KB4 is numerically the plain equidistant law, but it is a
+  // correction with free coefficients (e.g. a calibration seed): it is
+  // never folded into NONE.
+  CameraInfo info;
+  info.k = makeK(300.0, 300.0, 320.0, 240.0);
+  info.distortion_model = "equidistant";
+  info.d = {0.0, 0.0, 0.0, 0.0};
+  const CameraModel model = makeCameraModel(info);
+  EXPECT_EQ(validateCameraModel(model), StatusCode::OK);
+  EXPECT_EQ(model.projection.type, ProjectionModelType::EQUIDISTANT);
+  EXPECT_EQ(model.distortion.type, DistortionModelType::KB4);
+  EXPECT_EQ(model.distortion.count, 4U);
+}
+
+TEST(CompatMakeCameraModel, PlainLawsDropZeroPaddingAndRejectCoefficients)
+{
+  CameraInfo info;
+  info.k = makeK(300.0, 300.0, 320.0, 240.0);
+  info.distortion_model = "equisolid";
+  info.d = {0.0, 0.0, 0.0, 0.0, 0.0};
+  CameraModel model = makeCameraModel(info);
+  EXPECT_EQ(validateCameraModel(model), StatusCode::OK);
+  EXPECT_EQ(model.projection.type, ProjectionModelType::EQUISOLID);
+  EXPECT_EQ(model.distortion.type, DistortionModelType::NONE);
+  EXPECT_EQ(model.distortion.count, 0U);
+
+  info.d[1] = 0.01;
+  model = makeCameraModel(info);
+  EXPECT_EQ(validateCameraModel(model), StatusCode::INVALID_MODEL);
+}
+
+TEST(CompatRoundTrip, FisheyeLawsWithoutCorrection)
+{
+  for (const ProjectionModelType law :
+       {ProjectionModelType::EQUIDISTANT, ProjectionModelType::EQUISOLID,
+        ProjectionModelType::STEREOGRAPHIC, ProjectionModelType::ORTHOGRAPHIC})
+  {
+    FisheyeExternalModel ext;
+    ext.K = makeK(300.0, 300.0, 320.0, 240.0);
+    ext.projection_type = law;
+    ext.distortion_type = DistortionModelType::NONE;
+
+    CameraModel model;
+    ASSERT_EQ(importFisheyeModel(ext, FisheyeCompatProfile::CANONICAL, model), StatusCode::OK)
+      << toString(law);
+    EXPECT_EQ(model.projection.type, law);
+    EXPECT_EQ(model.distortion.type, DistortionModelType::NONE);
+
+    FisheyeExternalModel out;
+    ASSERT_EQ(exportFisheyeModel(model, FisheyeCompatProfile::CANONICAL, out), StatusCode::OK);
+    EXPECT_EQ(out.projection_type, law);
+    EXPECT_EQ(out.distortion_type, DistortionModelType::NONE);
+    EXPECT_TRUE(out.D.empty());
+
+    CameraInfo info;
+    ASSERT_EQ(
+      exportFisheyeCameraInfo(model, FisheyeCompatProfile::CANONICAL, info), StatusCode::OK
+    );
+    const char *expected_name = law == ProjectionModelType::EQUIDISTANT     ? "equidistant"
+                                : law == ProjectionModelType::EQUISOLID     ? "equisolid"
+                                : law == ProjectionModelType::STEREOGRAPHIC ? "stereographic"
+                                                                            : "orthographic";
+    EXPECT_EQ(info.distortion_model, expected_name);
+
+    // A plain law carries no D, and a KB correction exists on the
+    // equidistant law only.
+    ext.D = {0.0, 0.0, 0.0, 0.0};
+    EXPECT_EQ(
+      importFisheyeModel(ext, FisheyeCompatProfile::CANONICAL, model), StatusCode::INVALID_INPUT
+    );
+    if (law != ProjectionModelType::EQUIDISTANT)
+    {
+      ext.distortion_type = DistortionModelType::KB4;
+      EXPECT_EQ(
+        importFisheyeModel(ext, FisheyeCompatProfile::CANONICAL, model), StatusCode::INVALID_INPUT
+      );
+    }
+  }
+}
+
+TEST(MakeDistortionFree, KeepsTheProjectionLaw)
+{
+  CameraInfo info;
+  info.k = makeK(300.0, 300.0, 320.0, 240.0);
+  info.distortion_model = "stereographic";
+  const CameraModel stereographic = makeCameraModel(info);
+  ASSERT_EQ(validateCameraModel(stereographic), StatusCode::OK);
+  const CameraModel stereographic_free = makeDistortionFree(stereographic);
+  EXPECT_EQ(stereographic_free.projection.type, ProjectionModelType::STEREOGRAPHIC);
+  EXPECT_EQ(stereographic_free.projection.theta_max, stereographic.projection.theta_max);
+  EXPECT_EQ(stereographic_free.distortion.type, DistortionModelType::NONE);
+
+  info.distortion_model = "equidistant";
+  info.d = {0.01, 0.001, 0.0001, -0.0002};
+  const CameraModel kb4 = makeCameraModel(info);
+  ASSERT_EQ(kb4.distortion.type, DistortionModelType::KB4);
+  const CameraModel kb4_free = makeDistortionFree(kb4);
+  EXPECT_EQ(kb4_free.projection.type, ProjectionModelType::EQUIDISTANT);
+  EXPECT_EQ(kb4_free.distortion.type, DistortionModelType::NONE);
+  EXPECT_EQ(kb4_free.distortion.count, 0U);
+  EXPECT_EQ(validateCameraModel(kb4_free), StatusCode::OK);
+
+  info.distortion_model = "plumb_bob";
+  info.d = {-0.1, 0.01, 0.0, 0.0, 0.0};
+  const CameraModel pinhole_free = makeDistortionFree(makeCameraModel(info));
+  EXPECT_EQ(pinhole_free.projection.type, ProjectionModelType::PINHOLE);
+  EXPECT_EQ(pinhole_free.distortion.type, DistortionModelType::NONE);
 }
 
 TEST(CompatMakeCameraModel, DoubleSphereString)
@@ -637,7 +793,10 @@ TEST(CompatDouble, PreservesCameraInfoAcrossAllFamilies)
     {
       case ProjectionModelType::PINHOLE:
         status = exportPinholeCameraInfo64(model, PinholeCompatProfile::CANONICAL, out); break;
-      case ProjectionModelType::FISHEYE_THETA:
+      case ProjectionModelType::EQUIDISTANT:
+      case ProjectionModelType::EQUISOLID:
+      case ProjectionModelType::STEREOGRAPHIC:
+      case ProjectionModelType::ORTHOGRAPHIC:
         status = exportFisheyeCameraInfo64(model, FisheyeCompatProfile::CANONICAL, out); break;
       case ProjectionModelType::OMNIDIRECTIONAL:
         status = exportOmnidirectionalCameraInfo64(model, OmnidirectionalCompatProfile::CANONICAL, out); break;

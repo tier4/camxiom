@@ -80,7 +80,6 @@ CameraModel makeSingularRational()
 {
   CameraModel m = makePinhole(500.0f);
   m.distortion.type = DistortionModelType::RATIONAL8;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.count = 8U;
   m.distortion.coeffs[5] = -1.0f;  // k4
   m.distortion.is_rational = true;
@@ -127,7 +126,6 @@ TEST(ProjectionErrorPaths, DistortionOverflowIsNumericError)
   // OK with an infinite pixel, and not INVALID_INPUT.
   CameraModel m = makePinhole(500.0f);
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.count = 5U;
   m.distortion.coeffs[4] = 3e38f;  // k3
   ASSERT_EQ(validateCameraModel(m), StatusCode::OK);

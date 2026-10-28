@@ -33,6 +33,7 @@
 
 #include <Eigen/Core>
 
+#include <algorithm>
 #include <cmath>
 
 namespace camxiom::fisheye::impl
@@ -46,7 +47,7 @@ inline PixelResultT<T> rayToPixel(
   using detail_impl::invalidPixelResult;
   constexpr T kEpsilon = detail_impl::PlaneTraits<T>::kEpsilon;
 
-  if (model.projection.type != ProjectionModelType::FISHEYE_THETA)
+  if (!isFisheyeProjection(model.projection.type))
   {
     return invalidPixelResult<T>(StatusCode::INVALID_MODEL);
   }
@@ -77,7 +78,10 @@ inline PixelResultT<T> rayToPixel(
   }
 
   T theta_d = T(0);
-  const StatusCode theta_status = detail_impl::distortTheta<T>(model.distortion, theta, theta_d);
+  const StatusCode theta_status = detail_impl::distortTheta<T>(
+    detail_impl::angleLawOf(model.projection.type, model.distortion.type), model.distortion, theta,
+    theta_d
+  );
   if (theta_status != StatusCode::OK)
   {
     return invalidPixelResult<T>(theta_status);
@@ -111,7 +115,7 @@ inline RayResultT<T> pixelToRay(
   using detail_impl::invalidRayResult;
   constexpr T kEpsilon = detail_impl::PlaneTraits<T>::kEpsilon;
 
-  if (model.projection.type != ProjectionModelType::FISHEYE_THETA)
+  if (!isFisheyeProjection(model.projection.type))
   {
     return invalidRayResult<T>(StatusCode::INVALID_MODEL);
   }
@@ -155,13 +159,26 @@ inline RayResultT<T> pixelToRay(
   const T inv_radius = T(1) / radius_d;
   const T cos_phi = x_distorted * inv_radius;
   const T sin_phi = y_distorted * inv_radius;
-  const T sin_theta = std::sin(theta);
+  // theta never exceeds pi, but a rounded pi can (float pi exceeds the true
+  // one), and its sine would come out negative and flip the ray across the
+  // axis.
+  const T sin_theta = std::max(std::sin(theta), T(0));
   const T cos_theta = std::cos(theta);
   Eigen::Matrix<T, 3, 1> direction(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
   const T norm = direction.norm();
   if (!std::isfinite(norm) || norm <= kEpsilon)
   {
     return invalidRayResult<T>(StatusCode::NUMERIC_ERROR);
+  }
+  // A law whose range reaches theta = pi maps the back axis to a whole
+  // circle, so that ray has no azimuth and the forward map refuses it; refuse
+  // it here with the same test, so an OK ray always projects again. The
+  // normalized ray's sideways length is sin(theta) / norm (the azimuth's
+  // cosine and sine square to 1 up to rounding), compared with a hair of
+  // margin so that no ray the forward map refuses gets through.
+  if (cos_theta < T(0) && sin_theta <= kEpsilon * norm * T(1.0001))
+  {
+    return invalidRayResult<T>(StatusCode::DOMAIN_ERROR);
   }
   direction /= norm;
   result.ray.direction = direction;

@@ -21,8 +21,9 @@ namespace camxiom
 namespace
 {
 
-FisheyeDomain64 deriveFisheyeDomain64(const DistortionModel64 &distortion)
+FisheyeDomain64 deriveFisheyeDomain64(const CameraModel64 &model)
 {
+  const DistortionModel64 &distortion = model.distortion;
   FisheyeDomain64 result;
   result.status = StatusCode::OK;
   result.limit = FisheyeDomainLimit::ANGULAR_LIMIT;
@@ -40,7 +41,7 @@ FisheyeDomain64 deriveFisheyeDomain64(const DistortionModel64 &distortion)
                        : FisheyeDomainLimit::NUMERIC_LIMIT;
     }
   }
-  else if (distortion.type == DistortionModelType::ORTHOGRAPHIC)
+  else if (model.projection.type == ProjectionModelType::ORTHOGRAPHIC)
   {
     result.theta_limit = constants::kHalfPi;
     result.safe_theta_max = constants::kHalfPi - 1e-4;
@@ -53,13 +54,13 @@ FisheyeDomain64 deriveFisheyeDomain64(const DistortionModel64 &distortion)
 FisheyeDomain64 getFisheyeDomain64(const CameraModel64 &model)
 {
   FisheyeDomain64 result;
-  if (model.projection.type != ProjectionModelType::FISHEYE_THETA)
+  if (!isFisheyeProjection(model.projection.type))
   {
     result.status = StatusCode::INVALID_MODEL;
     return result;
   }
 
-  const auto derived = deriveFisheyeDomain64(model.distortion);
+  const auto derived = deriveFisheyeDomain64(model);
   auto candidate = model;
   candidate.projection.theta_max = derived.safe_theta_max;
   // The scan already checked monotonicity. Validate the remaining model
@@ -76,9 +77,9 @@ void updateThetaMax(CameraModel &model)
   {
     model.projection.theta_max = detail::kPi;
   }
-  else if (model.projection.type == ProjectionModelType::FISHEYE_THETA)
+  else if (isFisheyeProjection(model.projection.type))
   {
-    model.projection.theta_max = detail::defaultFisheyeThetaMax(model.distortion);
+    model.projection.theta_max = detail::defaultFisheyeThetaMax(model);
   }
   else
   {
@@ -92,9 +93,9 @@ void updateThetaMax64(CameraModel64 &model)
   if (model.projection.type == P::OMNIDIRECTIONAL ||
       model.projection.type == P::DOUBLE_SPHERE || model.projection.type == P::EUCM)
     model.projection.theta_max = constants::kPi;
-  else if (model.projection.type == P::FISHEYE_THETA)
+  else if (isFisheyeProjection(model.projection.type))
   {
-    model.projection.theta_max = deriveFisheyeDomain64(model.distortion).safe_theta_max;
+    model.projection.theta_max = deriveFisheyeDomain64(model).safe_theta_max;
   }
   else
     model.projection.theta_max = constants::kHalfPi - 1e-4;

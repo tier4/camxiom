@@ -66,7 +66,6 @@ CameraModel makePinholeRadtan5()
   m.intrinsics.cy = 241.0f;
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.coeffs[0] = -0.28f;
   m.distortion.coeffs[1] = 0.11f;
   m.distortion.coeffs[2] = 0.0006f;
@@ -83,10 +82,9 @@ CameraModel makeFisheyeEquidistant()
   m.intrinsics.fy = 280.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi) - 1e-4f;
-  m.distortion.type = DistortionModelType::EQUIDISTANT;
-  m.distortion.space = DistortionSpace::ANGLE;
+  m.distortion.type = DistortionModelType::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -98,10 +96,9 @@ CameraModel makeFisheyeKb4()
   m.intrinsics.fy = 285.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = 3.1415926f - 1e-3f;
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.coeffs[0] = -0.012f;
   m.distortion.coeffs[1] = 0.004f;
   m.distortion.coeffs[2] = -0.0007f;
@@ -121,7 +118,6 @@ CameraModel makeOmnidirectional()
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi);
   m.projection.xi = 0.6f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -138,7 +134,6 @@ CameraModel makeDoubleSphere()
   m.projection.xi = 0.5f;
   m.projection.alpha = 0.5f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -155,7 +150,6 @@ CameraModel makeEucm()
   m.projection.alpha = 0.6f;
   m.projection.beta = 1.1f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -217,7 +211,6 @@ CameraModel makePinholeTilted14()
   m.intrinsics.cy = 241.0f;
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::TILTED14;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.coeffs[0] = -0.28f;
   m.distortion.coeffs[1] = 0.11f;
   m.distortion.coeffs[2] = 0.0006f;

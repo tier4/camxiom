@@ -126,7 +126,6 @@ CameraModel makePinholeModel(float fx, float fy, float cx, float cy)
   model.intrinsics.cy = cy;
   model.intrinsics.skew = 0.0f;
   model.distortion.type = DistortionModelType::NONE;
-  model.distortion.space = DistortionSpace::NONE;
   model.distortion.count = 0U;
   model.distortion.coeffs.fill(0.0f);
   model.distortion.is_rational = false;

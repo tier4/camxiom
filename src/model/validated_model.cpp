@@ -38,7 +38,10 @@ ForwardFn resolveForwardFn(const ProjectionModelType type)
   {
     case ProjectionModelType::PINHOLE:
       return &pinhole::rayToPixelPrepared;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return &fisheye::rayToPixelPrepared;
     case ProjectionModelType::OMNIDIRECTIONAL:
       return &omnidirectional::rayToPixelPrepared;
@@ -58,7 +61,10 @@ InverseFn resolveInverseFn(const ProjectionModelType type)
   {
     case ProjectionModelType::PINHOLE:
       return &pinhole::pixelToRayPrepared;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return &fisheye::pixelToRayPrepared;
     case ProjectionModelType::OMNIDIRECTIONAL:
       return &omnidirectional::pixelToRayPrepared;

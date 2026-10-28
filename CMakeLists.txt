@@ -436,6 +436,7 @@ if(BUILD_TESTING)
     # sit inside the monotone range (forward/inverse round-trip guard).
     camxiom_add_gtest(camxiom_model_validate_test tests/model_validate_test.cpp)
     camxiom_add_gtest(camxiom_fisheye_domain_test tests/fisheye_domain_test.cpp)
+    camxiom_add_gtest(camxiom_fisheye_law_inverse_test tests/fisheye_law_inverse_test.cpp)
     camxiom_add_gtest(camxiom_model_compare_test tests/model_compare_test.cpp)
     camxiom_add_gtest(camxiom_projection_smoke_test tests/projection_smoke_test.cpp)
     camxiom_add_gtest(camxiom_batch_parity_test tests/batch_parity_test.cpp)

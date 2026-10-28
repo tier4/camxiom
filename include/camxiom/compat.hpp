@@ -93,7 +93,12 @@ struct FisheyeExternalModel
 {
   std::array<double, 9> K{{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}};
   std::vector<double> D{};
+  /// NONE (with an empty D), KB4 or KB8; UNKNOWN reads D as KB4.
   DistortionModelType distortion_type{DistortionModelType::UNKNOWN};
+  /// The fisheye law. CANONICAL reads it together with distortion_type;
+  /// the OpenCV and ROS profiles always mean EQUIDISTANT with KB4. Last, so
+  /// brace initialisers written before it existed keep their meaning.
+  ProjectionModelType projection_type{ProjectionModelType::EQUIDISTANT};
 };
 
 struct OmnidirectionalExternalModel

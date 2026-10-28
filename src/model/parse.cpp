@@ -20,11 +20,7 @@ namespace camxiom
 
 bool isFisheyeDistortionModel(const std::string &model_name)
 {
-  const DistortionModelType model_type = parseDistortionModelType(model_name);
-  return model_type == DistortionModelType::EQUIDISTANT || model_type == DistortionModelType::KB4 ||
-         model_type == DistortionModelType::KB8 || model_type == DistortionModelType::EQUISOLID ||
-         model_type == DistortionModelType::STEREOGRAPHIC ||
-         model_type == DistortionModelType::ORTHOGRAPHIC;
+  return isFisheyeProjection(detail::readInterchangeModelName(model_name).projection);
 }
 
 bool isRationalDistortionModel(const std::string &model_name)
@@ -42,11 +38,7 @@ DistortionModelType parseDistortionModelType(const std::string &model_name)
   // Canonical camxiom names first: every toString(DistortionModelType)
   // output must parse back to the same enum so persisted model strings
   // survive a round trip. (The remaining canonical names — radtan4/5, kb4,
-  // kb8, equisolid, stereographic, orthographic, omnidirectional — are
-  // already covered by the compatibility aliases below.) Note the ROS name
-  // "equidistant" denotes the 4-coefficient fisheye polynomial (KB4), so the
-  // coefficient-free ideal mapping uses the distinct canonical name
-  // "ideal_equidistant".
+  // kb8 — are already covered by the compatibility aliases below.)
   if (model == "none")
   {
     return DistortionModelType::NONE;
@@ -62,10 +54,6 @@ DistortionModelType parseDistortionModelType(const std::string &model_name)
   if (model == "tilted14")
   {
     return DistortionModelType::TILTED14;
-  }
-  if (model == "ideal_equidistant")
-  {
-    return DistortionModelType::EQUIDISTANT;
   }
 
   if (model == "plumb_bob")
@@ -108,49 +96,75 @@ DistortionModelType parseDistortionModelType(const std::string &model_name)
   {
     return DistortionModelType::KB8;
   }
-  if (model == "equisolid" || model == "equisolid_angle")
-  {
-    return DistortionModelType::EQUISOLID;
-  }
-  if (model == "stereographic" || model == "stereographic_angle")
-  {
-    return DistortionModelType::STEREOGRAPHIC;
-  }
-  if (model == "orthographic" || model == "orthographic_angle")
-  {
-    return DistortionModelType::ORTHOGRAPHIC;
-  }
-  if (model == "omnidirectional" || model == "omni")
-  {
-    return DistortionModelType::OMNIDIRECTIONAL;
-  }
   return DistortionModelType::UNKNOWN;
 }
 
-ProjectionModelType chooseProjectionModelType(const DistortionModelType distortion_model_type)
+ProjectionModelType parseProjectionModelType(const std::string &model_name)
 {
-  switch (distortion_model_type)
+  const std::string model = detail::toLowerCopy(model_name);
+  for (const ProjectionModelType type :
+       {ProjectionModelType::PINHOLE, ProjectionModelType::EQUIDISTANT,
+        ProjectionModelType::EQUISOLID, ProjectionModelType::STEREOGRAPHIC,
+        ProjectionModelType::ORTHOGRAPHIC, ProjectionModelType::OMNIDIRECTIONAL,
+        ProjectionModelType::DOUBLE_SPHERE, ProjectionModelType::EUCM})
+  {
+    if (model == toString(type))
+    {
+      return type;
+    }
+  }
+  return ProjectionModelType::UNKNOWN;
+}
+
+namespace detail
+{
+
+InterchangeModel readInterchangeModelName(const std::string &model_name)
+{
+  const std::string model = toLowerCopy(model_name);
+
+  // The coefficient-free fisheye laws. ROS has no name for the plain
+  // equidistant law ("equidistant" is its KB4 polynomial), so camxiom uses
+  // "ideal_equidistant" for it.
+  if (model == "ideal_equidistant")
+  {
+    return {ProjectionModelType::EQUIDISTANT, DistortionModelType::NONE};
+  }
+  if (model == "equisolid" || model == "equisolid_angle")
+  {
+    return {ProjectionModelType::EQUISOLID, DistortionModelType::NONE};
+  }
+  if (model == "stereographic" || model == "stereographic_angle")
+  {
+    return {ProjectionModelType::STEREOGRAPHIC, DistortionModelType::NONE};
+  }
+  if (model == "orthographic" || model == "orthographic_angle")
+  {
+    return {ProjectionModelType::ORTHOGRAPHIC, DistortionModelType::NONE};
+  }
+
+  // Otherwise the name is a correction, and the correction implies the law
+  // it is defined on: the KB polynomials on the equidistant law, the plane
+  // corrections on the pinhole law.
+  const DistortionModelType distortion = parseDistortionModelType(model);
+  switch (distortion)
   {
     case DistortionModelType::KB4:
     case DistortionModelType::KB8:
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
-      return ProjectionModelType::FISHEYE_THETA;
+      return {ProjectionModelType::EQUIDISTANT, distortion};
+    case DistortionModelType::NONE:
     case DistortionModelType::RADTAN4:
     case DistortionModelType::RADTAN5:
     case DistortionModelType::RATIONAL8:
     case DistortionModelType::THIN_PRISM12:
     case DistortionModelType::TILTED14:
-    case DistortionModelType::NONE:
-      return ProjectionModelType::PINHOLE;
-    case DistortionModelType::OMNIDIRECTIONAL:
-      return ProjectionModelType::OMNIDIRECTIONAL;
+      return {ProjectionModelType::PINHOLE, distortion};
     case DistortionModelType::UNKNOWN:
       break;
   }
-  return ProjectionModelType::UNKNOWN;
+  return {ProjectionModelType::UNKNOWN, DistortionModelType::UNKNOWN};
 }
+
+}  // namespace detail
 
 }  // namespace camxiom

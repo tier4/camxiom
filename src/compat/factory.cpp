@@ -40,17 +40,24 @@ CameraModelT<T> makeCameraModelImpl(const CameraInfo &camera_info)
   detail::setIdentity3x3(model.distortion.tilt_matrix);
   detail::setIdentity3x3(model.distortion.inv_tilt_matrix);
 
-  DistortionModelType parsed_type = parseDistortionModelType(camera_info.distortion_model);
-  const bool is_omni = parsed_type == DistortionModelType::OMNIDIRECTIONAL;
+  // The name gives both the projection law and the correction (e.g. ROS
+  // "equidistant" is the equidistant law with KB4, "equisolid" the plain
+  // equisolid law).
+  const detail::InterchangeModel named =
+    detail::readInterchangeModelName(camera_info.distortion_model);
+  ProjectionModelType law = named.projection;
+  DistortionModelType parsed_type = named.distortion;
 
   const std::string model_lower = detail::toLowerCopy(camera_info.distortion_model);
+  const bool is_omni = (model_lower == "omnidirectional" || model_lower == "omni");
   const bool is_ds = (model_lower == "double_sphere" || model_lower == "ds");
   const bool is_eucm = (model_lower == "eucm");
 
-  if (parsed_type == DistortionModelType::UNKNOWN && !is_ds && !is_eucm)
+  if (parsed_type == DistortionModelType::UNKNOWN && !is_omni && !is_ds && !is_eucm)
   {
     if (camera_info.distortion_model.empty())
     {
+      law = ProjectionModelType::PINHOLE;
       parsed_type = camera_info.d.empty()
                       ? DistortionModelType::NONE
                       : detail::classifyPlaneDistortionByCount(camera_info.d.size());
@@ -120,10 +127,24 @@ CameraModelT<T> makeCameraModelImpl(const CameraInfo &camera_info)
   }
 
   model.distortion.type = parsed_type;
-  model.distortion.space = detail::distortionSpaceFromType(parsed_type);
 
-  const std::size_t effective_d_count =
+  std::size_t effective_d_count =
     camera_info.d.size() > distortion_offset ? (camera_info.d.size() - distortion_offset) : 0U;
+  if (isFisheyeProjection(law) && parsed_type == DistortionModelType::NONE)
+  {
+    // The plain fisheye laws have no coefficients. A D of zeros (which a
+    // writer may pad to a fixed length) carries none; anything else does not
+    // describe this law.
+    for (std::size_t index = distortion_offset; index < camera_info.d.size(); ++index)
+    {
+      if (camera_info.d[index] != 0.0)
+      {
+        model.projection.type = ProjectionModelType::UNKNOWN;
+        return model;
+      }
+    }
+    effective_d_count = 0U;
+  }
   if (effective_d_count > model.distortion.coeffs.size())
   {
     model.projection.type = ProjectionModelType::UNKNOWN;
@@ -154,7 +175,7 @@ CameraModelT<T> makeCameraModelImpl(const CameraInfo &camera_info)
   }
   else
   {
-    model.projection.type = chooseProjectionModelType(model.distortion.type);
+    model.projection.type = law;
   }
 
   // Single source for the per-family theta_max policy — this used to be an

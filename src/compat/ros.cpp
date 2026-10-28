@@ -182,7 +182,7 @@ StatusCode importFisheyeCameraInfo(
   if (profile == FisheyeCompatProfile::CANONICAL || profile == FisheyeCompatProfile::ROS_CAMERA_INFO_EQUIDISTANT)
   {
     const CameraInfo info = toCameraInfo(camera_info);
-    return makeAndValidateProjectionModel(info, ProjectionModelType::FISHEYE_THETA, model_out);
+    return makeAndValidateFisheyeModel(info, model_out);
   }
 
   if (camera_info.d.size() != static_cast<std::size_t>(expected_count))

@@ -16,14 +16,15 @@
 #define CAMXIOM__COMPAT__INTERNAL_HPP
 
 #include "camxiom/compat.hpp"
+#include "camxiom/internal/angle_law.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <string>
-#include <vector>
 #include <type_traits>
+#include <vector>
 
 namespace camxiom
 {
@@ -200,11 +201,6 @@ inline std::string pinholeDistortionModelByType(const DistortionModelType model_
       return "plumb_bob";
     case DistortionModelType::KB4:
     case DistortionModelType::KB8:
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       break;
   }
@@ -214,35 +210,51 @@ inline std::string pinholeDistortionModelByType(const DistortionModelType model_
 inline constexpr std::size_t kFisheyeCanonicalMaxD = 8U;
 inline constexpr std::size_t kFisheyeLegacyMaxD = 4U;
 
-inline std::string fisheyeDistortionModelString(const DistortionModelType model_type)
+// The interchange distortion_model name of a fisheye law and its correction,
+// or an empty string for a combination camxiom does not support. ROS names
+// the KB4 polynomial "equidistant" and has no name for the plain equidistant
+// law; a zero KB4 is that law, so it is written as "equidistant" too.
+inline std::string fisheyeDistortionModelString(
+  const ProjectionModelType projection_type, const DistortionModelType distortion_type
+)
 {
-  switch (model_type)
+  switch (detail_impl::angleLawOf(projection_type, distortion_type))
   {
-    case DistortionModelType::EQUIDISTANT:
+    case detail_impl::AngleLaw::EQUIDISTANT:
+    case detail_impl::AngleLaw::KB4:
       return "equidistant";
-    case DistortionModelType::KB4:
-      // ROS names this 4-coefficient polynomial "equidistant".
-      return "equidistant";
-    case DistortionModelType::KB8:
+    case detail_impl::AngleLaw::KB8:
       return "kb8";
-    case DistortionModelType::EQUISOLID:
+    case detail_impl::AngleLaw::EQUISOLID:
       return "equisolid";
-    case DistortionModelType::STEREOGRAPHIC:
+    case detail_impl::AngleLaw::STEREOGRAPHIC:
       return "stereographic";
-    case DistortionModelType::ORTHOGRAPHIC:
+    case detail_impl::AngleLaw::ORTHOGRAPHIC:
       return "orthographic";
-    case DistortionModelType::NONE:
-      return "equidistant";
-    case DistortionModelType::RADTAN4:
-    case DistortionModelType::RADTAN5:
-    case DistortionModelType::RATIONAL8:
-    case DistortionModelType::THIN_PRISM12:
-    case DistortionModelType::TILTED14:
-    case DistortionModelType::OMNIDIRECTIONAL:
-    case DistortionModelType::UNKNOWN:
+    case detail_impl::AngleLaw::INVALID:
       break;
   }
-  return "equidistant";
+  return "";
+}
+
+// camxiom's own name for a coefficient-free fisheye law. Unlike the ROS
+// name above it reads back as the same law with no correction.
+inline std::string fisheyeLawName(const ProjectionModelType projection_type)
+{
+  switch (projection_type)
+  {
+    case ProjectionModelType::EQUIDISTANT:
+      return "ideal_equidistant";
+    case ProjectionModelType::EQUISOLID:
+      return "equisolid";
+    case ProjectionModelType::STEREOGRAPHIC:
+      return "stereographic";
+    case ProjectionModelType::ORTHOGRAPHIC:
+      return "orthographic";
+    default:
+      break;
+  }
+  return "";
 }
 
 template <typename T>
@@ -252,9 +264,10 @@ StatusCode validateCompatModel(const CameraModelT<T> &model)
   else return validateCameraModel64(model);
 }
 
-template <typename T>
-inline StatusCode makeAndValidateProjectionModel(
-  const CameraInfo &camera_info, const ProjectionModelType projection_type, CameraModelT<T> &model_out
+template <typename T, typename AcceptProjection>
+inline StatusCode makeAndValidateModel(
+  const CameraInfo &camera_info, const AcceptProjection &accept_projection,
+  CameraModelT<T> &model_out
 )
 {
   if (!isFiniteArray9(camera_info.k) || !isFiniteVector(camera_info.d))
@@ -269,11 +282,34 @@ inline StatusCode makeAndValidateProjectionModel(
   {
     return validation_status;
   }
-  if (model_out.projection.type != projection_type)
+  if (!accept_projection(model_out.projection.type))
   {
     return StatusCode::INVALID_MODEL;
   }
   return StatusCode::OK;
+}
+
+template <typename T>
+inline StatusCode makeAndValidateProjectionModel(
+  const CameraInfo &camera_info, const ProjectionModelType projection_type,
+  CameraModelT<T> &model_out
+)
+{
+  return makeAndValidateModel(
+    camera_info,
+    [projection_type](const ProjectionModelType type) { return type == projection_type; }, model_out
+  );
+}
+
+// Any fisheye law: the CameraInfo name picks which one.
+template <typename T>
+inline StatusCode makeAndValidateFisheyeModel(
+  const CameraInfo &camera_info, CameraModelT<T> &model_out
+)
+{
+  return makeAndValidateModel(
+    camera_info, [](const ProjectionModelType type) { return isFisheyeProjection(type); }, model_out
+  );
 }
 
 template <typename T>
@@ -288,7 +324,7 @@ inline StatusCode validatePinholeModelForExport(const CameraModelT<T> &model)
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (model.distortion.space == DistortionSpace::ANGLE)
+  if (distortionSpaceOf(model.distortion.type) == DistortionSpace::ANGLE)
   {
     return StatusCode::INVALID_MODEL;
   }
@@ -303,11 +339,11 @@ inline StatusCode validateFisheyeModelForExport(const CameraModelT<T> &model)
   {
     return validation_status;
   }
-  if (model.projection.type != ProjectionModelType::FISHEYE_THETA)
+  if (!isFisheyeProjection(model.projection.type))
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (model.distortion.space == DistortionSpace::PLANE)
+  if (distortionSpaceOf(model.distortion.type) == DistortionSpace::PLANE)
   {
     return StatusCode::INVALID_MODEL;
   }
@@ -326,7 +362,7 @@ inline StatusCode validateOmniModelForExport(const CameraModelT<T> &model)
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (model.distortion.space == DistortionSpace::ANGLE)
+  if (distortionSpaceOf(model.distortion.type) == DistortionSpace::ANGLE)
   {
     return StatusCode::INVALID_MODEL;
   }
@@ -345,7 +381,7 @@ inline StatusCode validateDoubleSphereModelForExport(const CameraModelT<T> &mode
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (model.distortion.space == DistortionSpace::ANGLE)
+  if (distortionSpaceOf(model.distortion.type) == DistortionSpace::ANGLE)
   {
     return StatusCode::INVALID_MODEL;
   }
@@ -364,7 +400,7 @@ inline StatusCode validateEucmModelForExport(const CameraModelT<T> &model)
   {
     return StatusCode::INVALID_MODEL;
   }
-  if (model.distortion.space == DistortionSpace::ANGLE)
+  if (distortionSpaceOf(model.distortion.type) == DistortionSpace::ANGLE)
   {
     return StatusCode::INVALID_MODEL;
   }

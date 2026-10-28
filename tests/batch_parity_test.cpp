@@ -70,7 +70,6 @@ CameraModel makeBase(ProjectionModelType type, float fx)
   m.projection.type = type;
   m.projection.theta_max = static_cast<float>(constants::kPi) - 1e-4f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -82,15 +81,13 @@ std::vector<NamedModel> allModels()
   CameraModel pinhole = makeBase(ProjectionModelType::PINHOLE, 500.0f);
   pinhole.projection.theta_max = static_cast<float>(constants::kHalfPi);
   pinhole.distortion.type = DistortionModelType::RADTAN5;
-  pinhole.distortion.space = DistortionSpace::PLANE;
   pinhole.distortion.coeffs[0] = -0.05f;
   pinhole.distortion.coeffs[1] = 0.01f;
   pinhole.distortion.count = 5U;
   models.push_back({"pinhole+radtan5", pinhole});
 
-  CameraModel fisheye = makeBase(ProjectionModelType::FISHEYE_THETA, 280.0f);
-  fisheye.distortion.type = DistortionModelType::EQUIDISTANT;
-  fisheye.distortion.space = DistortionSpace::ANGLE;
+  CameraModel fisheye = makeBase(ProjectionModelType::EQUIDISTANT, 280.0f);
+  fisheye.distortion.type = DistortionModelType::NONE;
   models.push_back({"fisheye+equidistant", fisheye});
 
   // KB4 is the one family the aarch64 dispatch keeps on the SCALAR inverse
@@ -99,9 +96,8 @@ std::vector<NamedModel> allModels()
   // including across OpenMP chunks in the large-N tests below. EQUIDISTANT
   // above is deliberately NOT in that opt-out list, so both sides of the
   // branch run.
-  CameraModel kb4 = makeBase(ProjectionModelType::FISHEYE_THETA, 280.0f);
+  CameraModel kb4 = makeBase(ProjectionModelType::EQUIDISTANT, 280.0f);
   kb4.distortion.type = DistortionModelType::KB4;
-  kb4.distortion.space = DistortionSpace::ANGLE;
   kb4.distortion.count = 4U;
   kb4.distortion.coeffs[0] = 0.02f;
   kb4.distortion.coeffs[1] = -0.005f;
@@ -216,6 +212,105 @@ TEST(BatchParity, RayToPixelBatchMatchesScalar)
       }
     }
     EXPECT_EQ(valid, expected_valid) << nm.name;
+  }
+}
+
+// Rays a hair off the optical axis, unnormalized, so the off-axis distance
+// falls in the band where a clamped SIMD divisor used to shrink the pixel
+// offset. Thirteen copies put each ray in an AVX2 group, an SSE group and the
+// scalar tail, and every lane must agree with the scalar projection.
+TEST(BatchParity, NearAxisRaysMatchScalarInEveryLane)
+{
+  CameraModel equidistant = makeBase(ProjectionModelType::EQUIDISTANT, 1000.0f);
+  equidistant.intrinsics.cx = 0.0f;
+  equidistant.intrinsics.cy = 0.0f;
+  equidistant.projection.theta_max = 2.0f;
+  CameraModel kb4 = equidistant;
+  kb4.distortion.type = DistortionModelType::KB4;
+  kb4.distortion.count = 4U;
+  kb4.distortion.coeffs[0] = 0.02f;
+  kb4.distortion.coeffs[1] = -0.005f;
+  kb4.distortion.coeffs[2] = 0.001f;
+  kb4.distortion.coeffs[3] = -0.0002f;
+  updateThetaMax(kb4);
+
+  const std::vector<Eigen::Vector3f> near_axis{
+    {5e-8f, 0.0f, 4e-4f},
+    {0.0f, -3e-8f, 1e-3f},
+    {4e-8f, 4e-8f, 2e-4f},
+    {5e-9f, 0.0f, 1.0f},
+    {0.0f, 0.0f, 1.0f}};
+  constexpr int kLanes = 13;  // one AVX2 group, one SSE group, one scalar lane
+
+  for (const NamedModel &nm : {NamedModel{"equidistant", equidistant}, NamedModel{"kb4", kb4}})
+  {
+    ASSERT_EQ(validateCameraModel(nm.model), StatusCode::OK) << nm.name;
+    for (const Eigen::Vector3f &ray : near_axis)
+    {
+      const PixelResult scalar = rayToPixel(nm.model, ray);
+      ASSERT_EQ(scalar.status, StatusCode::OK) << nm.name;
+      float rays_xyz[3 * kLanes];
+      for (int i = 0; i < kLanes; ++i)
+      {
+        rays_xyz[3 * i + 0] = ray.x();
+        rays_xyz[3 * i + 1] = ray.y();
+        rays_xyz[3 * i + 2] = ray.z();
+      }
+      float u_out[kLanes];
+      float v_out[kLanes];
+      StatusCode statuses[kLanes];
+      ASSERT_EQ(rayToPixelBatch(nm.model, rays_xyz, kLanes, u_out, v_out, statuses), kLanes)
+        << nm.name;
+      for (int i = 0; i < kLanes; ++i)
+      {
+        EXPECT_EQ(statuses[i], StatusCode::OK) << nm.name << " lane " << i;
+        EXPECT_NEAR(u_out[i], scalar.pixel.u, 1e-5f) << nm.name << " lane " << i;
+        EXPECT_NEAR(v_out[i], scalar.pixel.v, 1e-5f) << nm.name << " lane " << i;
+      }
+    }
+  }
+}
+
+// Finite rays whose squared norm overflows float are invalid input on the
+// scalar path; every SIMD lane must reject them the same way.
+TEST(BatchParity, OverflowingRayNormIsRejectedInEveryLane)
+{
+  CameraModel equidistant = makeBase(ProjectionModelType::EQUIDISTANT, 1000.0f);
+  equidistant.intrinsics.cx = 0.0f;
+  equidistant.intrinsics.cy = 0.0f;
+  equidistant.projection.theta_max = 2.0f;
+  CameraModel kb4 = equidistant;
+  kb4.distortion.type = DistortionModelType::KB4;
+  kb4.distortion.count = 4U;
+  kb4.distortion.coeffs[0] = 0.02f;
+  kb4.distortion.coeffs[1] = -0.005f;
+  updateThetaMax(kb4);
+
+  const std::vector<Eigen::Vector3f> huge{{1e20f, 0.0f, 1e20f}, {0.0f, 3e19f, 1.0f}};
+  constexpr int kLanes = 13;  // one AVX2 group, one SSE group, one scalar lane
+
+  for (const NamedModel &nm : {NamedModel{"equidistant", equidistant}, NamedModel{"kb4", kb4}})
+  {
+    ASSERT_EQ(validateCameraModel(nm.model), StatusCode::OK) << nm.name;
+    for (const Eigen::Vector3f &ray : huge)
+    {
+      ASSERT_EQ(rayToPixel(nm.model, ray).status, StatusCode::INVALID_INPUT) << nm.name;
+      float rays_xyz[3 * kLanes];
+      for (int i = 0; i < kLanes; ++i)
+      {
+        rays_xyz[3 * i + 0] = ray.x();
+        rays_xyz[3 * i + 1] = ray.y();
+        rays_xyz[3 * i + 2] = ray.z();
+      }
+      float u_out[kLanes];
+      float v_out[kLanes];
+      StatusCode statuses[kLanes];
+      EXPECT_EQ(rayToPixelBatch(nm.model, rays_xyz, kLanes, u_out, v_out, statuses), 0) << nm.name;
+      for (int i = 0; i < kLanes; ++i)
+      {
+        EXPECT_EQ(statuses[i], StatusCode::INVALID_INPUT) << nm.name << " lane " << i;
+      }
+    }
   }
 }
 

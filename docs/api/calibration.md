@@ -45,10 +45,12 @@ struct camxiom::calib::CalibrationView {
 
 A data-independent seed — the canonical warm start when no data-driven
 guess exists. Principal point at the image center; focal heuristic per
-family (`h/2` for rectilinear/unified models, `h/π` for equidistant
-fisheye); projection parameters at literature-typical values
-(fisheye `θ_max = π`; Mei `ξ = 1.0`; DS `ξ = −0.2, α = 0.5`;
-EUCM `α = 0.5, β = 1.0`). Guaranteed to validate for any valid input;
+family (`h/2` for rectilinear/unified models; for the fisheye laws the focal
+length that puts a ray 90° off axis at radius `h/2`, i.e. `h/π` for
+equidistant); projection parameters at literature-typical values
+(equidistant `θ_max = π` with a zero KB4 correction, the other fisheye laws
+their own monotone range without correction; Mei `ξ = 1.0`; DS
+`ξ = −0.2, α = 0.5`; EUCM `α = 0.5, β = 1.0`). Guaranteed to validate for any valid input;
 invalid input returns an `UNKNOWN`-type sentinel that
 `validateCameraModel` rejects.
 
@@ -197,7 +199,7 @@ still looks fine):
 | Model | Required locks |
 |---|---|
 | pinhole (radtan) | `NONE` |
-| KB4 fisheye | `FIX_DIST_2 \| FIX_DIST_3` (k3, k4) |
+| equidistant + KB4 | `FIX_DIST_2 \| FIX_DIST_3` (k3, k4) |
 | Mei / DS / EUCM | `FIX_PROJECTION_PARAMS` |
 
 ### `CalibrationOptions` (excerpt)

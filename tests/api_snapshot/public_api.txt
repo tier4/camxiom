@@ -238,6 +238,7 @@ camxiom::FisheyeCompatProfile | #000 CANONICAL = 0U
 camxiom::FisheyeCompatProfile | #001 OPENCV_FISHEYE_D4
 camxiom::FisheyeCompatProfile | #002 ROS_CAMERA_INFO_EQUIDISTANT
 camxiom::FisheyeExternalModel | DistortionModelType distortion_type
+camxiom::FisheyeExternalModel | ProjectionModelType projection_type
 camxiom::FisheyeExternalModel | std::array<double, 9> K
 camxiom::FisheyeExternalModel | std::vector<double> D
 camxiom::OmnidirectionalCompatProfile | #000 CANONICAL = 0U
@@ -384,7 +385,7 @@ camxiom | [[nodiscard]] CameraModel makeDistortionFree(const CameraModel &model)
 camxiom | [[nodiscard]] CameraModel64 makeDistortionFree64(const CameraModel64 &model)
 camxiom | [[nodiscard]] DistortionModelType parseDistortionModelType(const std::string &model_name)
 camxiom | [[nodiscard]] FisheyeDomain64 getFisheyeDomain64(const CameraModel64 &model)
-camxiom | [[nodiscard]] ProjectionModelType chooseProjectionModelType( DistortionModelType distortion_model_type )
+camxiom | [[nodiscard]] ProjectionModelType parseProjectionModelType(const std::string &model_name)
 camxiom | [[nodiscard]] StatusCode validateCameraModel(const CameraModel &model)
 camxiom | [[nodiscard]] StatusCode validateCameraModel64(const CameraModel64 &model)
 camxiom | [[nodiscard]] bool isFisheyeDistortionModel(const std::string &model_name)
@@ -714,6 +715,8 @@ camxiom | const char *toString(DistortionModelType model_type)
 camxiom | const char *toString(DistortionSpace space)
 camxiom | const char *toString(ProjectionModelType model_type)
 camxiom | const char *toString(StatusCode status_code)
+camxiom | constexpr DistortionSpace distortionSpaceOf(const DistortionModelType type) noexcept
+camxiom | constexpr bool isFisheyeProjection(const ProjectionModelType type) noexcept
 camxiom | enum class DistortionModelType : std::uint8_t
 camxiom | enum class DistortionSpace : std::uint8_t
 camxiom | enum class ProjectionModelType : std::uint8_t
@@ -739,7 +742,6 @@ camxiom::CameraModelT | DistortionModelT<T> distortion
 camxiom::CameraModelT | IntrinsicsModelT<T> intrinsics
 camxiom::CameraModelT | ProjectionModelT<T> projection
 camxiom::DistortionModelT | DistortionModelType type
-camxiom::DistortionModelT | DistortionSpace space
 camxiom::DistortionModelT | bool has_thin_prism
 camxiom::DistortionModelT | bool has_tilt
 camxiom::DistortionModelT | bool is_rational
@@ -755,12 +757,7 @@ camxiom::DistortionModelType | #004 THIN_PRISM12
 camxiom::DistortionModelType | #005 TILTED14
 camxiom::DistortionModelType | #006 KB4
 camxiom::DistortionModelType | #007 KB8
-camxiom::DistortionModelType | #008 EQUIDISTANT
-camxiom::DistortionModelType | #009 EQUISOLID
-camxiom::DistortionModelType | #010 STEREOGRAPHIC
-camxiom::DistortionModelType | #011 ORTHOGRAPHIC
-camxiom::DistortionModelType | #012 OMNIDIRECTIONAL
-camxiom::DistortionModelType | #013 UNKNOWN
+camxiom::DistortionModelType | #008 UNKNOWN
 camxiom::DistortionSpace | #000 NONE = 0U
 camxiom::DistortionSpace | #001 PLANE
 camxiom::DistortionSpace | #002 ANGLE
@@ -777,11 +774,14 @@ camxiom::ProjectionModelT | T beta
 camxiom::ProjectionModelT | T theta_max
 camxiom::ProjectionModelT | T xi
 camxiom::ProjectionModelType | #000 PINHOLE = 0U
-camxiom::ProjectionModelType | #001 FISHEYE_THETA
-camxiom::ProjectionModelType | #002 OMNIDIRECTIONAL
-camxiom::ProjectionModelType | #003 DOUBLE_SPHERE
-camxiom::ProjectionModelType | #004 EUCM
-camxiom::ProjectionModelType | #005 UNKNOWN
+camxiom::ProjectionModelType | #001 EQUIDISTANT
+camxiom::ProjectionModelType | #002 EQUISOLID
+camxiom::ProjectionModelType | #003 STEREOGRAPHIC
+camxiom::ProjectionModelType | #004 ORTHOGRAPHIC
+camxiom::ProjectionModelType | #005 OMNIDIRECTIONAL
+camxiom::ProjectionModelType | #006 DOUBLE_SPHERE
+camxiom::ProjectionModelType | #007 EUCM
+camxiom::ProjectionModelType | #008 UNKNOWN
 camxiom::Ray3T | Eigen::Matrix<T, 3, 1> direction
 camxiom::Ray3T | Eigen::Matrix<T, 3, 1> origin
 camxiom::SolverOptions | bool skip_verify

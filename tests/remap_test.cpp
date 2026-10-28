@@ -57,7 +57,6 @@ CameraModel makePinholeNoDistortion()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = 1.5707962f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -66,7 +65,6 @@ CameraModel makePinholeRadTan()
 {
   CameraModel m = makePinholeNoDistortion();
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.coeffs[0] = -0.2f;  // k1 (barrel)
   m.distortion.coeffs[1] = 0.05f;  // k2
   m.distortion.coeffs[2] = 0.0f;   // p1
@@ -85,10 +83,9 @@ CameraModel makeKB4(float theta_max = 1.0f)
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
   m.intrinsics.skew = 0.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = theta_max;
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.coeffs[0] = 0.01f;   // k1
   m.distortion.coeffs[1] = 0.001f;  // k2
   m.distortion.coeffs[2] = 0.0f;    // k3
@@ -110,7 +107,6 @@ CameraModel makeMEIOmni()
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi);
   m.projection.xi = 1.0f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -129,7 +125,6 @@ CameraModel makeDoubleSphere()
   m.projection.xi = -0.2f;
   m.projection.alpha = 0.5f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -148,7 +143,6 @@ CameraModel makeEUCM()
   m.projection.alpha = 0.5f;
   m.projection.beta = 1.0f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -1018,7 +1012,6 @@ TEST(Rectify, PinholeRadTanFoldOverInscribed)
   src.intrinsics.cy = 249.79f;
   src.intrinsics.skew = 0.0f;
   src.distortion.type = DistortionModelType::RADTAN5;
-  src.distortion.space = DistortionSpace::PLANE;
   src.distortion.count = 5U;
   src.distortion.coeffs[0] = -0.347168833f;      // k1 (strong barrel)
   src.distortion.coeffs[1] = 0.1494961828f;      // k2
