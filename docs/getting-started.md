@@ -5,7 +5,8 @@
 | Dependency | Minimum | Required? | Enables |
 |---|---|---|---|
 | C++17 compiler, CMake ≥ 3.14 | — | **required** | — |
-| Eigen3 | 3.3 | **required** | the runtime core (`camxiom::core`) — its only dependency. apt: `libeigen3-dev` |
+| Eigen3 | 3.3 | **required** | the runtime core (`camxiom::core`). apt: `libeigen3-dev` |
+| yaml-cpp | 0.7 | **required** | the runtime core, for reading camera YAML files (`parseCameraInfoYaml`, `loadCameraModelYaml`, ...). apt: `libyaml-cpp-dev` |
 | Ceres | 2.0 | optional | the calibration layer (`camxiom::calib`). apt: `libceres-dev` — the 2.0.0 shipped by Ubuntu 22.04 / JetPack works (the 2.0 vs 2.1+ Manifold API difference is absorbed inside the solver implementation). |
 | OpenCV | any | optional | the `cv::Mat` interop layer (`opencv.hpp`, `opencv/pnp.hpp`) |
 | sensor_msgs (ROS 2) | any | optional | the ROS interop layer (`ros.hpp`) |
@@ -66,14 +67,14 @@ find_package(camxiom REQUIRED)
 target_link_libraries(my_app PRIVATE camxiom::camxiom)
 
 # Or pick a layer explicitly:
-target_link_libraries(my_runtime PRIVATE camxiom::core)    # Eigen-only runtime geometry
+target_link_libraries(my_runtime PRIVATE camxiom::core)    # runtime geometry
 target_link_libraries(my_calib   PRIVATE camxiom::calib)   # calibration (needs a Ceres-enabled build)
 ```
 
 The generated package config re-resolves the public dependencies for you
-(`find_dependency` for Eigen3, and — only when the corresponding layer was
-built — OpenMP, Ceres, OpenCV, sensor_msgs). Consumers do not need to find
-those packages themselves.
+(`find_dependency` for Eigen3 and yaml-cpp, and — only when the corresponding
+layer was built — OpenMP, Ceres, OpenCV, sensor_msgs). Consumers do not need to
+find those packages themselves.
 
 When a ROS- or OpenCV-enabled camxiom build is consumed, the exported targets
 propagate the `CAMXIOM_HAS_ROS` / `CAMXIOM_HAS_OPENCV` compile definitions
@@ -173,7 +174,7 @@ API by layer:
 
 | Header | Pulls in |
 |---|---|
-| `<camxiom/core.hpp>` | the Eigen-only runtime geometry layer (types, model, projection, jacobian, lut, batch, remap, compat). No Ceres / OpenCV / ROS. |
+| `<camxiom/core.hpp>` | the runtime geometry layer (types, model, projection, jacobian, lut, batch, remap, compat). No Ceres / OpenCV / ROS. |
 | `<camxiom/calibration.hpp>` | the calibration layer (`default_seed`, `init/*`, `optimizer/*`, `calib/intrinsics`, `calib/convert`). Ceres-free to *include*; *linking* needs a Ceres-enabled build. |
 | `<camxiom/camxiom.hpp>` | everything: `core.hpp` + `calibration.hpp` + the optional ROS / OpenCV interop (self-guarded, harmless when absent). |
 

@@ -363,11 +363,10 @@ correction.
 ### Projection-level parameters are *not* distortion coefficients
 
 `xi`, `alpha`, `beta` live in `ProjectionModel`, never in `coeffs`.
-Interchange formats that pack them into a `D` vector (e.g. a
-`sensor_msgs/CameraInfo` for a double-sphere camera) are unpacked by the
-[CameraInfo interchange layer](api/camera-info.md): DS reads
-`d = [xi, alpha, plane-coeffs...]`, EUCM `d = [alpha, beta, ...]`, Mei
-`d = [xi, ...]`.
+camxiom's own camera description keeps them apart as well
+(`projection_parameters` beside `distortion_parameters`; see
+[CameraInfo interchange](api/camera-info.md)); ROS CameraInfo has no
+distortion model for these laws.
 
 ## Validation
 
@@ -391,10 +390,10 @@ loops, validate once via `ValidatedCameraModel::tryMake()` — see
 
 | Function / header | Purpose |
 |---|---|
-| `parseProjectionModelType(name)`, `parseDistortionModelType(name)` / `toString(...)` | string ↔ enum for both slots (round-trip through the canonical spellings; `parseDistortionModelType` also reads the interchange aliases of the corrections, e.g. `plumb_bob`, ROS `equidistant` = KB4) |
+| `parseProjectionModelType(name)`, `parseDistortionModelType(name)` / `toString(...)` | string ↔ enum for both slots, through the toString spellings only (case-insensitive); the ROS names are read by `makeCameraModel(CameraInfo)` |
 | `isFisheyeProjection(type)`, `isLatLongProjection(type)`, `distortionSpaceOf(type)` | which laws are fisheye or latitude-longitude laws; which space a correction acts in |
 | `makeEquirectangularModel`, `makeCylindricalModel` | equirectangular / cylindrical models from the angular range the image covers |
-| `isFisheyeDistortionModel(name)`, `isRationalDistortionModel(name)` | string predicates on interchange names |
+| `isFisheyeDistortionModel(name)`, `isRationalDistortionModel(name)` | predicates on ROS `distortion_model` names (`equidistant`, `rational_polynomial`) |
 | `makeDistortionFree(model)` | copy with the correction removed (distortion `NONE`, coeffs zeroed); the projection law is kept |
 | `model_compare.hpp` | `operator==` (exact, cache-invalidation) and `isApprox` (tolerance-based on the semantic parameters, for regression comparison across solver/platform noise) |
 | `toCameraModel64` / `fromCameraModel64` | precision conversion |

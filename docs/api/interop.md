@@ -2,8 +2,8 @@
 
 Two optional adapter layers compile into the core library when their
 dependency is present at configure time. Both are thin by design: all
-parsing, packing, and math stay in the dependency-free core; the adapters
-only copy fields.
+parsing, packing, and math stay in the core; the adapters only copy
+fields.
 
 | Layer | Header(s) | Guard |
 |---|---|---|
@@ -23,10 +23,8 @@ with no compiled implementation and turn every use into a link error.)
 // The one-liner most nodes need:
 CameraModel makeCameraModel(const sensor_msgs::msg::CameraInfo &camera_info);
 
-// Strict per-profile message conversion (same profiles as compat.hpp):
-StatusCode importPinholeCameraInfo(const sensor_msgs::msg::CameraInfo &, PinholeCompatProfile, CameraModel &out);
-StatusCode exportPinholeCameraInfo(const CameraModel &, PinholeCompatProfile, sensor_msgs::msg::CameraInfo &out);
-// ... Fisheye / Omnidirectional / DoubleSphere / Eucm variants
+// Publish a model, when ROS can hold its lens:
+StatusCode exportCameraInfo(const CameraModel &model, sensor_msgs::msg::CameraInfo &out);
 ```
 
 Semantics worth knowing:
@@ -34,6 +32,9 @@ Semantics worth knowing:
 - **Import folds binning/ROI into K/P** (the `image_geometry` adjustment),
   so the resulting model maps the *published* image's pixels, not the full
   sensor's.
+- **Export writes only lenses ROS can hold** (the core `exportCameraInfo`
+  rules: `plumb_bob`, `rational_polynomial`, `equidistant`); any other model
+  returns `INVALID_MODEL` and leaves the message unchanged.
 - **Export resets `binning_x/binning_y/roi`** to "no binning / full image" —
   the exported K/P describe the model's own pixel frame, and stale metadata
   would otherwise be applied a second time by the next importer.
@@ -128,10 +129,11 @@ from the calibration layer instead.
 
 ### Double-precision model import and export
 
-To keep the `double` values of a `CameraInfo` and of each compatibility
-profile, use `makeCameraModel64`, `import*Model64`, `export*Model64` and
-`export*CameraInfo64`. They read and write `CameraModel64` directly, without
-converting to `CameraModel` (float) on the way, alongside the float API.
+To keep the `double` values of a camera description, use `makeCameraModel64`
+and `exportCameraInfo64` (for `CameraInfo` and `CamxiomCameraInfo`, see
+[CameraInfo interchange](camera-info.md)). They read and write
+`CameraModel64` directly, without converting to `CameraModel` (float) on the
+way, alongside the float API.
 
 After changing coefficients directly, refresh the domain with
 `updateThetaMax64`. `makeDistortionFree64` removes the distortion while
