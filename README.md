@@ -30,7 +30,7 @@ ROS 2 / OpenCV interfaces.
   OpenCV, ROS 2, and OpenMP are optional layers detected at configure time.
   Ament and pure-CMake packaging from the same tree.
 
-License: [Apache-2.0](LICENSE) · Version: 0.2.0 ·
+License: [Apache-2.0](LICENSE) · Version: 0.3.0 ·
 Docs: [`docs/`](docs/index.md) (MkDocs / GitHub Pages ready)
 
 ---

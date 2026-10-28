@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(camxiom VERSION 0.2.0 LANGUAGES CXX)
+project(camxiom VERSION 0.3.0 LANGUAGES CXX)
 
 # include/camxiom/version.hpp and package.xml carry the same version as
 # project(); fail the configure if any of them drift apart.
