@@ -613,7 +613,6 @@ camxiom::projection_template | template <typename T> [[nodiscard]] bool projectD
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectEquidistant( const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectEquisolid( const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectEucm( const T *intrinsics, const T &alpha, const T &beta, const T *dist, int dist_count, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
-camxiom::projection_template | template <typename T> [[nodiscard]] bool projectFisheye4( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectGenericParametric( ProjectionModelType proj_type, DistortionModelType dist_type, const T *intrinsics, const T *dist, int dist_count, const T &proj_xi, const T &proj_alpha, const T &proj_beta, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out, double theta_max = constants::kPi )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectKB4( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectKB8( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
@@ -754,15 +753,14 @@ camxiom::DistortionModelType | #002 RADTAN5
 camxiom::DistortionModelType | #003 RATIONAL8
 camxiom::DistortionModelType | #004 THIN_PRISM12
 camxiom::DistortionModelType | #005 TILTED14
-camxiom::DistortionModelType | #006 OPENCV_FISHEYE4
-camxiom::DistortionModelType | #007 KB4
-camxiom::DistortionModelType | #008 KB8
-camxiom::DistortionModelType | #009 EQUIDISTANT
-camxiom::DistortionModelType | #010 EQUISOLID
-camxiom::DistortionModelType | #011 STEREOGRAPHIC
-camxiom::DistortionModelType | #012 ORTHOGRAPHIC
-camxiom::DistortionModelType | #013 OMNIDIRECTIONAL
-camxiom::DistortionModelType | #014 UNKNOWN
+camxiom::DistortionModelType | #006 KB4
+camxiom::DistortionModelType | #007 KB8
+camxiom::DistortionModelType | #008 EQUIDISTANT
+camxiom::DistortionModelType | #009 EQUISOLID
+camxiom::DistortionModelType | #010 STEREOGRAPHIC
+camxiom::DistortionModelType | #011 ORTHOGRAPHIC
+camxiom::DistortionModelType | #012 OMNIDIRECTIONAL
+camxiom::DistortionModelType | #013 UNKNOWN
 camxiom::DistortionSpace | #000 NONE = 0U
 camxiom::DistortionSpace | #001 PLANE
 camxiom::DistortionSpace | #002 ANGLE

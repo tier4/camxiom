@@ -84,7 +84,6 @@ inline DistortionSpace expectedSpaceFromType(const DistortionModelType type)
     case DistortionModelType::THIN_PRISM12:
     case DistortionModelType::TILTED14:
       return DistortionSpace::PLANE;
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
     case DistortionModelType::KB8:
     case DistortionModelType::EQUIDISTANT:
@@ -112,8 +111,7 @@ inline bool typeRequiresRational(const DistortionModelType type)
 // range for the inverse bracket to be usable.
 inline bool isPolynomialFisheyeDistortion(const DistortionModelType type)
 {
-  return type == DistortionModelType::OPENCV_FISHEYE4 || type == DistortionModelType::KB4 ||
-         type == DistortionModelType::KB8;
+  return type == DistortionModelType::KB4 || type == DistortionModelType::KB8;
 }
 
 inline bool typeAllowsThinPrism(const DistortionModelType type)
@@ -142,7 +140,6 @@ inline std::uint8_t minimumCoefficientCountForType(const DistortionModelType typ
       return 12U;
     case DistortionModelType::TILTED14:
       return 14U;
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
       return 4U;
     case DistortionModelType::KB8:
@@ -174,7 +171,6 @@ inline std::uint8_t maximumCoefficientCountForType(const DistortionModelType typ
       return 12U;
     case DistortionModelType::TILTED14:
       return 14U;
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
       return 4U;
     case DistortionModelType::KB8:
@@ -216,7 +212,6 @@ inline std::size_t requiredFiniteCoefficientCount(const DistortionModelType type
       return 12U;
     case DistortionModelType::TILTED14:
       return 14U;
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
       return 4U;
     case DistortionModelType::KB8:

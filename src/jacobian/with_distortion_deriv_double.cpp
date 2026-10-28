@@ -379,16 +379,6 @@ static FullProjectionJacobian64 fullJ64(const CameraModel64 &model, const Eigen:
         theta_d = theta;
         dtheta_d = 1.0;
         break;
-      case DistortionModelType::OPENCV_FISHEYE4: {
-        theta_d = theta * (1.0 + c[0] * t2 + c[1] * t4 + c[2] * t6 + c[3] * t8);
-        dtheta_d = 1.0 + 3.0 * c[0] * t2 + 5.0 * c[1] * t4 + 7.0 * c[2] * t6 + 9.0 * c[3] * t8;
-        // ∂theta_d/∂c[i] = theta^(2i+3)
-        dthetad_dc[0] = theta * t2;
-        dthetad_dc[1] = theta * t4;
-        dthetad_dc[2] = theta * t6;
-        dthetad_dc[3] = theta * t8;
-        break;
-      }
       case DistortionModelType::KB4: {
         theta_d =
           theta + c[0] * theta * t2 + c[1] * theta * t4 + c[2] * theta * t6 + c[3] * theta * t8;

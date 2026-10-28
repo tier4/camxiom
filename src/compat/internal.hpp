@@ -198,7 +198,6 @@ inline std::string pinholeDistortionModelByType(const DistortionModelType model_
       return "tilted";
     case DistortionModelType::NONE:
       return "plumb_bob";
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
     case DistortionModelType::KB8:
     case DistortionModelType::EQUIDISTANT:
@@ -221,10 +220,9 @@ inline std::string fisheyeDistortionModelString(const DistortionModelType model_
   {
     case DistortionModelType::EQUIDISTANT:
       return "equidistant";
-    case DistortionModelType::OPENCV_FISHEYE4:
-      return "equidistant";
     case DistortionModelType::KB4:
-      return "kb4";
+      // ROS names this 4-coefficient polynomial "equidistant".
+      return "equidistant";
     case DistortionModelType::KB8:
       return "kb8";
     case DistortionModelType::EQUISOLID:

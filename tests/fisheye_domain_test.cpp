@@ -41,7 +41,7 @@ CameraModel64 fisheye(DistortionModelType type = DistortionModelType::KB4)
     type == DistortionModelType::NONE ? DistortionSpace::NONE : DistortionSpace::ANGLE;
   if (type == DistortionModelType::KB8)
     model.distortion.count = 8;
-  else if (type == DistortionModelType::KB4 || type == DistortionModelType::OPENCV_FISHEYE4)
+  else if (type == DistortionModelType::KB4)
     model.distortion.count = 4;
   return model;
 }
@@ -62,8 +62,7 @@ TEST(FisheyeDomain64, PolynomialLimitBracketsAnAnalyticFold)
 {
   // theta_d = theta - 0.15 theta^3; theta_d' = 1 - 0.45 theta^2.
   const double fold = std::sqrt(1.0 / 0.45);
-  for (auto type :
-       {DistortionModelType::KB4, DistortionModelType::KB8, DistortionModelType::OPENCV_FISHEYE4})
+  for (auto type : {DistortionModelType::KB4, DistortionModelType::KB8})
   {
     auto model = fisheye(type);
     model.distortion.coeffs[0] = -0.15;
@@ -86,7 +85,7 @@ TEST(FisheyeDomain64, ReportsGeometricEndpointsForEveryIdealFamily)
   for (auto type :
        {DistortionModelType::NONE, DistortionModelType::EQUIDISTANT, DistortionModelType::EQUISOLID,
         DistortionModelType::STEREOGRAPHIC, DistortionModelType::ORTHOGRAPHIC,
-        DistortionModelType::KB4, DistortionModelType::KB8, DistortionModelType::OPENCV_FISHEYE4})
+        DistortionModelType::KB4, DistortionModelType::KB8})
   {
     SCOPED_TRACE(static_cast<int>(type));
     auto model = fisheye(type);
@@ -288,8 +287,7 @@ TEST(FisheyeDomain64, CallerCanApplyAnEvaluationMarginWithoutChangingAdoption)
 
 TEST(FisheyeDomain64, ProjectionJacobianAgreesWithDifferencesInsideDerivedCap)
 {
-  for (auto type :
-       {DistortionModelType::KB4, DistortionModelType::KB8, DistortionModelType::OPENCV_FISHEYE4})
+  for (auto type : {DistortionModelType::KB4, DistortionModelType::KB8})
   {
     auto model = fisheye(type);
     model.distortion.coeffs[0] = -0.15;

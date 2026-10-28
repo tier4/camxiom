@@ -128,7 +128,7 @@ while keeping the caller's own limit, use the non-mutating API described
 below.
 
 This consistency is enforced, not advisory: for the polynomial families
-(KB4 / KB8 / OpenCV-fisheye4) `validateCameraModel` certifies that
+(KB4 / KB8) `validateCameraModel` certifies that
 `theta_max` sits inside the polynomial's positive monotone range, and even
 the per-point query APIs reject a cap whose endpoint slope is negative
 (the common hand-set-cap-past-the-fold case) as `INVALID_MODEL`. Likewise,
@@ -153,7 +153,7 @@ accepted.
 | `theta_limit` | The geometric endpoint, or the first scan sample that failed the evaluation conditions (rad) |
 | `limit` | `ANGULAR_LIMIT` / `MONOTONICITY_LIMIT` / `NUMERIC_LIMIT` |
 
-The polynomial fisheye models (KB4, KB8, OpenCV fisheye4) share the existing
+The polynomial fisheye models (KB4, KB8) share the existing
 512-step scan. It runs from 1e-3 rad to about π − 1e-4 rad and returns as
 `safe_theta_max` the last sample whose radius is finite and non-negative and
 whose slope is finite and positive. `theta_limit` is not an exact root of the
@@ -221,8 +221,7 @@ Distortion acts on the incidence angle: the projected radius is
 
 | `DistortionModelType` | Coeffs | `θ_d(θ)` |
 |---|---|---|
-| `OPENCV_FISHEYE4` | `[k1..k4]` | `θ·(1 + k1θ² + k2θ⁴ + k3θ⁶ + k4θ⁸)` (OpenCV fisheye) |
-| `KB4` | `[k1..k4]` | `θ + k1θ³ + k2θ⁵ + k3θ⁷ + k4θ⁹` (Kannala–Brandt) |
+| `KB4` | `[k1..k4]` | `θ + k1θ³ + k2θ⁵ + k3θ⁷ + k4θ⁹` (Kannala–Brandt; the same function and coefficient order as OpenCV's fisheye model `θ·(1 + k1θ² + k2θ⁴ + k3θ⁶ + k4θ⁸)`) |
 | `KB8` | `[k1..k8]` | `θ + k1θ³ + ... + k8θ¹⁷` |
 | `EQUIDISTANT` | — | `θ` (ideal, coefficient-free) |
 | `EQUISOLID` | — | `2·sin(θ/2)` |

@@ -854,7 +854,7 @@ void PnpSolver::Impl::writeBack(
   camxiom::detail::rebuildDistortionAuxState(camera_model.distortion);
 
   // Recalculate theta_max from the updated distortion coefficients.
-  // For polynomial fisheye models (KB4/KB8/OpenCV_Fisheye4) the safe monotonic
+  // For polynomial fisheye models (KB4/KB8) the safe monotonic
   // range of the distortion polynomial depends on the coefficients, so
   // theta_max must be refreshed whenever they change.
   const T initial_cap = camera_model.projection.theta_max;

@@ -60,16 +60,14 @@ const char *toString(const DistortionModelType model_type)
       return "thin_prism12";
     case DistortionModelType::TILTED14:
       return "tilted14";
-    case DistortionModelType::OPENCV_FISHEYE4:
-      return "opencv_fisheye4";
     case DistortionModelType::KB4:
       return "kb4";
     case DistortionModelType::KB8:
       return "kb8";
     case DistortionModelType::EQUIDISTANT:
       // Deliberately NOT "equidistant": the ROS distortion_model string
-      // "equidistant" denotes the 4-coefficient OpenCV fisheye model, and
-      // parseDistortionModelType keeps that compatibility mapping. The
+      // "equidistant" denotes the 4-coefficient fisheye polynomial (KB4),
+      // and parseDistortionModelType keeps that compatibility mapping. The
       // coefficient-free ideal mapping gets a distinct canonical name so
       // every toString output parses back to the same enum.
       return "ideal_equidistant";

@@ -46,7 +46,6 @@ TEST(Types, DistortionModelTypeToString)
   EXPECT_STREQ(toString(DistortionModelType::RATIONAL8), "rational8");
   EXPECT_STREQ(toString(DistortionModelType::THIN_PRISM12), "thin_prism12");
   EXPECT_STREQ(toString(DistortionModelType::TILTED14), "tilted14");
-  EXPECT_STREQ(toString(DistortionModelType::OPENCV_FISHEYE4), "opencv_fisheye4");
   EXPECT_STREQ(toString(DistortionModelType::KB4), "kb4");
   EXPECT_STREQ(toString(DistortionModelType::KB8), "kb8");
   EXPECT_STREQ(toString(DistortionModelType::EQUIDISTANT), "ideal_equidistant");
@@ -68,7 +67,6 @@ TEST(Types, DistortionModelToStringRoundTripsThroughParse)
     DistortionModelType::RATIONAL8,
     DistortionModelType::THIN_PRISM12,
     DistortionModelType::TILTED14,
-    DistortionModelType::OPENCV_FISHEYE4,
     DistortionModelType::KB4,
     DistortionModelType::KB8,
     DistortionModelType::EQUIDISTANT,
@@ -82,6 +80,19 @@ TEST(Types, DistortionModelToStringRoundTripsThroughParse)
     EXPECT_EQ(parseDistortionModelType(toString(type)), type)
       << "round trip broken for \"" << toString(type) << "\"";
   }
+}
+
+TEST(Types, OpenCvFisheyeNamesReadAsKb4)
+{
+  // OpenCV's fisheye polynomial theta * (1 + k1 t^2 + k2 t^4 + k3 t^6 + k4 t^8)
+  // is KB4 with the same coefficient order, so its names map to KB4.
+  for (const char *name : {"equidistant", "fisheye", "opencv_fisheye4", "kb4"})
+  {
+    EXPECT_EQ(parseDistortionModelType(name), DistortionModelType::KB4) << name;
+    EXPECT_TRUE(isFisheyeDistortionModel(name)) << name;
+  }
+  // The coefficient-free ideal mapping keeps its own canonical name.
+  EXPECT_EQ(parseDistortionModelType("ideal_equidistant"), DistortionModelType::EQUIDISTANT);
 }
 
 TEST(Types, ProjectionModelTypeToString)

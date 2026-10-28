@@ -36,7 +36,7 @@ Docs: [`docs/`](docs/index.md) (MkDocs / GitHub Pages ready)
 | Projection | Distortion | Reference |
 |---|---|---|
 | Pinhole | none / radtan4 / radtan5 (plumb_bob) / rational8 / thin-prism12 / tilted14 (Scheimpflug) | OpenCV-compatible coefficients |
-| Fisheye (θ-based) | OpenCV-fisheye4, KB4, KB8, ideal equidistant / equisolid / stereographic / orthographic | Kannala & Brandt 2006 |
+| Fisheye (θ-based) | KB4 (also OpenCV's fisheye model), KB8, ideal equidistant / equisolid / stereographic / orthographic | Kannala & Brandt 2006 |
 | Omnidirectional | ξ + optional radtan | Mei & Rives 2007 |
 | Double sphere | ξ, α + optional radtan | Usenko et al. 2018 |
 | EUCM | α, β + optional radtan | Khomutenko et al. 2015 |

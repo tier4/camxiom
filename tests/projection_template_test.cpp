@@ -39,21 +39,20 @@ std::vector<CameraModel64> models()
   {
     const bool fish = projection == ProjectionModelType::FISHEYE_THETA;
     const std::vector<std::pair<DistortionModelType, int>> layouts =
-      fish ? std::vector<
-               std::pair<DistortionModelType, int>>{{DistortionModelType::NONE, 0},
-                                                    {DistortionModelType::OPENCV_FISHEYE4, 4},
-                                                    {DistortionModelType::KB4, 4},
-                                                    {DistortionModelType::KB8, 8},
-                                                    {DistortionModelType::EQUIDISTANT, 0},
-                                                    {DistortionModelType::EQUIDISTANT, 14},
-                                                    {DistortionModelType::EQUISOLID, 4},
-                                                    {DistortionModelType::STEREOGRAPHIC, 8},
-                                                    {DistortionModelType::ORTHOGRAPHIC, 14}}
-           : std::vector<std::pair<DistortionModelType, int>>{
-               {DistortionModelType::NONE, 0},      {DistortionModelType::RADTAN4, 4},
-               {DistortionModelType::RADTAN4, 5},   {DistortionModelType::RADTAN5, 5},
-               {DistortionModelType::RATIONAL8, 8}, {DistortionModelType::THIN_PRISM12, 12},
-               {DistortionModelType::TILTED14, 14}};
+      fish
+        ? std::vector<std::pair<DistortionModelType, int>>{{DistortionModelType::NONE, 0},
+                                                           {DistortionModelType::KB4, 4},
+                                                           {DistortionModelType::KB8, 8},
+                                                           {DistortionModelType::EQUIDISTANT, 0},
+                                                           {DistortionModelType::EQUIDISTANT, 14},
+                                                           {DistortionModelType::EQUISOLID, 4},
+                                                           {DistortionModelType::STEREOGRAPHIC, 8},
+                                                           {DistortionModelType::ORTHOGRAPHIC, 14}}
+        : std::vector<std::pair<DistortionModelType, int>>{
+            {DistortionModelType::NONE, 0},      {DistortionModelType::RADTAN4, 4},
+            {DistortionModelType::RADTAN4, 5},   {DistortionModelType::RADTAN5, 5},
+            {DistortionModelType::RATIONAL8, 8}, {DistortionModelType::THIN_PRISM12, 12},
+            {DistortionModelType::TILTED14, 14}};
     for (const auto &[distortion, count] : layouts)
     {
       CameraModel64 m;

@@ -128,8 +128,8 @@ bool projectGenericParametric(ProjectionModelType proj_type,
 
 Per-model building blocks are also public (`projectRadtan5`,
 `projectRational8`, `projectThinPrism12`, `projectTilted14`,
-`projectFisheye4`, `projectKB4`, `projectKB8`, `projectEquidistant`,
-`projectEquisolid`, `projectStereographic`, `projectOrthographic`,
+`projectKB4`, `projectKB8`, `projectEquidistant`, `projectEquisolid`,
+`projectStereographic`, `projectOrthographic`,
 `projectOmnidirectional`, `projectDoubleSphere`, `projectEucm`). All follow
 one contract: return `bool`, write `(u_out, v_out)`, and on a domain failure
 write zeros and return `false`. Unknown model/distortion types return

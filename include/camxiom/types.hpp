@@ -89,7 +89,6 @@ enum class DistortionModelType : std::uint8_t {
   RATIONAL8,
   THIN_PRISM12,
   TILTED14,
-  OPENCV_FISHEYE4,
   KB4,
   KB8,
   EQUIDISTANT,
