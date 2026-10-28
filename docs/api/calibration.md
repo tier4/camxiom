@@ -45,12 +45,18 @@ struct camxiom::calib::CalibrationView {
 
 A data-independent seed — the canonical warm start when no data-driven
 guess exists. Principal point at the image center; focal heuristic per
-family (`h/2` for rectilinear/unified models, `h/π` for equidistant
-fisheye); projection parameters at literature-typical values
-(fisheye `θ_max = π`; Mei `ξ = 1.0`; DS `ξ = −0.2, α = 0.5`;
-EUCM `α = 0.5, β = 1.0`). Guaranteed to validate for any valid input;
-invalid input returns an `UNKNOWN`-type sentinel that
-`validateCameraModel` rejects.
+family (`h/2` for rectilinear/unified models; for the fisheye laws the focal
+length that puts a ray 90° off axis at radius `h/2`, i.e. `h/π` for
+equidistant); projection parameters at literature-typical values
+(equidistant `θ_max = π` with a zero KB4 correction, the other fisheye laws
+their own monotone range without correction; Mei `ξ = 1.0`; DS
+`ξ = −0.2, α = 0.5`; EUCM `α = 0.5, β = 1.0`). Guaranteed to validate for any valid input;
+invalid input — and the latitude-longitude projections (equirectangular,
+cylindrical), which the calibration layer
+does not estimate — returns an `UNKNOWN`-type sentinel that
+`validateCameraModel` rejects. `calibrate`, `PnpSolver::solve`,
+`init::estimatePoseDLT`, `init::estimatePoseRefined` (`INVALID_MODEL`) and
+`convertCameraModel` likewise refuse latitude-longitude models.
 
 ## Init estimators (`camxiom::init`)
 
@@ -197,7 +203,7 @@ still looks fine):
 | Model | Required locks |
 |---|---|
 | pinhole (radtan) | `NONE` |
-| KB4 fisheye | `FIX_DIST_2 \| FIX_DIST_3` (k3, k4) |
+| equidistant + KB4 | `FIX_DIST_2 \| FIX_DIST_3` (k3, k4) |
 | Mei / DS / EUCM | `FIX_PROJECTION_PARAMS` |
 
 ### `CalibrationOptions` (excerpt)
@@ -262,10 +268,9 @@ counts, and per-view RMS/valid counts. `OK` means a finite statistic was
 computed from at least one correspondence; inspect coverage as well as RMS
 before accepting a model. With no projectable points it reports
 `DEGENERATE_CONFIG` and infinite errors. Invalid inputs/models and numeric
-overflow also report failure with infinite errors. The existing six-argument
-overload remains available, but now returns infinity instead of zero for
-failed/empty evaluations. Callers relying on the old zero sentinel must
-check finiteness or use the status-bearing overload.
+overflow also report failure with infinite errors. The six-argument
+overload carries no status: it returns infinity for a failed or empty
+evaluation, so check finiteness or use the status-bearing overload.
 
 ## See also
 
@@ -279,8 +284,8 @@ check finiteness or use the status-bearing overload.
 `PnpSolver::solve` with `PnpInitialGuess64` and `PnpResult64` keeps the input
 model, the write-back after optimization and the returned model as
 `CameraModel64`. It supports single and multiple views and the analytical
-Jacobian, automatic-differentiation and pose-only fast paths. The existing
-`PnpInitialGuess` / `PnpResult` remain float.
+Jacobian, automatic-differentiation and pose-only fast paths.
+`PnpInitialGuess` / `PnpResult` are the float counterparts.
 
 ### Keeping calibration results in double precision
 

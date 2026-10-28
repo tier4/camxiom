@@ -13,7 +13,9 @@ These conventions apply to the entire API.
 Right-handed, **+Z forward** (the optical axis, pointing out of the camera
 into the scene), **+X right**, **+Y down**. Rays with `z <= 0` are
 `BEHIND_CAMERA` for pinhole; wide-angle models (fisheye / omnidirectional /
-double sphere / EUCM) accept rays up to their `theta_max`.
+double sphere / EUCM) accept rays up to their `theta_max`; the
+latitude-longitude projections (equirectangular / cylindrical) accept every
+direction except the two poles.
 
 Projection is central: ray *direction* is what matters. Input rays do not
 need to be unit-normalized (the magnitude cancels in every projection
@@ -43,7 +45,8 @@ v = fy * y_d              + cy
 
 Every angle in the API is in **radians** unless the name says otherwise (only
 `*_fov_deg` fields are degrees). `theta` always denotes the angle between a
-ray and the optical axis.
+ray and the optical axis; `lambda` (longitude) and `phi` (latitude) are
+defined [below](#latitude-longitude-projections).
 
 ## The `CameraModel` aggregate
 
@@ -51,24 +54,57 @@ ray and the optical axis.
 struct CameraModel {                 // = CameraModelT<float>; CameraModel64 = CameraModelT<double>
   IntrinsicsModel intrinsics;        // fx, fy, cx, cy, skew            (pixels)
   ProjectionModel projection;        // type, theta_max, xi, alpha, beta
-  DistortionModel distortion;        // type, space, coeffs[14], tilt matrices, count, flags
+  DistortionModel distortion;        // type, coeffs[14], tilt matrices, count, flags
 };
 ```
 
 All model types are plain aggregates (no constructors): brace-initializable,
-stack-allocatable (~200 bytes), no virtual functions, no heap. A camera model
+stack-allocatable (176 bytes in float, 352 in double), no virtual functions,
+no heap. A camera model
 is the *composition* of three orthogonal parts:
 
 - **`IntrinsicsModel`** — the affine pixel mapping (`fx`, `fy`, `cx`, `cy`, `skew`).
-- **`ProjectionModel`** — the projection family and its *projection-level*
+- **`ProjectionModel`** — the projection law and its *projection-level*
   parameters: `type`, `theta_max` (maximum accepted ray-to-axis angle,
   default π/2), `xi` (omnidirectional / double-sphere), `alpha`
   (double-sphere / EUCM), `beta` (EUCM).
-- **`DistortionModel`** — the distortion model applied in between: `type`,
-  `space` (`PLANE` or `ANGLE`), `coeffs[14]` (OpenCV-compatible layout,
-  `count` says how many leading entries are meaningful), precomputed tilt
-  matrices for TILTED14, and derived flags (`is_rational`, `has_thin_prism`,
-  `has_tilt`).
+- **`DistortionModel`** — the lens correction applied on top of the law:
+  `type`, `coeffs[14]` (OpenCV-compatible layout, `count` says how many
+  leading entries are meaningful), precomputed tilt matrices for TILTED14,
+  and derived flags (`is_rational`, `has_thin_prism`, `has_tilt`).
+
+### Projection law and lens correction
+
+camxiom keeps two questions apart:
+
+- **the law** — how a ray direction maps to the normalized image plane for
+  an ideal lens of that kind (pinhole, one of the fisheye laws, a
+  sphere-based model, or a latitude-longitude projection). It always lives in
+  the projection slot (`ProjectionModelType`), together with its parameters.
+- **the correction** — how a real lens deviates from its law. It always
+  lives in the distortion slot (`DistortionModelType`). `NONE` means the
+  camera follows its law exactly.
+
+Each law takes the corrections that are defined for it:
+
+| Projection law | Allowed distortion |
+|---|---|
+| `PINHOLE`, `OMNIDIRECTIONAL`, `DOUBLE_SPHERE`, `EUCM` | `NONE`, `RADTAN4`, `RADTAN5`, `RATIONAL8`, `THIN_PRISM12`, `TILTED14` (plane corrections) |
+| `EQUIDISTANT` | `NONE`, `KB4`, `KB8` (angle corrections) |
+| `EQUISOLID`, `STEREOGRAPHIC`, `ORTHOGRAPHIC` | `NONE` |
+| `EQUIRECTANGULAR`, `CYLINDRICAL` | `NONE` |
+
+`validateCameraModel` rejects every other pair. The Kannala–Brandt
+polynomials are corrections of the equidistant law: with all coefficients
+zero, KB4 maps exactly like plain `EQUIDISTANT`. A zero KB4 is still kept
+as KB4 (it is a correction whose coefficients can be fitted), never folded
+into `NONE`.
+
+Because the law never sits in the distortion slot, removing the correction
+keeps the law: `makeDistortionFree` returns the same projection (type,
+`theta_max`, `xi`, `alpha`, `beta`) with distortion `NONE` — a
+stereographic model stays stereographic, and `EQUIDISTANT` + `KB4` becomes
+plain `EQUIDISTANT`.
 
 ### Float and double variants
 
@@ -85,16 +121,28 @@ Member names are identical across precisions. Conversion helpers:
 
 ## Projection models
 
-`ProjectionModelType`: `PINHOLE`, `FISHEYE_THETA`, `OMNIDIRECTIONAL`,
-`DOUBLE_SPHERE`, `EUCM` (+ `UNKNOWN`).
+`ProjectionModelType`: `PINHOLE`, `EQUIDISTANT`, `EQUISOLID`,
+`STEREOGRAPHIC`, `ORTHOGRAPHIC`, `OMNIDIRECTIONAL`, `DOUBLE_SPHERE`, `EUCM`,
+`EQUIRECTANGULAR`, `CYLINDRICAL` (+ `UNKNOWN`). `isFisheyeProjection(type)`
+is true for the four fisheye laws, `isLatLongProjection(type)` for the two
+latitude-longitude projections.
+
+The fisheye laws map the angle `θ = atan2(√(X²+Y²), Z)` between the ray and
+the optical axis to an image radius `r`, and place the point at
+`(x, y) = r · (X, Y) / √(X²+Y²)`.
 
 | Model | Projection-level params | Forward projection (before distortion & intrinsics) | Reference |
 |---|---|---|---|
 | `PINHOLE` | — | `(x, y) = (X/Z, Y/Z)` | — |
-| `FISHEYE_THETA` | `theta_max` | `θ = atan2(√(X²+Y²), Z)`; radius `r = f·θ_d(θ)` per the angle-distortion model | Kannala & Brandt, PAMI 2006 |
+| `EQUIDISTANT` | `theta_max` | `r = θ` (with KB4 / KB8: `r = θ_d(θ)`, see below) | Kannala & Brandt, PAMI 2006 |
+| `EQUISOLID` | `theta_max` | `r = 2·sin(θ/2)` | — |
+| `STEREOGRAPHIC` | `theta_max` | `r = 2·tan(θ/2)` | — |
+| `ORTHOGRAPHIC` | `theta_max` (≤ π/2) | `r = sin(θ)` (rear hemisphere rejected — non-injective past π/2) | — |
 | `OMNIDIRECTIONAL` (Mei) | `xi` | `(x, y) = (X, Y) / (Z + ξ·‖P‖)` | Mei & Rives, ICRA 2007 |
 | `DOUBLE_SPHERE` | `xi`, `alpha` | `d₁=‖P‖`, `d₂=√(X²+Y²+(ξd₁+Z)²)`, `(x, y) = (X, Y) / (α·d₂ + (1−α)(ξd₁+Z))` | Usenko et al., 3DV 2018 |
 | `EUCM` | `alpha`, `beta` | `d=√(β(X²+Y²)+Z²)`, `(x, y) = (X, Y) / (α·d + (1−α)Z)` | Khomutenko et al., RA-L 2015 |
+| `EQUIRECTANGULAR` | — | `(x, y) = (λ, φ)` | see [Latitude-longitude projections](#latitude-longitude-projections) |
+| `CYLINDRICAL` | — | `(x, y) = (λ, tan φ) = (λ, Y/√(X²+Z²))` | see [Latitude-longitude projections](#latitude-longitude-projections) |
 
 Domain limits are enforced, not clamped: the Mei model rejects directions
 past its injectivity limit (`‖P‖ + ξZ > 0`), double sphere enforces the
@@ -105,6 +153,86 @@ folding onto a wrong pixel.
 Typical parameter ranges: Mei `ξ ≥ 0` (1.0 = parabolic mirror); double
 sphere `ξ ∈ (−1, 1)` with real cameras typically in `[−0.4, −0.05]`,
 `α ∈ (0, 1)`; EUCM `α ∈ (0, 1)`, `β > 0` (1.0 = unified camera model).
+
+### Latitude-longitude projections
+
+`EQUIRECTANGULAR` and `CYLINDRICAL` map a direction's longitude and latitude
+to the two image axes. With `h = √(X²+Z²)`:
+
+- **longitude** `λ = atan2(X, Z)` in `[−π, π)`: 0 straight ahead, positive
+  to the right. The seam is directly behind the camera (−Z) and belongs to
+  the left edge (`λ = −π`).
+- **latitude** `φ = atan2(Y, h)` in `(−π/2, π/2)`: positive *downward*, so
+  it grows with `v` like the rest of the frame.
+
+The intrinsics then apply as for every model (`u = fx·x + skew·y + cx`,
+`v = fy·y + cy`), so a model is upright with `fy > 0`. Rotating the
+view (a different "forward" or "up") is the caller's rotation, as for
+any camera; there is no separate axis setting.
+
+Domain, enforced rather than wrapped:
+
+- A pole (`h = 0`, straight up or down) has no longitude, so it is a
+  `DOMAIN_ERROR` both ways: `rayToPixel` for the ray (as do the Jacobian and
+  batch paths), and `pixelToRay` for the equirectangular rows at
+  `φ = ±π/2`, which would unproject onto it.
+- `pixelToRay` returns `OUT_OF_FOV` for a pixel whose longitude falls
+  outside `[−π, π)`, and for `EQUIRECTANGULAR` whose latitude falls past
+  `±π/2`; it never wraps a pixel past the seam onto the other side.
+- The left image edge is the seam: it unprojects to the ray straight
+  behind the camera, which projects back onto the left edge, in `float` as
+  in `double`. A longitude within a few `float` rounding units below `−π`
+  (about 6·10⁻⁶ rad in both precisions, what an edge pixel recovers after
+  the intrinsics, but never more than a hundredth of a pixel) counts as the
+  seam itself, and a latitude that close past `±π/2` as the pole. The
+  hundredth of a pixel holds for a `double` model; a `float` model resolves
+  the edge only to `float`'s precision at that pixel coordinate, which is
+  coarser for a very long focal length (e.g. about 0.1 px at `fx = 10⁶`).
+  Converting a `float` model to `double` does not undo the rounding of its
+  intrinsics, so the converted model is not guaranteed to accept the image
+  edge itself.
+- `CYLINDRICAL` spaces its rows evenly in `tan φ`, so it covers any latitude
+  short of the poles, at a cost of stretching rows near them.
+
+Both take no lens correction and ignore `theta_max` (like `PINHOLE`); they
+project, unproject, batch, take Jacobians and build remap maps like any
+other model. The calibration layer does not estimate them and rejects
+them: `calibrate`, `PnpSolver`, `init::estimatePoseDLT` and
+`estimatePoseRefined`, `convertCameraModel`, `getDefaultSeed`, the
+parameter Jacobian and the autodiff template, and the OpenCV-layer
+`undistortPoints` and `solvePnP` (the normalized image plane they use
+cannot tell such a ray from its opposite).
+
+Factories in `<camxiom/model.hpp>` build a model from the angular range its
+image should cover, edge to edge (the left edge of column 0 is `lon_min`,
+the right edge of the last column `lon_max`, and likewise for rows):
+
+```cpp
+CameraModel model;
+// Whole sphere: fx = W/2π, fy = H/π, cx = (W−1)/2, cy = (H−1)/2.
+if (makeEquirectangularModel(ImageSize{4096, 2048}, model) != StatusCode::OK) { /* ... */ }
+
+// The front half, ±45° in latitude (lon_min, lon_max, lat_min, lat_max):
+StatusCode s = makeEquirectangularModel(ImageSize{2000, 1000},
+                                        -M_PI / 2, M_PI / 2, -M_PI / 4, M_PI / 4, model);
+
+// All longitudes, latitudes strictly inside ±π/2:
+s = makeCylindricalModel(ImageSize{2000, 800}, -M_PI, M_PI, -1.2, 1.2, model);
+```
+
+They return `INVALID_INPUT` (and reset the model) for a non-positive size or
+a non-finite range or one outside `−π ≤ lon_min < lon_max ≤ π`,
+`−π/2 ≤ lat_min < lat_max ≤ π/2` (strict at `±π/2` for the cylinder).
+
+`computeFov` reports a latitude-longitude model's longitude span along the
+principal row and latitude span down the principal column (a whole sphere is
+360 × 180) instead of the angle between two edge rays; see
+[Remap & rectification](api/remap.md#field-of-view).
+
+The [inverse LUT](api/lut.md) of a whole-sphere equirectangular image cannot be
+queried in its last grid cell before the right and bottom edges (up to `step`
+columns and rows): the grid nodes past those edges lie beyond the seam and
+the pole.
 
 ### `theta_max`
 
@@ -120,22 +248,22 @@ void updateThetaMax64(CameraModel64 &model);
 
 must be called after distortion coefficients are modified by hand or by an
 optimizer. Both functions also overwrite a narrower limit set by the caller,
-and they reset non-fisheye models to their default angular limit. Model
-factories (`makeCameraModel`, `getDefaultSeed`, `calibrate`,
+and they reset the other models to a fixed limit (π/2 − 1e-4 for pinhole, π
+for the sphere-based models and the latitude-longitude projections, which ignore
+it). Model factories (`makeCameraModel`, `getDefaultSeed`, `calibrate`,
 `convertCameraModel` and their double-precision counterparts) already leave
 `theta_max` consistent. To inspect the domain of the current coefficients
 while keeping the caller's own limit, use the non-mutating API described
 below.
 
 This consistency is enforced, not advisory: for the polynomial families
-(KB4 / KB8 / OpenCV-fisheye4) `validateCameraModel` certifies that
+(KB4 / KB8) `validateCameraModel` certifies that
 `theta_max` sits inside the polynomial's positive monotone range, and even
 the per-point query APIs reject a cap whose endpoint slope is negative
 (the common hand-set-cap-past-the-fold case) as `INVALID_MODEL`. Likewise,
-the coefficient-free types (`NONE` and the ideal `equidistant` /
-`equisolid` / `stereographic` / `orthographic` mappings) must carry an
-all-zero `coeffs` array — stale non-zero entries are rejected instead of
-being silently ignored by some code paths and applied by others.
+`NONE` carries no coefficients on any law: `count` is 0 and the `coeffs`
+array is all zero — stale non-zero entries are rejected instead of being
+silently ignored by some code paths and applied by others.
 
 ### Fisheye domain in double precision
 
@@ -143,8 +271,8 @@ being silently ignored by some code paths and applied by others.
 `FisheyeDomain64` without modifying the model. It ignores the input
 `projection.theta_max`, so the domain is recomputed from the current
 coefficients even when the declared limit is narrow, stale or NaN. The rest of
-the model is still checked for consistency. Only `FISHEYE_THETA` models are
-accepted.
+the model is still checked for consistency. Only fisheye-law models
+(`isFisheyeProjection`) are accepted.
 
 | Field | Meaning |
 |---|---|
@@ -153,8 +281,7 @@ accepted.
 | `theta_limit` | The geometric endpoint, or the first scan sample that failed the evaluation conditions (rad) |
 | `limit` | `ANGULAR_LIMIT` / `MONOTONICITY_LIMIT` / `NUMERIC_LIMIT` |
 
-The polynomial fisheye models (KB4, KB8, OpenCV fisheye4) share the existing
-512-step scan. It runs from 1e-3 rad to about π − 1e-4 rad and returns as
+The polynomial fisheye models (KB4, KB8) share one 512-step scan. It runs from 1e-3 rad to about π − 1e-4 rad and returns as
 `safe_theta_max` the last sample whose radius is finite and non-negative and
 whose slope is finite and positive. `theta_limit` is not an exact root of the
 fold. A fold narrower than the scan step (about π/512 rad), or one that
@@ -162,8 +289,8 @@ appears and recovers before the starting sample, may go undetected; the API
 does not prove injectivity over the whole range. The starting sample is
 checked too, and the call fails when no usable positive sample exists.
 
-For `ANGULAR_LIMIT` the endpoint is π (π/2 for orthographic only), and the
-non-polynomial models use a safe limit 1e-4 rad inside it.
+For `ANGULAR_LIMIT` the endpoint is π (π/2 for the orthographic law only),
+and the laws without a KB correction use a safe limit 1e-4 rad inside it.
 `MONOTONICITY_LIMIT` means a non-positive slope or a negative radius was
 found; `NUMERIC_LIMIT` means a non-finite radius or slope. On failure both
 angles are 0 and the reason is `UNKNOWN`. Query again whenever the
@@ -189,13 +316,19 @@ coefficient changes.
 
 ## Distortion models
 
-`DistortionSpace` divides distortion models into two families, and
-`validateCameraModel` rejects mismatched combinations (e.g. a pinhole
-projection with an angle-space distortion) instead of producing garbage:
+Distortion types are lens corrections only (see
+[Projection law and lens correction](#projection-law-and-lens-correction)).
+`DistortionSpace` divides them into two families. It is not a field of
+`DistortionModel`: `distortionSpaceOf(type)` derives it from the distortion
+type, so a model cannot hold a type and a space that disagree.
+`validateCameraModel` rejects corrections a law does not take (e.g. a
+pinhole projection with an angle-space correction) instead of producing
+garbage:
 
-- **`PLANE`** — distortion applied to normalized image-plane coordinates
-  (pinhole family; also the optional add-on distortion of Mei / DS / EUCM).
-- **`ANGLE`** — distortion applied to the incidence angle θ (fisheye family).
+- **`PLANE`** — corrections applied to normalized image-plane coordinates
+  (pinhole; also the optional add-on correction of Mei / DS / EUCM).
+- **`ANGLE`** — corrections applied to the incidence angle θ of the
+  equidistant law.
 
 ### PLANE space
 
@@ -216,27 +349,24 @@ Coefficient array layout (OpenCV-compatible, full TILTED14 ordering):
 
 ### ANGLE space
 
-Distortion acts on the incidence angle: the projected radius is
-`r = f · θ_d(θ)`.
+The correction acts on the incidence angle of the equidistant law: the
+projected radius is `r = θ_d(θ)` instead of `r = θ`.
 
 | `DistortionModelType` | Coeffs | `θ_d(θ)` |
 |---|---|---|
-| `OPENCV_FISHEYE4` | `[k1..k4]` | `θ·(1 + k1θ² + k2θ⁴ + k3θ⁶ + k4θ⁸)` (OpenCV fisheye) |
-| `KB4` | `[k1..k4]` | `θ + k1θ³ + k2θ⁵ + k3θ⁷ + k4θ⁹` (Kannala–Brandt) |
+| `KB4` | `[k1..k4]` | `θ + k1θ³ + k2θ⁵ + k3θ⁷ + k4θ⁹` (Kannala–Brandt; the same function and coefficient order as OpenCV's fisheye model `θ·(1 + k1θ² + k2θ⁴ + k3θ⁶ + k4θ⁸)`) |
 | `KB8` | `[k1..k8]` | `θ + k1θ³ + ... + k8θ¹⁷` |
-| `EQUIDISTANT` | — | `θ` (ideal, coefficient-free) |
-| `EQUISOLID` | — | `2·sin(θ/2)` |
-| `STEREOGRAPHIC` | — | `2·tan(θ/2)` |
-| `ORTHOGRAPHIC` | — | `sin(θ)` (rear hemisphere rejected — non-injective past π/2) |
+
+The other fisheye laws (equisolid, stereographic, orthographic) take no
+correction.
 
 ### Projection-level parameters are *not* distortion coefficients
 
 `xi`, `alpha`, `beta` live in `ProjectionModel`, never in `coeffs`.
-Interchange formats that pack them into a `D` vector (e.g. a
-`sensor_msgs/CameraInfo` for a double-sphere camera) are unpacked by the
-[CameraInfo interchange layer](api/camera-info.md): DS reads
-`d = [xi, alpha, plane-coeffs...]`, EUCM `d = [alpha, beta, ...]`, Mei
-`d = [xi, ...]`.
+camxiom's own camera description keeps them apart as well
+(`projection_parameters` beside `distortion_parameters`; see
+[CameraInfo interchange](api/camera-info.md)); ROS CameraInfo has no
+distortion model for these laws.
 
 ## Validation
 
@@ -245,9 +375,9 @@ Interchange formats that pack them into a `D` vector (e.g. a
 [[nodiscard]] StatusCode validateCameraModel64(const CameraModel64 &model);
 ```
 
-Checks internal consistency (finite parameters, valid type/space
-combinations, parameter ranges such as DS `ξ ∈ (−1, 1)`, `theta_max`
-consistency). Both precisions are single-sourced from one validator template,
+Checks internal consistency: finite parameters, a correction the law takes
+(the combination table above), parameter ranges such as DS `ξ ∈ (−1, 1)`,
+and `theta_max` consistency. Both precisions are single-sourced from one validator template,
 so a model accepted in float is accepted after widening to double — see
 [Numerical strategy](design/numerical-strategy.md) for why this is enforced
 structurally.
@@ -260,10 +390,11 @@ loops, validate once via `ValidatedCameraModel::tryMake()` — see
 
 | Function / header | Purpose |
 |---|---|
-| `parseDistortionModelType(name)` / `toString(...)` | string ↔ enum for distortion models (round-trips through the canonical spellings) |
-| `chooseProjectionModelType(dist_type)` | the natural projection family for a distortion type |
-| `isFisheyeDistortionModel(name)`, `isRationalDistortionModel(name)` | string predicates |
-| `makeDistortionFree(model)` | copy with distortion removed (coeffs zeroed, type `NONE`) |
+| `parseProjectionModelType(name)`, `parseDistortionModelType(name)` / `toString(...)` | string ↔ enum for both slots, through the toString spellings only (case-insensitive); the ROS names are read by `makeCameraModel(CameraInfo)` |
+| `isFisheyeProjection(type)`, `isLatLongProjection(type)`, `distortionSpaceOf(type)` | which laws are fisheye or latitude-longitude laws; which space a correction acts in |
+| `makeEquirectangularModel`, `makeCylindricalModel` | equirectangular / cylindrical models from the angular range the image covers |
+| `isFisheyeDistortionModel(name)`, `isRationalDistortionModel(name)` | predicates on ROS `distortion_model` names (`equidistant`, `rational_polynomial`) |
+| `makeDistortionFree(model)` | copy with the correction removed (distortion `NONE`, coeffs zeroed); the projection law is kept |
 | `model_compare.hpp` | `operator==` (exact, cache-invalidation) and `isApprox` (tolerance-based on the semantic parameters, for regression comparison across solver/platform noise) |
 | `toCameraModel64` / `fromCameraModel64` | precision conversion |
 | `version.hpp` | `CAMXIOM_VERSION_{MAJOR,MINOR,PATCH,STRING,CODE}` + `CAMXIOM_MAKE_VERSION(m, n, p)` for numeric comparison |

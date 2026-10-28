@@ -38,7 +38,6 @@ CameraModel makeDistortionFree(const CameraModel &model)
 {
   CameraModel result = model;
   result.distortion.type = DistortionModelType::NONE;
-  result.distortion.space = DistortionSpace::NONE;
   result.distortion.coeffs.fill(0.0f);
   result.distortion.count = 0U;
   result.distortion.is_rational = false;
@@ -50,7 +49,6 @@ CameraModel64 makeDistortionFree64(const CameraModel64 &model)
 {
   CameraModel64 result = model;
   result.distortion.type = DistortionModelType::NONE;
-  result.distortion.space = DistortionSpace::NONE;
   result.distortion.coeffs.fill(0.0);
   result.distortion.count = 0U;
   result.distortion.is_rational = false;

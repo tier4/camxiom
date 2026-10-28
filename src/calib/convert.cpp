@@ -58,7 +58,10 @@ Result convertCameraModelImpl(
     result.status = StatusCode::INVALID_INPUT;
     return result;
   }
-  if (camxiom::detail::validateModel(src_model) != StatusCode::OK || camxiom::detail::validateModel(dst_seed) != StatusCode::OK)
+  // The fit runs the calibration solver, which does not estimate lat-long
+  // models; a lat-long source has no single image plane to sample either.
+  if (camxiom::detail::validateModel(src_model) != StatusCode::OK || camxiom::detail::validateModel(dst_seed) != StatusCode::OK ||
+      isLatLongProjection(src_model.projection.type) || isLatLongProjection(dst_seed.projection.type))
   {
     result.status = StatusCode::INVALID_MODEL;
     return result;

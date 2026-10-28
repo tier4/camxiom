@@ -66,8 +66,8 @@ struct KB4InitResult
 ///      diagonal corner at ~172 deg incidence, so every pixel lifts to
 ///      theta < pi under the seed for any aspect ratio — peripheral and
 ///      >180-deg-FOV observations included). Build a CameraModel64 with
-///      projection.type = FISHEYE_THETA (theta_max = pi) and
-///      distortion.type = EQUIDISTANT (k_i = 0).
+///      projection.type = EQUIDISTANT (theta_max = pi) and
+///      distortion.type = NONE (k_i = 0).
 ///   2. For each view i, lift the planar board points to Z = 0 and call
 ///      estimatePoseDLT() with the seed model to recover (R_i, t_i).
 ///      Any non-OK status here is reported as DEGENERATE_CONFIG.

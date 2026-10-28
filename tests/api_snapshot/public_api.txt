@@ -152,67 +152,19 @@ namespace camxiom::calib
 
 === include/camxiom/calibration.hpp ===
 
-=== include/camxiom/camera_info_yaml.hpp ===
-camxiom | [[nodiscard]] StatusCode saveCameraInfoYaml( const std::string &path, const CameraInfo &camera_info, const std::string &camera_name = "" )
-camxiom | [[nodiscard]] StatusCode saveCameraInfoYaml( const std::string &path, const CameraInfo &camera_info, const std::string &camera_name, CameraInfoYamlPrecision precision )
-camxiom | [[nodiscard]] std::string toCameraInfoYaml( const CameraInfo &camera_info, const std::string &camera_name = "" )
-camxiom | [[nodiscard]] std::string toCameraInfoYaml( const CameraInfo &camera_info, const std::string &camera_name, CameraInfoYamlPrecision precision )
-camxiom | enum class CameraInfoYamlPrecision : std::uint8_t
-camxiom::CameraInfoYamlPrecision | #000 FIXED = 0U
-camxiom::CameraInfoYamlPrecision | #001 ROUND_TRIP = 1U
-namespace camxiom
-
 === include/camxiom/camxiom.hpp ===
 
 === include/camxiom/compat.hpp ===
 camxiom | [[nodiscard]] CameraModel makeCameraModel(const CameraInfo &camera_info)
+camxiom | [[nodiscard]] CameraModel makeCameraModel(const CamxiomCameraInfo &camera_info)
 camxiom | [[nodiscard]] CameraModel64 makeCameraModel64(const CameraInfo &camera_info)
-camxiom | [[nodiscard]] StatusCode exportDoubleSphereCameraInfo( const CameraModel &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportDoubleSphereCameraInfo64( const CameraModel64 &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out)
-camxiom | [[nodiscard]] StatusCode exportDoubleSphereModel( const CameraModel &model, DoubleSphereCompatProfile profile, DoubleSphereExternalModel &external_model_out )
-camxiom | [[nodiscard]] StatusCode exportDoubleSphereModel64( const CameraModel64 &model, DoubleSphereCompatProfile profile, DoubleSphereExternalModel &external_model_out)
-camxiom | [[nodiscard]] StatusCode exportEucmCameraInfo( const CameraModel &model, EucmCompatProfile profile, CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportEucmCameraInfo64( const CameraModel64 &model, EucmCompatProfile profile, CameraInfo &camera_info_out)
-camxiom | [[nodiscard]] StatusCode exportEucmModel( const CameraModel &model, EucmCompatProfile profile, EucmExternalModel &external_model_out )
-camxiom | [[nodiscard]] StatusCode exportEucmModel64( const CameraModel64 &model, EucmCompatProfile profile, EucmExternalModel &external_model_out)
-camxiom | [[nodiscard]] StatusCode exportFisheyeCameraInfo( const CameraModel &model, FisheyeCompatProfile profile, CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportFisheyeCameraInfo64( const CameraModel64 &model, FisheyeCompatProfile profile, CameraInfo &camera_info_out)
-camxiom | [[nodiscard]] StatusCode exportFisheyeModel( const CameraModel &model, FisheyeCompatProfile profile, FisheyeExternalModel &external_model_out )
-camxiom | [[nodiscard]] StatusCode exportFisheyeModel64( const CameraModel64 &model, FisheyeCompatProfile profile, FisheyeExternalModel &external_model_out)
-camxiom | [[nodiscard]] StatusCode exportOmnidirectionalCameraInfo( const CameraModel &model, OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportOmnidirectionalCameraInfo64( const CameraModel64 &model, OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out)
-camxiom | [[nodiscard]] StatusCode exportOmnidirectionalModel( const CameraModel &model, OmnidirectionalCompatProfile profile, OmnidirectionalExternalModel &external_model_out )
-camxiom | [[nodiscard]] StatusCode exportOmnidirectionalModel64( const CameraModel64 &model, OmnidirectionalCompatProfile profile, OmnidirectionalExternalModel &external_model_out)
-camxiom | [[nodiscard]] StatusCode exportPinholeCameraInfo( const CameraModel &model, PinholeCompatProfile profile, CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportPinholeCameraInfo64( const CameraModel64 &model, PinholeCompatProfile profile, CameraInfo &camera_info_out)
-camxiom | [[nodiscard]] StatusCode exportPinholeModel( const CameraModel &model, PinholeCompatProfile profile, PinholeExternalModel &external_model_out )
-camxiom | [[nodiscard]] StatusCode exportPinholeModel64( const CameraModel64 &model, PinholeCompatProfile profile, PinholeExternalModel &external_model_out)
-camxiom | [[nodiscard]] StatusCode importDoubleSphereModel( const DoubleSphereExternalModel &external_model, DoubleSphereCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importDoubleSphereModel64( const DoubleSphereExternalModel &external_model, DoubleSphereCompatProfile profile, CameraModel64 &model_out)
-camxiom | [[nodiscard]] StatusCode importEucmModel( const EucmExternalModel &external_model, EucmCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importEucmModel64( const EucmExternalModel &external_model, EucmCompatProfile profile, CameraModel64 &model_out)
-camxiom | [[nodiscard]] StatusCode importFisheyeModel( const FisheyeExternalModel &external_model, FisheyeCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importFisheyeModel64( const FisheyeExternalModel &external_model, FisheyeCompatProfile profile, CameraModel64 &model_out)
-camxiom | [[nodiscard]] StatusCode importOmnidirectionalModel( const OmnidirectionalExternalModel &external_model, OmnidirectionalCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importOmnidirectionalModel64( const OmnidirectionalExternalModel &external_model, OmnidirectionalCompatProfile profile, CameraModel64 &model_out)
-camxiom | [[nodiscard]] StatusCode importPinholeModel( const PinholeExternalModel &external_model, PinholeCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importPinholeModel64( const PinholeExternalModel &external_model, PinholeCompatProfile profile, CameraModel64 &model_out)
-camxiom | const char *toString(DoubleSphereCompatProfile profile)
-camxiom | const char *toString(EucmCompatProfile profile)
-camxiom | const char *toString(FisheyeCompatProfile profile)
-camxiom | const char *toString(OmnidirectionalCompatProfile profile)
-camxiom | const char *toString(PinholeCompatProfile profile)
-camxiom | enum class DoubleSphereCompatProfile : std::uint8_t
-camxiom | enum class EucmCompatProfile : std::uint8_t
-camxiom | enum class FisheyeCompatProfile : std::uint8_t
-camxiom | enum class OmnidirectionalCompatProfile : std::uint8_t
-camxiom | enum class PinholeCompatProfile : std::uint8_t
+camxiom | [[nodiscard]] CameraModel64 makeCameraModel64(const CamxiomCameraInfo &camera_info)
+camxiom | [[nodiscard]] StatusCode exportCameraInfo( const CameraModel &model, CamxiomCameraInfo &camera_info_out )
+camxiom | [[nodiscard]] StatusCode exportCameraInfo(const CameraModel &model, CameraInfo &camera_info_out)
+camxiom | [[nodiscard]] StatusCode exportCameraInfo64( const CameraModel64 &model, CameraInfo &camera_info_out )
+camxiom | [[nodiscard]] StatusCode exportCameraInfo64( const CameraModel64 &model, CamxiomCameraInfo &camera_info_out )
 camxiom | struct CameraInfo
-camxiom | struct DoubleSphereExternalModel
-camxiom | struct EucmExternalModel
-camxiom | struct FisheyeExternalModel
-camxiom | struct OmnidirectionalExternalModel
-camxiom | struct PinholeExternalModel
+camxiom | struct CamxiomCameraInfo
 camxiom::CameraInfo | std::array<double, 12> p
 camxiom::CameraInfo | std::array<double, 9> k
 camxiom::CameraInfo | std::array<double, 9> r
@@ -220,42 +172,13 @@ camxiom::CameraInfo | std::string distortion_model
 camxiom::CameraInfo | std::uint32_t height
 camxiom::CameraInfo | std::uint32_t width
 camxiom::CameraInfo | std::vector<double> d
-camxiom::DoubleSphereCompatProfile | #000 CANONICAL = 0U
-camxiom::DoubleSphereCompatProfile | #001 BASALT_D0
-camxiom::DoubleSphereCompatProfile | #002 BASALT_D4
-camxiom::DoubleSphereExternalModel | double alpha
-camxiom::DoubleSphereExternalModel | double xi
-camxiom::DoubleSphereExternalModel | std::array<double, 9> K
-camxiom::DoubleSphereExternalModel | std::vector<double> D
-camxiom::EucmCompatProfile | #000 CANONICAL = 0U
-camxiom::EucmCompatProfile | #001 KALIBR_D0
-camxiom::EucmCompatProfile | #002 KALIBR_D4
-camxiom::EucmExternalModel | double alpha
-camxiom::EucmExternalModel | double beta
-camxiom::EucmExternalModel | std::array<double, 9> K
-camxiom::EucmExternalModel | std::vector<double> D
-camxiom::FisheyeCompatProfile | #000 CANONICAL = 0U
-camxiom::FisheyeCompatProfile | #001 OPENCV_FISHEYE_D4
-camxiom::FisheyeCompatProfile | #002 ROS_CAMERA_INFO_EQUIDISTANT
-camxiom::FisheyeExternalModel | DistortionModelType distortion_type
-camxiom::FisheyeExternalModel | std::array<double, 9> K
-camxiom::FisheyeExternalModel | std::vector<double> D
-camxiom::OmnidirectionalCompatProfile | #000 CANONICAL = 0U
-camxiom::OmnidirectionalCompatProfile | #001 OPENCV_OMNIDIR_D4
-camxiom::OmnidirectionalCompatProfile | #002 OPENCV_OMNIDIR_D5
-camxiom::OmnidirectionalCompatProfile | #003 OPENCV_OMNIDIR_D8
-camxiom::OmnidirectionalExternalModel | double xi
-camxiom::OmnidirectionalExternalModel | std::array<double, 9> K
-camxiom::OmnidirectionalExternalModel | std::vector<double> D
-camxiom::PinholeCompatProfile | #000 CANONICAL = 0U
-camxiom::PinholeCompatProfile | #001 OPENCV_CALIB3D_D4
-camxiom::PinholeCompatProfile | #002 OPENCV_CALIB3D_D5
-camxiom::PinholeCompatProfile | #003 OPENCV_CALIB3D_D8
-camxiom::PinholeCompatProfile | #004 OPENCV_CALIB3D_D12
-camxiom::PinholeCompatProfile | #005 OPENCV_CALIB3D_D14
-camxiom::PinholeCompatProfile | #006 ROS_CAMERA_INFO_RAW
-camxiom::PinholeExternalModel | std::array<double, 9> K
-camxiom::PinholeExternalModel | std::vector<double> D
+camxiom::CamxiomCameraInfo | std::array<double, 5> intrinsic_parameters
+camxiom::CamxiomCameraInfo | std::string distortion_model
+camxiom::CamxiomCameraInfo | std::string projection_model
+camxiom::CamxiomCameraInfo | std::uint32_t image_height
+camxiom::CamxiomCameraInfo | std::uint32_t image_width
+camxiom::CamxiomCameraInfo | std::vector<double> distortion_parameters
+camxiom::CamxiomCameraInfo | std::vector<double> projection_parameters
 namespace camxiom
 
 === include/camxiom/core.hpp ===
@@ -384,7 +307,10 @@ camxiom | [[nodiscard]] CameraModel makeDistortionFree(const CameraModel &model)
 camxiom | [[nodiscard]] CameraModel64 makeDistortionFree64(const CameraModel64 &model)
 camxiom | [[nodiscard]] DistortionModelType parseDistortionModelType(const std::string &model_name)
 camxiom | [[nodiscard]] FisheyeDomain64 getFisheyeDomain64(const CameraModel64 &model)
-camxiom | [[nodiscard]] ProjectionModelType chooseProjectionModelType( DistortionModelType distortion_model_type )
+camxiom | [[nodiscard]] ProjectionModelType parseProjectionModelType(const std::string &model_name)
+camxiom | [[nodiscard]] StatusCode makeCylindricalModel( ImageSize image_size, double lon_min, double lon_max, double lat_min, double lat_max, CameraModel &model_out )
+camxiom | [[nodiscard]] StatusCode makeEquirectangularModel( ImageSize image_size, double lon_min, double lon_max, double lat_min, double lat_max, CameraModel &model_out )
+camxiom | [[nodiscard]] StatusCode makeEquirectangularModel(ImageSize image_size, CameraModel &model_out)
 camxiom | [[nodiscard]] StatusCode validateCameraModel(const CameraModel &model)
 camxiom | [[nodiscard]] StatusCode validateCameraModel64(const CameraModel64 &model)
 camxiom | [[nodiscard]] bool isFisheyeDistortionModel(const std::string &model_name)
@@ -613,7 +539,6 @@ camxiom::projection_template | template <typename T> [[nodiscard]] bool projectD
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectEquidistant( const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectEquisolid( const T *intrinsics, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectEucm( const T *intrinsics, const T &alpha, const T &beta, const T *dist, int dist_count, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
-camxiom::projection_template | template <typename T> [[nodiscard]] bool projectFisheye4( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectGenericParametric( ProjectionModelType proj_type, DistortionModelType dist_type, const T *intrinsics, const T *dist, int dist_count, const T &proj_xi, const T &proj_alpha, const T &proj_beta, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out, double theta_max = constants::kPi )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectKB4( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
 camxiom::projection_template | template <typename T> [[nodiscard]] bool projectKB8( const T *intrinsics, const T *dist, const T &x_cam, const T &y_cam, const T &z_cam, T &u_out, T &v_out )
@@ -626,7 +551,6 @@ camxiom::projection_template | template <typename T> [[nodiscard]] bool projectT
 namespace camxiom::projection_template
 
 === include/camxiom/remap.hpp ===
-camxiom | BuildRectifyMapResult buildRectifyMap( const CameraModel &src_model, ImageSize src_size, ImageSize dst_size, float alpha, float *map_x, float *map_y, const BuildRectifyMapOptions &options = BuildRectifyMapOptions{} )
 camxiom | FovResult computeFov( const CameraModel &model, ImageSize image_size, const SolverOptions &solver_options = SolverOptions{} )
 camxiom | ImageRemapResult buildImageRemapMap( const CameraModel &src_model, ImageSize src_size, const CameraModel &dst_model, ImageSize dst_size, float *map_x, float *map_y, const ImageRemapOptions &options = ImageRemapOptions{} )
 camxiom | ImageRemapResult buildUndistortImageRemapMap( const CameraModel &src_model, ImageSize image_size, float *map_x, float *map_y, const SolverOptions &solver_options = SolverOptions{} )
@@ -635,56 +559,26 @@ camxiom | RectifyRemapResult buildRectifyRemapMap( const CameraModel &src_model,
 camxiom | RemapResult buildRemapMap( const CameraModel &src_model, const CameraModel &dst_model, int width, int height, float *map_x, float *map_y, const SolverOptions &solver_options = SolverOptions{} )
 camxiom | RemapResult buildUndistortRemapMap( const CameraModel &src_model, int width, int height, float *map_x, float *map_y, const SolverOptions &solver_options = SolverOptions{} )
 camxiom | const char *toString(InvalidPixelPolicy pixel_policy)
-camxiom | const char *toString(RectifiedProjectionType projection_type)
-camxiom | const char *toString(RectifyFitPolicy fit_policy)
 camxiom | enum class InvalidPixelPolicy : std::uint8_t
-camxiom | enum class RectifiedProjectionType : std::uint8_t
-camxiom | enum class RectifyFitPolicy : std::uint8_t
-camxiom | struct BuildRectifyMapOptions
-camxiom | struct BuildRectifyMapResult
 camxiom | struct ImageRemapOptions
-camxiom | struct ImageSize
 camxiom | struct RectifiedOutputModelOptions
 camxiom | struct [[nodiscard]] FovResult
 camxiom | struct [[nodiscard]] ImageRemapResult
 camxiom | struct [[nodiscard]] RectifiedOutputModelResult
 camxiom | struct [[nodiscard]] RectifyRemapResult
 camxiom | struct [[nodiscard]] RemapResult
-camxiom::BuildRectifyMapOptions | Eigen::Matrix3f src_from_output_rotation
-camxiom::BuildRectifyMapOptions | SolverOptions solver_options
-camxiom::BuildRectifyMapOptions | float source_margin_px
-camxiom::BuildRectifyMapOptions | int boundary_sample_count
-camxiom::BuildRectifyMapResult | CameraModel output_model
-camxiom::BuildRectifyMapResult | ImageRemapResult remap_result
-camxiom::BuildRectifyMapResult | constexpr bool ok() const
-camxiom::BuildRectifyMapResult | constexpr explicit operator bool() const
-camxiom::BuildRectifyMapResult | float alpha_used
-camxiom::BuildRectifyMapResult | float diagonal_fov_deg
-camxiom::BuildRectifyMapResult | float horizontal_fov_deg
-camxiom::BuildRectifyMapResult | float vertical_fov_deg
 camxiom::ImageRemapOptions | Eigen::Matrix3f src_from_dst_rotation
 camxiom::ImageRemapOptions | InvalidPixelPolicy invalid_pixel_policy
 camxiom::ImageRemapOptions | SolverOptions solver_options
 camxiom::ImageRemapOptions | bool require_source_in_bounds
-camxiom::ImageSize | constexpr bool isValid() const
-camxiom::ImageSize | int height
-camxiom::ImageSize | int width
 camxiom::InvalidPixelPolicy | #000 WRITE_NEGATIVE_ONE = 0U
 camxiom::InvalidPixelPolicy | #001 WRITE_RAW_COORDINATE
+camxiom::RectifiedOutputModelOptions | CameraModel output_template
 camxiom::RectifiedOutputModelOptions | Eigen::Matrix3f src_from_output_rotation
 camxiom::RectifiedOutputModelOptions | ImageSize output_size
-camxiom::RectifiedOutputModelOptions | RectifiedProjectionType projection_type
-camxiom::RectifiedOutputModelOptions | RectifyFitPolicy fit_policy
-camxiom::RectifiedOutputModelOptions | float focal_scale
+camxiom::RectifiedOutputModelOptions | SolverOptions solver_options
+camxiom::RectifiedOutputModelOptions | float alpha
 camxiom::RectifiedOutputModelOptions | float source_margin_px
-camxiom::RectifiedOutputModelOptions | int boundary_sample_count
-camxiom::RectifiedProjectionType | #000 PINHOLE = 0U
-camxiom::RectifiedProjectionType | #001 CYLINDRICAL
-camxiom::RectifiedProjectionType | #002 STEREOGRAPHIC
-camxiom::RectifiedProjectionType | #003 LONGITUDE_LATITUDE
-camxiom::RectifyFitPolicy | #000 MAX_INSCRIBED_VALID = 0U
-camxiom::RectifyFitPolicy | #001 ALLOW_INVALID_BORDER
-camxiom::RectifyFitPolicy | #002 ALL_SOURCE_CONTAINED
 namespace camxiom
 
 === include/camxiom/remap_kernel.hpp ===
@@ -698,16 +592,7 @@ namespace camxiom
 
 === include/camxiom/ros.hpp ===
 camxiom | [[nodiscard]] CameraModel makeCameraModel(const sensor_msgs::msg::CameraInfo &camera_info)
-camxiom | [[nodiscard]] StatusCode exportDoubleSphereCameraInfo( const CameraModel &model, DoubleSphereCompatProfile profile, sensor_msgs::msg::CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportEucmCameraInfo( const CameraModel &model, EucmCompatProfile profile, sensor_msgs::msg::CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportFisheyeCameraInfo( const CameraModel &model, FisheyeCompatProfile profile, sensor_msgs::msg::CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportOmnidirectionalCameraInfo( const CameraModel &model, OmnidirectionalCompatProfile profile, sensor_msgs::msg::CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportPinholeCameraInfo( const CameraModel &model, PinholeCompatProfile profile, sensor_msgs::msg::CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode importDoubleSphereCameraInfo( const sensor_msgs::msg::CameraInfo &camera_info, DoubleSphereCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importEucmCameraInfo( const sensor_msgs::msg::CameraInfo &camera_info, EucmCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importFisheyeCameraInfo( const sensor_msgs::msg::CameraInfo &camera_info, FisheyeCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importOmnidirectionalCameraInfo( const sensor_msgs::msg::CameraInfo &camera_info, OmnidirectionalCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importPinholeCameraInfo( const sensor_msgs::msg::CameraInfo &camera_info, PinholeCompatProfile profile, CameraModel &model_out )
+camxiom | [[nodiscard]] StatusCode exportCameraInfo( const CameraModel &model, sensor_msgs::msg::CameraInfo &camera_info_out )
 namespace camxiom
 
 === include/camxiom/types.hpp ===
@@ -715,10 +600,14 @@ camxiom | const char *toString(DistortionModelType model_type)
 camxiom | const char *toString(DistortionSpace space)
 camxiom | const char *toString(ProjectionModelType model_type)
 camxiom | const char *toString(StatusCode status_code)
+camxiom | constexpr DistortionSpace distortionSpaceOf(const DistortionModelType type) noexcept
+camxiom | constexpr bool isFisheyeProjection(const ProjectionModelType type) noexcept
+camxiom | constexpr bool isLatLongProjection(const ProjectionModelType type) noexcept
 camxiom | enum class DistortionModelType : std::uint8_t
 camxiom | enum class DistortionSpace : std::uint8_t
 camxiom | enum class ProjectionModelType : std::uint8_t
 camxiom | enum class [[nodiscard]] StatusCode : std::uint8_t
+camxiom | struct ImageSize
 camxiom | struct SolverOptions
 camxiom | template <typename T> struct CameraModelT
 camxiom | template <typename T> struct DistortionModelT
@@ -740,7 +629,6 @@ camxiom::CameraModelT | DistortionModelT<T> distortion
 camxiom::CameraModelT | IntrinsicsModelT<T> intrinsics
 camxiom::CameraModelT | ProjectionModelT<T> projection
 camxiom::DistortionModelT | DistortionModelType type
-camxiom::DistortionModelT | DistortionSpace space
 camxiom::DistortionModelT | bool has_thin_prism
 camxiom::DistortionModelT | bool has_tilt
 camxiom::DistortionModelT | bool is_rational
@@ -754,18 +642,15 @@ camxiom::DistortionModelType | #002 RADTAN5
 camxiom::DistortionModelType | #003 RATIONAL8
 camxiom::DistortionModelType | #004 THIN_PRISM12
 camxiom::DistortionModelType | #005 TILTED14
-camxiom::DistortionModelType | #006 OPENCV_FISHEYE4
-camxiom::DistortionModelType | #007 KB4
-camxiom::DistortionModelType | #008 KB8
-camxiom::DistortionModelType | #009 EQUIDISTANT
-camxiom::DistortionModelType | #010 EQUISOLID
-camxiom::DistortionModelType | #011 STEREOGRAPHIC
-camxiom::DistortionModelType | #012 ORTHOGRAPHIC
-camxiom::DistortionModelType | #013 OMNIDIRECTIONAL
-camxiom::DistortionModelType | #014 UNKNOWN
+camxiom::DistortionModelType | #006 KB4
+camxiom::DistortionModelType | #007 KB8
+camxiom::DistortionModelType | #008 UNKNOWN
 camxiom::DistortionSpace | #000 NONE = 0U
 camxiom::DistortionSpace | #001 PLANE
 camxiom::DistortionSpace | #002 ANGLE
+camxiom::ImageSize | constexpr bool isValid() const
+camxiom::ImageSize | int height
+camxiom::ImageSize | int width
 camxiom::IntrinsicsModelT | T cx
 camxiom::IntrinsicsModelT | T cy
 camxiom::IntrinsicsModelT | T fx
@@ -779,11 +664,16 @@ camxiom::ProjectionModelT | T beta
 camxiom::ProjectionModelT | T theta_max
 camxiom::ProjectionModelT | T xi
 camxiom::ProjectionModelType | #000 PINHOLE = 0U
-camxiom::ProjectionModelType | #001 FISHEYE_THETA
-camxiom::ProjectionModelType | #002 OMNIDIRECTIONAL
-camxiom::ProjectionModelType | #003 DOUBLE_SPHERE
-camxiom::ProjectionModelType | #004 EUCM
-camxiom::ProjectionModelType | #005 UNKNOWN
+camxiom::ProjectionModelType | #001 EQUIDISTANT
+camxiom::ProjectionModelType | #002 EQUISOLID
+camxiom::ProjectionModelType | #003 STEREOGRAPHIC
+camxiom::ProjectionModelType | #004 ORTHOGRAPHIC
+camxiom::ProjectionModelType | #005 OMNIDIRECTIONAL
+camxiom::ProjectionModelType | #006 DOUBLE_SPHERE
+camxiom::ProjectionModelType | #007 EUCM
+camxiom::ProjectionModelType | #008 EQUIRECTANGULAR
+camxiom::ProjectionModelType | #009 CYLINDRICAL
+camxiom::ProjectionModelType | #010 UNKNOWN
 camxiom::Ray3T | Eigen::Matrix<T, 3, 1> direction
 camxiom::Ray3T | Eigen::Matrix<T, 3, 1> origin
 camxiom::SolverOptions | bool skip_verify

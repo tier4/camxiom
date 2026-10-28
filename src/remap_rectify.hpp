@@ -15,51 +15,49 @@
 #ifndef CAMXIOM__REMAP_RECTIFY_HPP
 #define CAMXIOM__REMAP_RECTIFY_HPP
 
-// Internal (NOT installed) helper: the rectify-target focal computation
-// extracted from remap.cpp (LOADMAP R1). This is the single source-boundary
-// pass that produces the per-axis inscribed / circumscribed focal estimates
-// consumed by makeRectifiedOutputModel() and buildRectifyMap(). It is a pure
-// numeric helper with no public-API surface; splitting it out of the 1198-line
-// remap.cpp is a readability-only move -- behaviour and numerics are identical
-// to the former in-file anonymous-namespace implementation.
+// Internal (NOT installed) helper: fitting the scale of a rectify output
+// camera. makeRectifiedOutputModel() scales an output template by one common
+// factor s (fx, fy and skew together); this helper finds the two scales that
+// alpha = 0 and alpha = 1 stand for. Larger s means a narrower view.
 
-#include "camxiom/remap.hpp"  // ImageSize
-#include "camxiom/types.hpp"  // CameraModel
+#include "camxiom/types.hpp"  // CameraModel, ImageSize
 
 #include <Eigen/Core>
 
 namespace camxiom::detail
 {
 
-// Per-axis output of the unified rectify-focal helper.
-//
-// `*_inscribed`: maximum focal such that all 4 source edges land inside the
-//   output frame on the corresponding side (per-axis tight bound).
-// `*_circumscribed`: focal that exactly contains the overall extremes of all
-//   sampled source rays in the output frame (alpha=1-style widest-FOV fit,
-//   D36 / D45).
-//
-// `inscribed_valid` is false when at least one edge contributed no sample
-// (rays past the theta clamp, etc.) — the inscribed rectangle is then
-// degenerate. `circumscribed_valid` is false when no source ray survived the
-// clamp at all.
-struct RectifyFocalPairs
+/// `inscribed_scale`: the smallest s at which every ray the output shows is
+///   a valid source ray landing inside the source image (alpha = 0).
+/// `contained_scale`: the largest s at which every valid source ray in the
+///   image that the output keeps lands inside the output image (alpha = 1).
+/// Each is on the safe side of the exact scale for the double evaluation of
+/// the model formulas (up to rounding), within 3e-4 of it unless the search
+/// could not settle a patch, and meaningful only when its `_valid` flag is
+/// set.
+struct RectifyScaleFit
 {
-  float fx_inscribed{0.0f};
-  float fy_inscribed{0.0f};
-  float fx_circumscribed{0.0f};
-  float fy_circumscribed{0.0f};
+  float inscribed_scale{0.0f};
+  float contained_scale{0.0f};
   bool inscribed_valid{false};
-  bool circumscribed_valid{false};
+  bool contained_valid{false};
 };
 
-// Single source-boundary pass producing both inscribed and circumscribed
-// per-axis focal estimates (see remap_rectify.cpp for the detailed contract).
-// Each caller checks the `_valid` flag for the policy it cares about.
-RectifyFocalPairs computeRectifyFocalPairs(
-  const CameraModel &src_model, const ImageSize &src_size, const ImageSize &out_size,
-  const Eigen::Matrix3f &src_from_output_rotation, int boundary_sample_count, float source_margin_px
+/// The number of patches each search refines at most; past it, a search
+/// returns the bound it holds (on the safe side, less tight).
+constexpr int kRectifyMaxPatches = 1 << 18;
+
+/// `unit_output` is the output template at s = 1 with its principal point at
+/// the output image centre. Only the bounds that are asked for are computed.
+RectifyScaleFit fitRectifyScale(
+  const CameraModel &src_model, const ImageSize &src_size, const CameraModel &unit_output,
+  const ImageSize &out_size, const Eigen::Matrix3f &src_from_output, float source_margin_px,
+  const SolverOptions &solver_options, bool need_inscribed, bool need_contained,
+  int max_patches = kRectifyMaxPatches
 );
+
+/// The output model at scale s: fx, fy and skew of `unit_output` times s.
+CameraModel scaleOutputModel(const CameraModel &unit_output, float scale);
 
 }  // namespace camxiom::detail
 

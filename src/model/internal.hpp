@@ -42,33 +42,6 @@ inline std::string toLowerCopy(const std::string &input)
 // PnP solver write-back and the analytical double cost), together with
 // rebuildDistortionAuxState.
 
-inline DistortionSpace distortionSpaceFromType(const DistortionModelType type)
-{
-  switch (type)
-  {
-    case DistortionModelType::NONE:
-      return DistortionSpace::NONE;
-    case DistortionModelType::RADTAN4:
-    case DistortionModelType::RADTAN5:
-    case DistortionModelType::RATIONAL8:
-    case DistortionModelType::THIN_PRISM12:
-    case DistortionModelType::TILTED14:
-      return DistortionSpace::PLANE;
-    case DistortionModelType::OPENCV_FISHEYE4:
-    case DistortionModelType::KB4:
-    case DistortionModelType::KB8:
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
-      return DistortionSpace::ANGLE;
-    case DistortionModelType::OMNIDIRECTIONAL:
-    case DistortionModelType::UNKNOWN:
-      break;
-  }
-  return DistortionSpace::NONE;
-}
-
 inline DistortionModelType classifyPlaneDistortionByCount(const std::size_t count)
 {
   if (count >= 14U)
@@ -132,13 +105,11 @@ inline float estimateSafeThetaMaxForPolynomialFisheye(const DistortionModel &mod
 template <typename T>
 bool shrinkThetaMaxToPolynomialMonotoneRange(CameraModelT<T> &model)
 {
-  if (model.projection.type != ProjectionModelType::FISHEYE_THETA)
+  if (!isFisheyeProjection(model.projection.type))
   {
     return false;
   }
-  if (model.distortion.type != DistortionModelType::KB4 &&
-      model.distortion.type != DistortionModelType::KB8 &&
-      model.distortion.type != DistortionModelType::OPENCV_FISHEYE4)
+  if (model.distortion.type != DistortionModelType::KB4 && model.distortion.type != DistortionModelType::KB8)
   {
     return false;
   }
@@ -151,29 +122,21 @@ bool shrinkThetaMaxToPolynomialMonotoneRange(CameraModelT<T> &model)
   return false;
 }
 
-inline float defaultFisheyeThetaMax(const DistortionModel &model)
+inline float defaultFisheyeThetaMax(const CameraModel &model)
 {
-  switch (model.type)
+  switch (detail_impl::angleLawOf(model.projection.type, model.distortion.type))
   {
-    case DistortionModelType::ORTHOGRAPHIC:
+    case detail_impl::AngleLaw::ORTHOGRAPHIC:
       // theta->sin(theta) is monotonic only on [0, pi/2].
       return kHalfPi - 1e-4f;
-    case DistortionModelType::OPENCV_FISHEYE4:
-    case DistortionModelType::KB4:
-    case DistortionModelType::KB8:
-      return estimateSafeThetaMaxForPolynomialFisheye(model);
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
+    case detail_impl::AngleLaw::KB4:
+    case detail_impl::AngleLaw::KB8:
+      return estimateSafeThetaMaxForPolynomialFisheye(model.distortion);
+    case detail_impl::AngleLaw::EQUIDISTANT:
+    case detail_impl::AngleLaw::EQUISOLID:
+    case detail_impl::AngleLaw::STEREOGRAPHIC:
       return kPi - 1e-4f;
-    case DistortionModelType::NONE:
-    case DistortionModelType::RADTAN4:
-    case DistortionModelType::RADTAN5:
-    case DistortionModelType::RATIONAL8:
-    case DistortionModelType::THIN_PRISM12:
-    case DistortionModelType::TILTED14:
-    case DistortionModelType::OMNIDIRECTIONAL:
-    case DistortionModelType::UNKNOWN:
+    case detail_impl::AngleLaw::INVALID:
       break;
   }
   return kHalfPi - 1e-4f;

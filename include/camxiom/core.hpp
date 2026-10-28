@@ -47,7 +47,6 @@
 #include "camxiom/validated_model.hpp"
 
 // --- ROS-free, OpenCV-free K/D <-> CameraModel interchange (CameraInfo POD) --
-#include "camxiom/camera_info_yaml.hpp"
 #include "camxiom/compat.hpp"
 
 // --- Projection: ray <-> pixel (float, double, AutoDiff template) -----------

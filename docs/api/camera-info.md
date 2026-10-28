@@ -1,173 +1,151 @@
 # CameraInfo interchange
 
-How camera descriptions enter and leave camxiom. The canonical interchange
-type is a **ROS-free POD** — every conversion (ROS messages, OpenCV K/D
-pairs, Kalibr / Basalt conventions, YAML files) funnels through it, so the
-parsing and packing logic exists exactly once, in the dependency-free core.
+How camera descriptions enter and leave camxiom. There are two formats:
 
-Headers: `<camxiom/compat.hpp>`, `<camxiom/camera_info_yaml.hpp>` (both
-core, no ROS / no OpenCV). The ROS message adapters live in
-[`<camxiom/ros.hpp>`](interop.md).
+- **ROS CameraInfo** (`camxiom::CameraInfo`): for ROS and every tool that reads
+  `sensor_msgs/CameraInfo` or its calibration YAML. It can hold only the
+  lenses ROS has distortion models for, and camxiom writes a model to it only
+  when it holds the same lens.
+- **camxiom's own description** (`camxiom::CamxiomCameraInfo`): holds every
+  valid `CameraModel`, field by field, and reads back as the same model.
 
-## `camxiom::CameraInfo` — the interchange POD
+Header: `<camxiom/compat.hpp>` (core, no ROS / no OpenCV). The ROS message
+adapters live in [`<camxiom/ros.hpp>`](interop.md). camxiom does not read or
+write files: storing a description is left to the application, and
+[Camera files in YAML](../guides/camera-yaml.md) shows how to do it with
+yaml-cpp in both layouts.
+
+## ROS CameraInfo
 
 ```cpp
 struct CameraInfo {
   std::array<double, 9>  k;               // 3x3 intrinsic matrix, row-major (default identity)
-  std::vector<double>    d;               // distortion coefficients (model-dependent length)
+  std::vector<double>    d;               // distortion coefficients
   std::string            distortion_model;
   std::array<double, 9>  r;               // rectification matrix (default identity)
   std::array<double, 12> p;               // 3x4 projection matrix, row-major
   std::uint32_t          width{0}, height{0};
 };
+
+CameraModel   makeCameraModel(const CameraInfo &camera_info);
+CameraModel64 makeCameraModel64(const CameraInfo &camera_info);
+StatusCode    exportCameraInfo(const CameraModel &model, CameraInfo &camera_info_out);
+StatusCode    exportCameraInfo64(const CameraModel64 &model, CameraInfo &camera_info_out);
 ```
 
-Mirrors the field layout of `sensor_msgs/CameraInfo` without the ROS-only
-fields (`header`, `binning_*`, `roi` — the [ROS layer](interop.md) folds
-those into K/P before producing this POD).
+The POD mirrors `sensor_msgs/CameraInfo` without the ROS-only fields
+(`header`, `binning_*`, `roi` — the [ROS layer](interop.md) folds those into
+K / P before producing it).
 
-## `makeCameraModel` — the single parsing entry point
+### Writing
 
-```cpp
-CameraModel makeCameraModel(const CameraInfo &camera_info);
-```
+`exportCameraInfo` picks the ROS distortion model from the camera model and
+writes it only when that name holds the same lens:
 
-Builds a `CameraModel` from K / D / `distortion_model`. Parsing is
-case-insensitive and accepts both camxiom's canonical names and the common
-ROS / OpenCV / third-party spellings:
-
-| Input string(s) | Distortion model | Projection family |
+| Model | `distortion_model` | `d` |
 |---|---|---|
-| `none` (or empty string + empty `d`) | `NONE` | pinhole |
-| `radtan4` | `RADTAN4` | pinhole |
-| `radtan5`, `plumb_bob`, `brown_conrady` | `RADTAN5` | pinhole |
-| `rational8`, `rational_polynomial` | `RATIONAL8` | pinhole |
-| `thin_prism12`, `thin_prism_fisheye` | `THIN_PRISM12` | pinhole |
-| `tilted14`, `tilted` | `TILTED14` | pinhole |
-| `equidistant`, `fisheye`, `opencv_fisheye4` | `OPENCV_FISHEYE4` | fisheye |
-| `kb4`, `kannala_brandt`, `kannala-brandt` | `KB4` | fisheye |
-| `kb8`, `kannala_brandt8`, `kannala-brandt8` | `KB8` | fisheye |
-| `ideal_equidistant` | `EQUIDISTANT` (coefficient-free) | fisheye |
-| `equisolid[_angle]`, `stereographic[_angle]`, `orthographic[_angle]` | trigonometric fisheye variants | fisheye |
-| `omnidirectional`, `omni` | — | Mei; `d = [xi, plane coeffs...]` |
-| `double_sphere`, `ds` | — | double sphere; `d = [xi, alpha, plane coeffs...]` |
-| `eucm` | — | EUCM; `d = [alpha, beta, plane coeffs...]` |
-| anything else | `UNKNOWN` (rejected by `validateCameraModel`) | — |
+| `PINHOLE` + `NONE` / `RADTAN4` / `RADTAN5` | `plumb_bob` | 5 (`k1 k2 p1 p2 k3`, zeros for what the model lacks; a `RADTAN4` that carries `k3` in a fifth coefficient writes it) |
+| `PINHOLE` + `RATIONAL8` | `rational_polynomial` | 8 |
+| `PINHOLE` + `THIN_PRISM12` / `TILTED14` with the prism and tilt terms all zero | `rational_polynomial` | 8 |
+| `EQUIDISTANT` + `NONE` / `KB4` | `equidistant` | 4 (`k1..k4`, zeros without a correction) |
+| `EQUIDISTANT` + `KB8` with `k5..k8` all zero | `equidistant` | 4 |
 
-Two pitfalls worth knowing:
+Zeros are added only where the ROS name fixes the length, and no non-zero
+coefficient is dropped. Every other model returns `INVALID_MODEL` and leaves
+`camera_info_out` unchanged: a non-zero prism or tilt term, KB8 terms past
+`k4`, a non-zero skew (ROS defines K without one, and receivers such as
+`image_geometry` project without it), and every projection other than
+pinhole and the equidistant law (equisolid, stereographic, orthographic,
+omnidirectional, double sphere, EUCM, equirectangular, cylindrical). Use
+camxiom's own description for those. An invalid model returns its
+validation status, also without writing.
 
-- ROS's `equidistant` means the **4-coefficient OpenCV fisheye**, not the
-  ideal equidistant mapping — camxiom follows ROS here and provides
-  `ideal_equidistant` for the coefficient-free model.
-- For Mei / DS / EUCM, the projection-level parameters ride in the *front*
-  of `d` (see the table). They are unpacked into
-  `CameraModel::projection`, not kept as distortion coefficients.
+On `OK`, `k` is `[fx 0 cx; 0 fy cy; 0 0 1]`, `r` the identity and
+`p = [K | 0]`; `width` / `height` are left to the caller.
 
-`makeCameraModel` never throws; a description it cannot understand yields a
-model that `validateCameraModel` rejects. Always validate after parsing.
+What a receiver does with the file is up to the receiver. `image_geometry`,
+for one, treats a `D` whose coefficients are all zero as no distortion for
+every distortion model, `equidistant` included, and then leaves points
+unchanged. That is right for pinhole, but the plain equidistant law (written
+as `equidistant` with `[0, 0, 0, 0]`) is not a pinhole camera, so such a
+receiver handles it as a different lens. camxiom reads it back correctly.
 
-## Strict per-profile import / export
+### Reading
 
-For interchange with specific ecosystems, `compat.hpp` defines profile enums
-and symmetric import/export functions per model family. Unlike the lenient
-`makeCameraModel`, these **enforce the profile's exact coefficient count**
-and validate the result, returning a `StatusCode`.
+`makeCameraModel` reads only the names `exportCameraInfo` writes, with the
+coefficient counts they define:
 
-| Family | External struct | Profiles |
+| `distortion_model` | `d` length | Model |
 |---|---|---|
-| pinhole | `PinholeExternalModel{K, D}` | `CANONICAL`, `OPENCV_CALIB3D_D4/D5/D8/D12/D14`, `ROS_CAMERA_INFO_RAW` |
-| fisheye | `FisheyeExternalModel{K, D, distortion_type}` | `CANONICAL`, `OPENCV_FISHEYE_D4`, `ROS_CAMERA_INFO_EQUIDISTANT` |
-| omnidirectional | `OmnidirectionalExternalModel{K, D, xi}` | `CANONICAL`, `OPENCV_OMNIDIR_D4/D5/D8` |
-| double sphere | `DoubleSphereExternalModel{K, D, xi, alpha}` | `CANONICAL`, `BASALT_D0`, `BASALT_D4` |
-| EUCM | `EucmExternalModel{K, D, alpha, beta}` | `CANONICAL`, `KALIBR_D0`, `KALIBR_D4` |
+| `plumb_bob` | 0 / 4 / 5 | `PINHOLE` + `NONE` / `RADTAN4` / `RADTAN5` |
+| `rational_polynomial` | 8 / 12 / 14 | `PINHOLE` + `RATIONAL8` / `THIN_PRISM12` / `TILTED14` |
+| `equidistant` | 4 | `EQUIDISTANT` + `KB4` |
+
+K gives `fx = k[0]`, `skew = k[1]`, `cx = k[2]`, `fy = k[4]`, `cy = k[5]`.
+Any other name or length, including an empty name, yields a model that
+`validateCameraModel` rejects; `makeCameraModel` never throws, so validate
+after reading.
+
+ROS's `equidistant` is the four-coefficient fisheye polynomial (OpenCV's
+fisheye model, the same function as KB4), not the plain equidistant law.
+A model without a correction is written with zero coefficients and so reads
+back as `KB4` (or `RADTAN5` for pinhole) with zero coefficients: the same
+lens, projecting every ray to the same pixel, but a correction with free
+coefficients rather than none. camxiom's own description keeps that
+distinction.
+
+## camxiom's own description
 
 ```cpp
-StatusCode importPinholeModel(const PinholeExternalModel &, PinholeCompatProfile, CameraModel &out);
-StatusCode exportPinholeModel(const CameraModel &, PinholeCompatProfile, PinholeExternalModel &out);
-// ... importFisheyeModel / exportFisheyeModel, importOmnidirectionalModel / ...,
-//     importDoubleSphereModel / ..., importEucmModel / ...
+struct CamxiomCameraInfo {
+  std::uint32_t         image_width{0}, image_height{0};
+  std::string           projection_model;        // toString(ProjectionModelType)
+  std::vector<double>   projection_parameters;   // xi | xi, alpha | alpha, beta | none
+  std::string           distortion_model;        // toString(DistortionModelType), "none" without one
+  std::vector<double>   distortion_parameters;   // exactly the correction's coefficients
+  std::array<double, 5> intrinsic_parameters;    // fx, fy, cx, cy, skew
+};
+
+CameraModel   makeCameraModel(const CamxiomCameraInfo &camera_info);
+CameraModel64 makeCameraModel64(const CamxiomCameraInfo &camera_info);
+StatusCode    exportCameraInfo(const CameraModel &model, CamxiomCameraInfo &camera_info_out);
+StatusCode    exportCameraInfo64(const CameraModel64 &model, CamxiomCameraInfo &camera_info_out);
 ```
 
-In the external structs, `xi` / `alpha` / `beta` are **named fields** and `D`
-carries only the plane/angle coefficients — the prefix packing only happens
-in the `CameraInfo` POD / ROS-message direction. `toString()` overloads
-exist for every profile enum.
+It keeps the projection law and its own parameters apart from the lens
+correction (see
+[Projection law and lens correction](../camera-models.md#projection-law-and-lens-correction)):
+`projection_parameters` holds `xi` for omnidirectional, `xi, alpha` for double
+sphere, `alpha, beta` for EUCM and nothing for the other laws, and
+`distortion_parameters` holds exactly the correction's coefficients (4 for
+`radtan4` and `kb4`, 5 for `radtan5`, 8 for `rational8` and `kb8`, 12 for
+`thin_prism12`, 14 for `tilted14`, none for `none`). A correction whose
+coefficients are zero stays that correction.
 
-### Exporting to a `CameraInfo` POD
-
-```cpp
-StatusCode exportPinholeCameraInfo(const CameraModel &, PinholeCompatProfile, CameraInfo &out);
-// ... exportFisheyeCameraInfo, exportOmnidirectionalCameraInfo,
-//     exportDoubleSphereCameraInfo, exportEucmCameraInfo
-```
-
-Packs K/D per the profile, sets the family's canonical
-`distortion_model` string, `r = I`, `p = [K | 0]`. `width`/`height` are left
-untouched (the caller owns image geometry). The reverse direction for a raw
-POD is simply `makeCameraModel`.
-
-## YAML output (`camera_calibration_parsers` layout)
-
-```cpp
-[[nodiscard]] std::string toCameraInfoYaml(const CameraInfo &info,
-                                           const std::string &camera_name = "camera");
-[[nodiscard]] StatusCode  saveCameraInfoYaml(const std::string &path,
-                                             const CameraInfo &info,
-                                             const std::string &camera_name = "camera");
-```
-
-Serializes the POD in the standard ROS calibration-file layout —
-`image_width`, `image_height`, `camera_name`, `camera_matrix`,
-`distortion_model`, `distortion_coefficients`, `rectification_matrix`,
-`projection_matrix` — accepted by `camera_calibration_parsers` and camera
-drivers' `camera_info_url`, **without camxiom depending on ROS** (the writer
-is plain C++ in the core).
-
-Formatting is deterministic and locale-independent (matrices at 6 decimals
-in aligned blocks, distortion coefficients at 12 decimals on one line;
-numbers always use `.`). Strings are quoted/escaped only when not
-identifier-like, so the output is always valid YAML. `saveCameraInfoYaml`
-overwrites `path` and returns `INVALID_INPUT` when the file cannot be
-opened or fully written.
-
-The writer emits what it is given — it does not re-validate K/D consistency
-(use `validateCameraModel(makeCameraModel(info))` for that).
+`exportCameraInfo` writes every valid model, the latitude-longitude
+projections included; a float model's values are written as the shortest
+decimals that read back as the same floats. `makeCameraModel` reads the
+toString names only, requires exactly the law's parameters and the
+correction's coefficients, and derives `theta_max` again (`updateThetaMax`):
+a description that is not a valid model yields one `validateCameraModel`
+rejects. A model therefore reads back as itself, apart from a `theta_max`
+narrower than the derived one, which is not stored, and a `radtan4` holding
+the five-term layout, which is written as `radtan5` and reads back as that
+(the same lens, all five coefficients kept). `image_width` /
+`image_height` are left to the caller on export.
 
 ## Round-trip picture
 
 ```
-              lenient, string-driven                strict, profile-driven
-  CameraInfo ───── makeCameraModel ────► CameraModel ── export*Model ──► {K, D, xi, ...}
-      ▲                                        │                      (OpenCV / Kalibr / Basalt)
-      │                                        │
-      └────── export*CameraInfo(profile) ◄─────┘        import*Model ──► CameraModel
-      │
-      ├── toCameraInfoYaml / saveCameraInfoYaml         (ROS-free calibration YAML)
-      └── ros.hpp: sensor_msgs ⇄ CameraInfo POD         (optional layer, binning/ROI folded)
+                     exportCameraInfo (ROS lenses only)
+  CameraModel ──────────────────────────────────────────► CameraInfo
+       ▲  ▲                                                   │  ▲
+       │  └────────────────── makeCameraModel ────────────────┘  └── ros.hpp: sensor_msgs (binning/ROI folded)
+       │
+       │             exportCameraInfo (every model)
+       ├────────────────────────────────────────────────► CamxiomCameraInfo
+       └───────────────────── makeCameraModel ◄───────────────┘
 ```
 
-### Saving and reloading in double precision
-
-`makeCameraModel64` and `import*Model64` / `export*Model64` /
-`export*CameraInfo64` pass intrinsics, distortion coefficients and projection
-parameters through without rounding them to float. To keep that precision in
-YAML, pass `CameraInfoYamlPrecision::ROUND_TRIP` after the camera name.
-Without it, the existing format is unchanged: 6 decimal places for the
-matrices and 12 for the distortion coefficients.
-
-```cpp
-camxiom::CameraInfo info;
-auto status = camxiom::exportFisheyeCameraInfo64(
-    fit.camera_model, camxiom::FisheyeCompatProfile::CANONICAL, info);
-if (status == camxiom::StatusCode::OK) {
-  status = camxiom::saveCameraInfoYaml(
-      path, info, "front_camera", camxiom::CameraInfoYamlPrecision::ROUND_TRIP);
-}
-```
-
-`ROUND_TRIP` writes finite doubles in scientific notation with 17 significant
-digits, so negative zero and subnormal values survive as well. To reload,
-read the numbers into a `CameraInfo` as doubles with an existing YAML reader
-and pass it to `makeCameraModel64`; camxiom itself adds no YAML reader
-dependency. `theta_max` is not part of the CameraInfo format and is not
-saved, so keep any application-specific field-of-view limit separately.
+`makeCameraModel64` and `exportCameraInfo64` pass intrinsics, coefficients
+and projection parameters through without rounding them to float.

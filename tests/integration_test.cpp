@@ -51,7 +51,7 @@
 //
 // LOCK TABLE (mandatory per-model, D29/D30):
 //   PINHOLE:         PnpFlag::NONE
-//   FISHEYE_THETA:   PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3
+//   EQUIDISTANT:   PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3
 //   OMNIDIRECTIONAL: PnpFlag::FIX_PROJECTION_PARAMS
 //   DOUBLE_SPHERE:   PnpFlag::FIX_PROJECTION_PARAMS
 //   EUCM:            PnpFlag::FIX_PROJECTION_PARAMS
@@ -143,7 +143,6 @@ CameraModel64 buildGTPinhole()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -162,10 +161,9 @@ CameraModel64 buildGTKB4()
   m.intrinsics.cx = 320.0;
   m.intrinsics.cy = 240.0;
   m.intrinsics.skew = 0.0;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = 2.6;  // inside the polynomial's monotone range
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 4U;
   m.distortion.coeffs.fill(0.0);
   m.distortion.coeffs[0] = 0.01;    // k1 — free
@@ -193,7 +191,6 @@ CameraModel64 buildGTMEI()
   m.projection.xi = 1.0;  // = seed, LOCKED
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -217,7 +214,6 @@ CameraModel64 buildGTDS()
   m.projection.alpha = 0.5;  // = seed, LOCKED
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -241,7 +237,6 @@ CameraModel64 buildGTEUCM()
   m.projection.beta = 1.0;   // = seed, LOCKED
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -436,7 +431,6 @@ CameraModel buildPinholeZhangSeed(
   seed.intrinsics.cy = static_cast<float>(K(1, 2));
   seed.intrinsics.skew = 0.0f;  // force skew=0 per spec (standard pinhole path)
   seed.distortion.type = DistortionModelType::NONE;
-  seed.distortion.space = DistortionSpace::NONE;
   seed.distortion.count = 0U;
   return seed;
 }
@@ -483,7 +477,7 @@ TEST(Ms2Integration, KB4NoiseFree)
   // Require at least 8 valid views (some may be skipped for out-of-domain corners).
   ASSERT_GE(views.size(), 8u) << "Too few valid views built for KB4 noise-free";
 
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
   ASSERT_EQ(validateCameraModel(seed), StatusCode::OK);
 
   // KB4 lock: k3=k4=0 (= seed; high-order terms non-identifiable, D29).
@@ -512,7 +506,7 @@ TEST(Ms2Integration, KB4NoisySigma03)
   const auto views = makeRicherViews(gt, wpts, 0.3, rng);
   ASSERT_GE(views.size(), 8u) << "Too few valid views for KB4 sigma=0.3";
 
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
   const PnpFlag lock_flags = PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3;
   const CalibrationResult res = calibrate(views, seed, lock_flags, makeDefaultOptions());
 
@@ -539,7 +533,7 @@ TEST(Ms2Integration, KB4NoisySigma05)
   const auto views = makeRicherViews(gt, wpts, 0.5, rng);
   ASSERT_GE(views.size(), 8u) << "Too few valid views for KB4 sigma=0.5";
 
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
   const PnpFlag lock_flags = PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3;
   const CalibrationResult res = calibrate(views, seed, lock_flags, makeDefaultOptions());
 
@@ -989,7 +983,7 @@ TEST(Ms2Integration, PinholeDefaultSeedNoisySigma05)
 //
 // Calibration pipeline reuse:
 //   Pinhole: getDefaultSeed (PINHOLE, 640, 480) → calibrate(PnpFlag::NONE)
-//   KB4:     getDefaultSeed (FISHEYE_THETA, …) → calibrate(FIX_DIST_2|FIX_DIST_3)
+//   KB4:     getDefaultSeed (EQUIDISTANT, …) → calibrate(FIX_DIST_2|FIX_DIST_3)
 //   MEI:     getDefaultSeed (OMNIDIRECTIONAL, …) → calibrate(FIX_PROJECTION_PARAMS)
 //   DS:      getDefaultSeed (DOUBLE_SPHERE, …)   → calibrate(FIX_PROJECTION_PARAMS)
 //   EUCM:    getDefaultSeed (EUCM, …)             → calibrate(FIX_PROJECTION_PARAMS)
@@ -1115,6 +1109,17 @@ bool sampleMapBilinear(
 // were fully asserted.
 // ---------------------------------------------------------------------------
 
+// Rectify to a square-pixel pinhole of the source size with the given alpha.
+RectifyRemapResult rectifyWithAlpha(
+  const CameraModel &src, const ImageSize size, const float alpha, float *map_x, float *map_y
+)
+{
+  RectifiedOutputModelOptions options;
+  options.output_size = size;
+  options.alpha = alpha;
+  return buildRectifyRemapMap(src, size, options, map_x, map_y);
+}
+
 void checkRoundTripAlpha0(
   const CameraModel &calibrated, const float *map_x, const float *map_y,
   const CameraModel &output_model, const std::string &model_name, double &max_err_out,
@@ -1211,11 +1216,9 @@ TEST(Ms2Integration, RectifyRoundTripPinholeAlpha0)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK)
-    << "buildRectifyMap alpha=0 failed for Pinhole";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "rectify alpha=0 failed for Pinhole";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "Pinhole rectified output_model is invalid";
 
@@ -1234,17 +1237,16 @@ TEST(Ms2Integration, RectifyRoundTripKB4Alpha0)
 {
   const auto wpts = makeCheckerboard3D(8, 6, 0.05);
   const CalibrateSpec spec{
-    ProjectionModelType::FISHEYE_THETA, PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3};
+    ProjectionModelType::EQUIDISTANT, PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3};
   const CameraModel calibrated = runNoiseFreePipeline(buildGTKB4(), wpts, spec);
   ASSERT_EQ(validateCameraModel(calibrated), StatusCode::OK)
     << "KB4 calibration failed; cannot test rectification";
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "buildRectifyMap alpha=0 failed for KB4";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "rectify alpha=0 failed for KB4";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "KB4 rectified output_model is invalid";
 
@@ -1268,10 +1270,9 @@ TEST(Ms2Integration, RectifyRoundTripMEIAlpha0)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "buildRectifyMap alpha=0 failed for MEI";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "rectify alpha=0 failed for MEI";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "MEI rectified output_model is invalid";
 
@@ -1295,10 +1296,9 @@ TEST(Ms2Integration, RectifyRoundTripDSAlpha0)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "buildRectifyMap alpha=0 failed for DS";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "rectify alpha=0 failed for DS";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "DS rectified output_model is invalid";
 
@@ -1322,10 +1322,9 @@ TEST(Ms2Integration, RectifyRoundTripEUCMAlpha0)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "buildRectifyMap alpha=0 failed for EUCM";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "rectify alpha=0 failed for EUCM";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "EUCM rectified output_model is invalid";
 
@@ -1342,7 +1341,7 @@ TEST(Ms2Integration, RectifyRoundTripEUCMAlpha0)
 // ===========================================================================
 // Group 2: RectifyAlpha1Smoke — 5 models
 //
-// Verify that buildRectifyMap with alpha=1 succeeds and returns finite
+// Verify that rectifying with alpha=1 succeeds and returns finite
 // positive FOV values.  No round-trip assertion here; alpha=1 may clamp
 // for wide fisheye per design (D36).
 // ===========================================================================
@@ -1356,10 +1355,9 @@ TEST(Ms2Integration, RectifyAlpha1SmokePinhole)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 1.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 1.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "Pinhole alpha=1 buildRectifyMap failed";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "Pinhole alpha=1 rectify failed";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "Pinhole alpha=1 output_model is invalid";
 
@@ -1376,16 +1374,15 @@ TEST(Ms2Integration, RectifyAlpha1SmokeKB4)
 {
   const auto wpts = makeCheckerboard3D(8, 6, 0.05);
   const CalibrateSpec spec{
-    ProjectionModelType::FISHEYE_THETA, PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3};
+    ProjectionModelType::EQUIDISTANT, PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3};
   const CameraModel calibrated = runNoiseFreePipeline(buildGTKB4(), wpts, spec);
   ASSERT_EQ(validateCameraModel(calibrated), StatusCode::OK);
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 1.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 1.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "KB4 alpha=1 buildRectifyMap failed";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "KB4 alpha=1 rectify failed";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "KB4 alpha=1 output_model is invalid";
 
@@ -1404,10 +1401,9 @@ TEST(Ms2Integration, RectifyAlpha1SmokeMEI)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 1.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 1.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "MEI alpha=1 buildRectifyMap failed";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "MEI alpha=1 rectify failed";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "MEI alpha=1 output_model is invalid";
 
@@ -1426,10 +1422,9 @@ TEST(Ms2Integration, RectifyAlpha1SmokeDS)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 1.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 1.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "DS alpha=1 buildRectifyMap failed";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "DS alpha=1 rectify failed";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "DS alpha=1 output_model is invalid";
 
@@ -1448,10 +1443,9 @@ TEST(Ms2Integration, RectifyAlpha1SmokeEUCM)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult res =
-    buildRectifyMap(calibrated, sz, sz, 1.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult res = rectifyWithAlpha(calibrated, sz, 1.0f, map_x.data(), map_y.data());
 
-  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "EUCM alpha=1 buildRectifyMap failed";
+  ASSERT_EQ(res.remap_result.status, StatusCode::OK) << "EUCM alpha=1 rectify failed";
   ASSERT_EQ(validateCameraModel(res.output_model), StatusCode::OK)
     << "EUCM alpha=1 output_model is invalid";
 
@@ -1534,8 +1528,8 @@ TEST(Ms2Integration, RemapImageSmokePinhole)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult rmap =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult rmap =
+    rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
   ASSERT_EQ(rmap.remap_result.status, StatusCode::OK);
 
   const std::vector<std::uint8_t> src = makeDeterministicSrc(640, 480);
@@ -1583,14 +1577,14 @@ TEST(Ms2Integration, RemapImageSmokeKB4)
 {
   const auto wpts = makeCheckerboard3D(8, 6, 0.05);
   const CalibrateSpec spec{
-    ProjectionModelType::FISHEYE_THETA, PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3};
+    ProjectionModelType::EQUIDISTANT, PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3};
   const CameraModel calibrated = runNoiseFreePipeline(buildGTKB4(), wpts, spec);
   ASSERT_EQ(validateCameraModel(calibrated), StatusCode::OK);
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult rmap =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult rmap =
+    rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
   ASSERT_EQ(rmap.remap_result.status, StatusCode::OK);
 
   const std::vector<std::uint8_t> src = makeDeterministicSrc(640, 480);
@@ -1635,8 +1629,8 @@ TEST(Ms2Integration, RemapImageSmokeMEI)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult rmap =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult rmap =
+    rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
   ASSERT_EQ(rmap.remap_result.status, StatusCode::OK);
 
   const std::vector<std::uint8_t> src = makeDeterministicSrc(640, 480);
@@ -1681,8 +1675,8 @@ TEST(Ms2Integration, RemapImageSmokeDS)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult rmap =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult rmap =
+    rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
   ASSERT_EQ(rmap.remap_result.status, StatusCode::OK);
 
   const std::vector<std::uint8_t> src = makeDeterministicSrc(640, 480);
@@ -1727,8 +1721,8 @@ TEST(Ms2Integration, RemapImageSmokeEUCM)
 
   const ImageSize sz{640, 480};
   std::vector<float> map_x(640 * 480), map_y(640 * 480);
-  const BuildRectifyMapResult rmap =
-    buildRectifyMap(calibrated, sz, sz, 0.0f, map_x.data(), map_y.data());
+  const RectifyRemapResult rmap =
+    rectifyWithAlpha(calibrated, sz, 0.0f, map_x.data(), map_y.data());
   ASSERT_EQ(rmap.remap_result.status, StatusCode::OK);
 
   const std::vector<std::uint8_t> src = makeDeterministicSrc(640, 480);
@@ -1774,7 +1768,7 @@ TEST(Ms2Integration, RemapImageSmokeEUCM)
 //
 // Fixture text format (documented in tests/fixtures/README.md):
 //   Lines starting with '#' and blank lines are ignored.
-//   model: <pinhole|fisheye_theta|omnidirectional|double_sphere|eucm>
+//   model: <pinhole|equidistant|omnidirectional|double_sphere|eucm>
 //          (lowercase = toString() output; uppercase also accepted)
 //   image_size: <w> <h>
 //   # optional regression expectations (checked only when present):
@@ -1789,7 +1783,7 @@ TEST(Ms2Integration, RemapImageSmokeEUCM)
 //
 // LOCK TABLE (per-model, D29/D30):
 //   PINHOLE:         PnpFlag::NONE
-//   FISHEYE_THETA:   PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3
+//   EQUIDISTANT:   PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3
 //   OMNIDIRECTIONAL: PnpFlag::FIX_PROJECTION_PARAMS
 //   DOUBLE_SPHERE:   PnpFlag::FIX_PROJECTION_PARAMS
 //   EUCM:            PnpFlag::FIX_PROJECTION_PARAMS
@@ -1896,9 +1890,9 @@ bool parseFixture(std::istream &in, ParsedFixture &out, std::string &err)
       {
         out.model = ProjectionModelType::PINHOLE;
       }
-      else if (model_str == "fisheye_theta" || model_str == "FISHEYE_THETA")
+      else if (model_str == "equidistant" || model_str == "EQUIDISTANT")
       {
-        out.model = ProjectionModelType::FISHEYE_THETA;
+        out.model = ProjectionModelType::EQUIDISTANT;
       }
       else if (model_str == "omnidirectional" || model_str == "OMNIDIRECTIONAL")
       {
@@ -1915,7 +1909,7 @@ bool parseFixture(std::istream &in, ParsedFixture &out, std::string &err)
       else
       {
         err = "line " + std::to_string(lineno) + ": unknown model '" + model_str +
-              "'; expected one of: pinhole, fisheye_theta, omnidirectional, "
+              "'; expected one of: pinhole, equidistant, omnidirectional, "
               "double_sphere, eucm (case-insensitive)";
         return false;
       }
@@ -2142,7 +2136,7 @@ bool parseFixture(std::istream &in, ParsedFixture &out, std::string &err)
 // ---------------------------------------------------------------------------
 // lockFor — per-model D29/D30 Ceres lock flags.
 // PINHOLE:         PnpFlag::NONE
-// FISHEYE_THETA:   FIX_DIST_2 | FIX_DIST_3   (k3=k4=0 locked)
+// EQUIDISTANT:   FIX_DIST_2 | FIX_DIST_3   (k3=k4=0 locked)
 // OMNI/DS/EUCM:   FIX_PROJECTION_PARAMS       (xi, alpha, beta locked at seed)
 // ---------------------------------------------------------------------------
 
@@ -2152,7 +2146,10 @@ PnpFlag lockFor(ProjectionModelType model)
   {
     case ProjectionModelType::PINHOLE:
       return PnpFlag::NONE;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3;
     case ProjectionModelType::OMNIDIRECTIONAL:
     case ProjectionModelType::DOUBLE_SPHERE:
@@ -2296,7 +2293,7 @@ TEST(Ms2IntegrationFixture, ParserRoundTripSynthetic)
   // --- Serialise to fixture text ---
   std::ostringstream oss;
   writeFixture(
-    oss, ProjectionModelType::FISHEYE_THETA, 640, 480, views,
+    oss, ProjectionModelType::EQUIDISTANT, 640, 480, views,
     /*include_expected=*/true, gt_fx, gt_fy, gt_cx, gt_cy
   );
 
@@ -2310,7 +2307,7 @@ TEST(Ms2IntegrationFixture, ParserRoundTripSynthetic)
   ASSERT_TRUE(parseFixture(iss, parsed, parse_err)) << "parseFixture failed: " << parse_err;
 
   // --- Assert model / image_size ---
-  EXPECT_EQ(parsed.model, ProjectionModelType::FISHEYE_THETA) << "Parsed model mismatch";
+  EXPECT_EQ(parsed.model, ProjectionModelType::EQUIDISTANT) << "Parsed model mismatch";
   EXPECT_EQ(parsed.w, 640) << "Parsed image width mismatch";
   EXPECT_EQ(parsed.h, 480) << "Parsed image height mismatch";
 
@@ -2346,9 +2343,9 @@ TEST(Ms2IntegrationFixture, ParserRoundTripSynthetic)
   }
 
   // --- Run getDefaultSeed → calibrate on the parsed views ---
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, parsed.w, parsed.h);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, parsed.w, parsed.h);
   ASSERT_EQ(validateCameraModel(seed), StatusCode::OK)
-    << "getDefaultSeed(FISHEYE_THETA) returned invalid model";
+    << "getDefaultSeed(EQUIDISTANT) returned invalid model";
 
   const CalibrationResult res =
     calibrate(parsed.views, seed, lockFor(parsed.model), makeDefaultOptions(parsed.w, parsed.h));
@@ -2357,7 +2354,7 @@ TEST(Ms2IntegrationFixture, ParserRoundTripSynthetic)
     << "calibrate failed on parsed fixture views; rms=" << res.rms_reprojection_error_px;
 
   // Noise-free RMS < 1e-3 px: same basis as Section A KB4NoiseFree.
-  // Justification: noise=0, FISHEYE_THETA seed + calibrate should reach
+  // Justification: noise=0, EQUIDISTANT seed + calibrate should reach
   // machine precision for consistent geometry.
   EXPECT_LT(res.rms_reprojection_error_px, 1e-3)
     << "ParserRoundTrip noise-free RMS=" << res.rms_reprojection_error_px
@@ -2424,7 +2421,6 @@ TEST(Ms2IntegrationFixture, RealCorrespondenceRegression)
     {
       ASSERT_EQ(parsed.model, ProjectionModelType::PINHOLE);
       seed.distortion.type = parsed.pinhole_distortion;
-      seed.distortion.space = DistortionSpace::PLANE;
       seed.distortion.count = parsed.pinhole_distortion == DistortionModelType::RATIONAL8 ? 8U : 5U;
       seed.distortion.is_rational = parsed.pinhole_distortion == DistortionModelType::RATIONAL8;
     }

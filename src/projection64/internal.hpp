@@ -147,17 +147,19 @@ inline StatusCode undistortPlaneModel64(
 // ---------------------------------------------------------------------------
 
 inline StatusCode distortTheta64(
-  const DistortionModel64 &model, const double theta, double &theta_d
+  const detail_impl::AngleLaw law, const DistortionModel64 &model, const double theta,
+  double &theta_d
 )
 {
-  return detail_impl::distortTheta<double>(model, theta, theta_d);
+  return detail_impl::distortTheta<double>(law, model, theta, theta_d);
 }
 
 inline StatusCode distortThetaDerivative64(
-  const DistortionModel64 &model, const double theta, double &derivative_out
+  const detail_impl::AngleLaw law, const DistortionModel64 &model, const double theta,
+  double &derivative_out
 )
 {
-  return detail_impl::distortThetaDerivative<double>(model, theta, derivative_out);
+  return detail_impl::distortThetaDerivative<double>(law, model, theta, derivative_out);
 }
 
 inline StatusCode undistortThetaHybrid64(

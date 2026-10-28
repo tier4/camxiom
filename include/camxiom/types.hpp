@@ -31,7 +31,9 @@ namespace camxiom
 //   +Z forward (optical axis, points out of the camera into the scene),
 //   +X right, +Y down. Rays with z <= 0 are BEHIND_CAMERA for pinhole;
 //   wide-angle models (fisheye / omnidirectional / double-sphere / EUCM)
-//   accept rays up to their theta_max.
+//   accept rays up to their theta_max; the lat-long projections
+//   (equirectangular / cylindrical) accept every direction except the two
+//   poles straight up and straight down.
 //
 // Pixel coordinates:
 //   u along +X (columns, increases rightward), v along +Y (rows, increases
@@ -51,7 +53,38 @@ namespace camxiom
 //   Every angle in the API is in RADIANS unless the name says otherwise
 //   (only the *_fov_deg fields are degrees). ProjectionModelT::theta_max is
 //   the maximum accepted angle between a ray and the optical axis, in
-//   radians.
+//   radians. PINHOLE and the lat-long projections ignore it.
+//
+// Lat-long projections (EQUIRECTANGULAR, CYLINDRICAL):
+//   For a ray (X, Y, Z), with h = sqrt(X^2 + Z^2):
+//     longitude  lambda = atan2(X, Z) in [-pi, pi): 0 straight ahead,
+//                positive to the right, the seam directly behind (-Z)
+//                belongs to the left edge (-pi);
+//     latitude   phi = atan2(Y, h) in (-pi/2, pi/2): positive downward,
+//                so it grows with v like the rest of the frame.
+//   EQUIRECTANGULAR uses (x_d, y_d) = (lambda, phi); CYLINDRICAL uses
+//   (x_d, y_d) = (lambda, tan(phi)) = (lambda, Y / h). The intrinsics then
+//   apply as for every other model. A pole (h = 0) has no longitude and is
+//   a DOMAIN_ERROR in both directions: rayToPixel for the ray, pixelToRay
+//   for a pixel that unprojects onto it (the equirectangular rows at
+//   phi = +-pi/2). pixelToRay rejects pixels whose longitude falls outside
+//   [-pi, pi) or (equirectangular) whose latitude falls past +-pi/2 with
+//   OUT_OF_FOV instead of wrapping them. A longitude within a few float
+//   ulps (about 6e-6 rad, in both precisions) below -pi is the seam itself
+//   (an image edge recovers it only to rounding), and the left edge always
+//   unprojects to the ray behind the camera and projects back onto the left
+//   edge, in float as in double.
+//   Orientation is the caller's rotation, as for every model: there is no
+//   separate axis setting.
+//
+// Projection law and lens correction:
+//   ProjectionModelT::type names the law (pinhole, a fisheye law, or a
+//   sphere-based model); DistortionModelT::type names the correction applied
+//   on top of it. Plane corrections (radtan family) combine with PINHOLE,
+//   OMNIDIRECTIONAL, DOUBLE_SPHERE and EUCM; the angle corrections KB4/KB8
+//   combine with EQUIDISTANT only; EQUISOLID, STEREOGRAPHIC, ORTHOGRAPHIC,
+//   EQUIRECTANGULAR and CYLINDRICAL take no correction. validateCameraModel
+//   rejects other combinations.
 //
 // Distortion coefficients (DistortionModelT::coeffs, OpenCV-compatible
 // ordering; `count` says how many leading entries are meaningful):
@@ -60,13 +93,14 @@ namespace camxiom
 //     RADTAN4 uses the first 4, RADTAN5 the first 5, RATIONAL8 the first 8
 //     (k4..k6 form the denominator), THIN_PRISM12 the first 12, TILTED14
 //     all 14 (tau_x/tau_y in radians).
-//   ANGLE space (fisheye-family): [k1, k2, k3, k4] on the incidence angle,
-//     theta_d = theta * (1 + k1*theta^2 + k2*theta^4 + k3*theta^6
-//                          + k4*theta^8) (Kannala-Brandt / OpenCV fisheye).
+//   ANGLE space (on the equidistant law): KB4 [k1, k2, k3, k4] on the
+//     incidence angle, theta_d = theta * (1 + k1*theta^2 + k2*theta^4
+//     + k3*theta^6 + k4*theta^8) (Kannala-Brandt / OpenCV fisheye); KB8
+//     continues the series to k8*theta^16.
 //   Projection-level parameters (omnidirectional xi, double-sphere xi/alpha,
-//   EUCM alpha/beta) live in ProjectionModelT, NOT in coeffs. (Interchange
-//   formats that pack them into D — e.g. sensor_msgs — are unpacked by the
-//   compat layer.)
+//   EUCM alpha/beta) live in ProjectionModelT, NOT in coeffs; camxiom's own
+//   camera description (CamxiomCameraInfo) keeps them apart from the
+//   coefficients as well.
 // ===========================================================================
 
 /// [[nodiscard]] on the enum makes every function returning a StatusCode by
@@ -89,26 +123,83 @@ enum class DistortionModelType : std::uint8_t {
   RATIONAL8,
   THIN_PRISM12,
   TILTED14,
-  OPENCV_FISHEYE4,
   KB4,
   KB8,
-  EQUIDISTANT,
-  EQUISOLID,
-  STEREOGRAPHIC,
-  ORTHOGRAPHIC,
-  OMNIDIRECTIONAL,
   UNKNOWN
 };
 
 enum class DistortionSpace : std::uint8_t { NONE = 0U, PLANE, ANGLE };
 
+/// The space a distortion model acts in. It is a property of the type, not a
+/// separate setting: the radtan family corrects the normalized image plane
+/// (PLANE), the Kannala-Brandt family corrects the incidence angle of the
+/// equidistant law (ANGLE), and NONE (or an unusable type) corrects nothing.
+constexpr DistortionSpace distortionSpaceOf(const DistortionModelType type) noexcept
+{
+  switch (type)
+  {
+    case DistortionModelType::RADTAN4:
+    case DistortionModelType::RADTAN5:
+    case DistortionModelType::RATIONAL8:
+    case DistortionModelType::THIN_PRISM12:
+    case DistortionModelType::TILTED14:
+      return DistortionSpace::PLANE;
+    case DistortionModelType::KB4:
+    case DistortionModelType::KB8:
+      return DistortionSpace::ANGLE;
+    case DistortionModelType::NONE:
+    case DistortionModelType::UNKNOWN:
+      break;
+  }
+  return DistortionSpace::NONE;
+}
+
+/// The projection law: how a ray direction maps to the normalized image
+/// plane before any lens correction. Fisheye laws are functions of the angle
+/// theta between the ray and the optical axis (equidistant r = theta,
+/// equisolid r = 2 sin(theta/2), stereographic r = 2 tan(theta/2),
+/// orthographic r = sin(theta)); then come pinhole, the sphere-based Mei,
+/// double-sphere and EUCM models, and the lat-long projections, which map
+/// longitude and latitude to the two image axes (see the conventions above).
+/// Lens corrections live in DistortionModelType.
 enum class ProjectionModelType : std::uint8_t {
   PINHOLE = 0U,
-  FISHEYE_THETA,
+  EQUIDISTANT,
+  EQUISOLID,
+  STEREOGRAPHIC,
+  ORTHOGRAPHIC,
   OMNIDIRECTIONAL,
   DOUBLE_SPHERE,
   EUCM,
+  EQUIRECTANGULAR,
+  CYLINDRICAL,
   UNKNOWN
+};
+
+/// True for the fisheye laws, which map the angle theta to an image radius:
+/// EQUIDISTANT, EQUISOLID, STEREOGRAPHIC and ORTHOGRAPHIC.
+constexpr bool isFisheyeProjection(const ProjectionModelType type) noexcept
+{
+  return type == ProjectionModelType::EQUIDISTANT || type == ProjectionModelType::EQUISOLID ||
+         type == ProjectionModelType::STEREOGRAPHIC || type == ProjectionModelType::ORTHOGRAPHIC;
+}
+
+/// True for the lat-long projections, which map longitude and latitude to the
+/// image axes: EQUIRECTANGULAR and CYLINDRICAL. They project and unproject
+/// like any other model but take no lens correction, and the calibration
+/// layer does not estimate them.
+constexpr bool isLatLongProjection(const ProjectionModelType type) noexcept
+{
+  return type == ProjectionModelType::EQUIRECTANGULAR || type == ProjectionModelType::CYLINDRICAL;
+}
+
+/// Image dimensions in pixels.
+struct ImageSize
+{
+  int width{0};
+  int height{0};
+
+  constexpr bool isValid() const { return width > 0 && height > 0; }
 };
 
 // ---------------------------------------------------------------------------
@@ -160,7 +251,6 @@ template <typename T>
 struct DistortionModelT
 {
   DistortionModelType type{DistortionModelType::NONE};
-  DistortionSpace space{DistortionSpace::NONE};
   std::array<T, 14> coeffs{};
   std::array<T, 9> tilt_matrix{{T(1), T(0), T(0), T(0), T(1), T(0), T(0), T(0), T(1)}};
   std::array<T, 9> inv_tilt_matrix{{T(1), T(0), T(0), T(0), T(1), T(0), T(0), T(0), T(1)}};

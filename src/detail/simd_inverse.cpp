@@ -14,6 +14,7 @@
 
 #include "detail/simd_inverse.hpp"
 
+#include "camxiom/internal/angle_law.hpp"
 #include "camxiom/projection.hpp"
 #include "detail/projection_common.hpp"
 #include "detail/projection_models.hpp"
@@ -33,38 +34,19 @@ namespace
 
 inline bool requiresSimdRoundTripVerification(const CameraModel &model)
 {
-  return model.projection.type == ProjectionModelType::FISHEYE_THETA &&
-         (model.distortion.type == DistortionModelType::OPENCV_FISHEYE4 ||
-          model.distortion.type == DistortionModelType::KB4 ||
+  return isFisheyeProjection(model.projection.type) &&
+         (model.distortion.type == DistortionModelType::KB4 ||
           model.distortion.type == DistortionModelType::KB8);
 }
 
 /// Distortion families rayToPixelFisheyeSse4 implements — must stay in sync
 /// with supportsFisheyeSseDistortion (batch/float.cpp). Other configs verify
 /// through the scalar projection instead.
-inline bool fisheyeSseForwardSupports(const DistortionModelType type)
+inline bool fisheyeSseForwardSupports(const CameraModel &model)
 {
-  switch (type)
-  {
-    case DistortionModelType::OPENCV_FISHEYE4:
-    case DistortionModelType::KB4:
-    case DistortionModelType::EQUIDISTANT:
-      return true;
-    case DistortionModelType::NONE:
-    case DistortionModelType::RADTAN4:
-    case DistortionModelType::RADTAN5:
-    case DistortionModelType::RATIONAL8:
-    case DistortionModelType::THIN_PRISM12:
-    case DistortionModelType::TILTED14:
-    case DistortionModelType::KB8:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
-    case DistortionModelType::OMNIDIRECTIONAL:
-    case DistortionModelType::UNKNOWN:
-      break;
-  }
-  return false;
+  const detail_impl::AngleLaw law =
+    detail_impl::angleLawOf(model.projection.type, model.distortion.type);
+  return law == detail_impl::AngleLaw::EQUIDISTANT || law == detail_impl::AngleLaw::KB4;
 }
 
 inline void storeScalarRayResult(const RayResult &result, const int off, float *dirs_xyz)
@@ -458,12 +440,12 @@ int pixelToRayFisheyeSse4(
 
   // theta estimation: invert theta_d(theta)
   __m128 theta;
-  const auto dtype = model.distortion.type;
-  if (dtype == DistortionModelType::EQUIDISTANT || dtype == DistortionModelType::NONE)
+  const auto law = detail_impl::angleLawOf(model.projection.type, model.distortion.type);
+  if (law == detail_impl::AngleLaw::EQUIDISTANT)
   {
     theta = r_d;
   }
-  else if (dtype == DistortionModelType::EQUISOLID)
+  else if (law == detail_impl::AngleLaw::EQUISOLID)
   {
     // theta_d = 2*sin(theta/2) → theta = 2*asin(r_d/2)
     const __m128 half = _mm_set1_ps(0.5f);
@@ -476,7 +458,7 @@ int pixelToRayFisheyeSse4(
     for (int i = 0; i < 4; ++i) theta_arr[i] = 2.0f * std::asin(arg_arr[i]);
     theta = _mm_load_ps(theta_arr);
   }
-  else if (dtype == DistortionModelType::STEREOGRAPHIC)
+  else if (law == detail_impl::AngleLaw::STEREOGRAPHIC)
   {
     // theta_d = 2*tan(theta/2) → theta = 2*atan(r_d/2)
     alignas(16) float rd_arr[4], theta_arr[4];
@@ -484,7 +466,7 @@ int pixelToRayFisheyeSse4(
     for (int i = 0; i < 4; ++i) theta_arr[i] = 2.0f * std::atan(rd_arr[i] * 0.5f);
     theta = _mm_load_ps(theta_arr);
   }
-  else if (dtype == DistortionModelType::ORTHOGRAPHIC)
+  else if (law == detail_impl::AngleLaw::ORTHOGRAPHIC)
   {
     // theta_d = sin(theta) → theta = asin(r_d)
     const __m128 clamped = _mm_min_ps(_mm_max_ps(r_d, _mm_set1_ps(-1.0f)), one);
@@ -495,7 +477,7 @@ int pixelToRayFisheyeSse4(
   }
   else
   {
-    // Polynomial (OPENCV_FISHEYE4 / KB4): Newton iteration
+    // Polynomial (KB4): Newton iteration
     // theta_d = theta*(1 + k1*t^2 + k2*t^4 + k3*t^6 + k4*t^8)
     // Start from theta = r_d as initial guess
     theta = r_d;
@@ -868,8 +850,7 @@ int pixelToRayBatchFisheyeSse(
   }
   return pixelToRayBatchSseGeneric(
     model, u_in, v_in, count, dirs_xyz, statuses_out, solver_options, &pixelToRayFisheyeSse4,
-    fisheyeSseForwardSupports(model.distortion.type) ? &rayToPixelFisheyeSse4 : nullptr,
-    &fisheye::pixelToRay
+    fisheyeSseForwardSupports(model) ? &rayToPixelFisheyeSse4 : nullptr, &fisheye::pixelToRay
   );
 }
 
@@ -1200,12 +1181,12 @@ int pixelToRayFisheyeAvx8(
   const __m256 zero = _mm256_setzero_ps();
 
   __m256 theta;
-  const auto dtype = model.distortion.type;
-  if (dtype == DistortionModelType::EQUIDISTANT || dtype == DistortionModelType::NONE)
+  const auto law = detail_impl::angleLawOf(model.projection.type, model.distortion.type);
+  if (law == detail_impl::AngleLaw::EQUIDISTANT)
   {
     theta = r_d;
   }
-  else if (dtype == DistortionModelType::EQUISOLID)
+  else if (law == detail_impl::AngleLaw::EQUISOLID)
   {
     const __m256 half = _mm256_set1_ps(0.5f);
     const __m256 arg = _mm256_mul_ps(r_d, half);
@@ -1215,14 +1196,14 @@ int pixelToRayFisheyeAvx8(
     for (int i = 0; i < 8; ++i) theta_arr[i] = 2.0f * std::asin(arg_arr[i]);
     theta = _mm256_load_ps(theta_arr);
   }
-  else if (dtype == DistortionModelType::STEREOGRAPHIC)
+  else if (law == detail_impl::AngleLaw::STEREOGRAPHIC)
   {
     alignas(32) float rd_arr[8], theta_arr[8];
     _mm256_store_ps(rd_arr, r_d);
     for (int i = 0; i < 8; ++i) theta_arr[i] = 2.0f * std::atan(rd_arr[i] * 0.5f);
     theta = _mm256_load_ps(theta_arr);
   }
-  else if (dtype == DistortionModelType::ORTHOGRAPHIC)
+  else if (law == detail_impl::AngleLaw::ORTHOGRAPHIC)
   {
     const __m256 clamped = _mm256_min_ps(_mm256_max_ps(r_d, _mm256_set1_ps(-1.0f)), one);
     alignas(32) float rd_arr[8], theta_arr[8];

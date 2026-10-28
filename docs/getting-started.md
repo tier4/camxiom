@@ -52,7 +52,7 @@ cmake -S camxiom -B build -DCMAKE_BUILD_TYPE=Release -DCAMXIOM_WITH_CERES=OFF
 | Option | Default | Effect |
 |---|---|---|
 | `CAMXIOM_WITH_CERES` | auto (`ON` when Ceres ≥ 2.0 is found) | Build `camxiom::calib` and add it to the umbrella target. `OFF` gives a core-only build. |
-| `CAMXIOM_BUILD_BENCHMARKS` | `OFF` | Build the projection benchmark (and the calibrate benchmark when Ceres is enabled). Use with `CMAKE_BUILD_TYPE=Release`. |
+| `CAMXIOM_BUILD_BENCHMARKS` | `OFF` | Build the projection and projection-template benchmarks (and the calibrate benchmark when Ceres is enabled). Use with `CMAKE_BUILD_TYPE=Release`. |
 | `BUILD_TESTING` | (CTest default; colcon sets it ON) | Build the GoogleTest suite. In standalone mode tests additionally require a findable GTest package. |
 
 ## Linking
@@ -66,7 +66,7 @@ find_package(camxiom REQUIRED)
 target_link_libraries(my_app PRIVATE camxiom::camxiom)
 
 # Or pick a layer explicitly:
-target_link_libraries(my_runtime PRIVATE camxiom::core)    # Eigen-only runtime geometry
+target_link_libraries(my_runtime PRIVATE camxiom::core)    # runtime geometry
 target_link_libraries(my_calib   PRIVATE camxiom::calib)   # calibration (needs a Ceres-enabled build)
 ```
 
@@ -144,7 +144,7 @@ using camxiom::calib::CalibrationView;
 std::vector<CalibrationView> views = /* detected corners: world (Z=0) + pixels */;
 
 camxiom::CameraModel seed = camxiom::getDefaultSeed(
-    camxiom::ProjectionModelType::FISHEYE_THETA, 1280, 960);
+    camxiom::ProjectionModelType::EQUIDISTANT, 1280, 960);
 
 camxiom::calib::CalibrationOptions opts;
 opts.image_width = 1280;
@@ -173,7 +173,7 @@ API by layer:
 
 | Header | Pulls in |
 |---|---|
-| `<camxiom/core.hpp>` | the Eigen-only runtime geometry layer (types, model, projection, jacobian, lut, batch, remap, compat). No Ceres / OpenCV / ROS. |
+| `<camxiom/core.hpp>` | the runtime geometry layer (types, model, projection, jacobian, lut, batch, remap, compat). No Ceres / OpenCV / ROS. |
 | `<camxiom/calibration.hpp>` | the calibration layer (`default_seed`, `init/*`, `optimizer/*`, `calib/intrinsics`, `calib/convert`). Ceres-free to *include*; *linking* needs a Ceres-enabled build. |
 | `<camxiom/camxiom.hpp>` | everything: `core.hpp` + `calibration.hpp` + the optional ROS / OpenCV interop (self-guarded, harmless when absent). |
 

@@ -111,7 +111,7 @@ inline __m128 atan2Sse4HighPrecision(const __m128 y, const __m128 x)
 inline __m128 sqrtSse4(__m128 x) { return _mm_sqrt_ps(x); }
 
 /// Process 4 fisheye forward projections simultaneously using SSE.
-/// Handles: polynomial angle distortion (OPENCV_FISHEYE4 / KB4 / EQUIDISTANT), intrinsics.
+/// Handles: polynomial angle distortion (KB4 / EQUIDISTANT), intrinsics.
 /// Returns bitmask of valid points (0-15).
 inline int rayToPixelFisheyeSse4(
   const CameraModel &model, const float *rays_xyz, float *u_out, float *v_out,
@@ -144,7 +144,9 @@ inline int rayToPixelFisheyeSse4(
   const __m128 axis_mask = _mm_cmple_ps(xy_norm, eps);
   const __m128 z_negative = _mm_cmplt_ps(zs, zero);
   const __m128 singular_back_axis = _mm_and_ps(axis_mask, z_negative);
-  const __m128 norm_valid = _mm_cmpgt_ps(ray_norm_sq, eps);
+  // A finite ray whose squared norm overflows is invalid, as in the scalar path.
+  const __m128 norm_valid =
+    _mm_and_ps(_mm_cmpgt_ps(ray_norm_sq, eps), finiteMaskSseFwd(ray_norm_sq));
   __m128 valid = _mm_and_ps(
     _mm_and_ps(finite_xyz, norm_valid),
     _mm_andnot_ps(singular_back_axis, _mm_and_ps(theta_non_negative, fov_valid))
@@ -157,10 +159,8 @@ inline int rayToPixelFisheyeSse4(
     return 0;
   }
 
-  // Distort theta: theta_d = theta * (1 + k1*t² + k2*t⁴ + k3*t⁶ + k4*t⁸)
-  // This works for both OPENCV_FISHEYE4 and KB4 since derivative formula is shared.
-  // For KB4: theta_d = theta + k1*t³ + k2*t⁵ + k3*t⁷ + k4*t⁹
-  //        = theta * (1 + k1*t² + k2*t⁴ + k3*t⁶ + k4*t⁸)  (same form)
+  // Distort theta (KB4): theta_d = theta + k1*t³ + k2*t⁵ + k3*t⁷ + k4*t⁹,
+  // evaluated in the factored form theta * (1 + k1*t² + k2*t⁴ + k3*t⁶ + k4*t⁸).
   const auto &c = model.distortion.coeffs;
   const __m128 k1 = _mm_set1_ps(c[0]);
   const __m128 k2 = _mm_set1_ps(c[1]);
@@ -178,9 +178,12 @@ inline int rayToPixelFisheyeSse4(
   poly = _mm_add_ps(poly, _mm_mul_ps(k4, t8));
   const __m128 theta_d = _mm_mul_ps(theta, poly);
 
-  // scale = theta_d / xy_norm (safe with epsilon guard)
-  const __m128 safe_norm = _mm_max_ps(xy_norm, eps);
-  const __m128 scale = _mm_div_ps(theta_d, safe_norm);
+  // scale = theta_d / xy_norm, divided by the true off-axis distance like the
+  // scalar path; at or below its on-axis epsilon the point is the principal
+  // point (scale 0). Clamping the divisor instead would shrink near-axis rays.
+  const __m128 axis_eps = _mm_set1_ps(1e-8f);
+  const __m128 off_axis = _mm_cmpgt_ps(xy_norm, axis_eps);
+  const __m128 scale = _mm_and_ps(_mm_div_ps(theta_d, _mm_max_ps(xy_norm, axis_eps)), off_axis);
 
   // x_d = X * scale, y_d = Y * scale
   const __m128 x_d = _mm_mul_ps(xs, scale);
@@ -329,7 +332,8 @@ inline int rayToPixelFisheyeAvx8(
   const __m256 axis_mask = _mm256_cmp_ps(xy_norm, eps, _CMP_LE_OQ);
   const __m256 z_negative = _mm256_cmp_ps(zs, zero, _CMP_LT_OQ);
   const __m256 singular_back_axis = _mm256_and_ps(axis_mask, z_negative);
-  const __m256 norm_valid = _mm256_cmp_ps(ray_norm_sq, eps, _CMP_GT_OQ);
+  const __m256 norm_valid =
+    _mm256_and_ps(_mm256_cmp_ps(ray_norm_sq, eps, _CMP_GT_OQ), finiteMaskAvxFwd(ray_norm_sq));
   __m256 valid = _mm256_and_ps(
     _mm256_and_ps(finite_xyz, norm_valid),
     _mm256_andnot_ps(singular_back_axis, _mm256_and_ps(theta_non_negative, fov_valid))
@@ -359,8 +363,11 @@ inline int rayToPixelFisheyeAvx8(
   poly = _mm256_add_ps(poly, _mm256_mul_ps(k4, t8));
   const __m256 theta_d = _mm256_mul_ps(theta, poly);
 
-  const __m256 safe_norm = _mm256_max_ps(xy_norm, eps);
-  const __m256 scale = _mm256_div_ps(theta_d, safe_norm);
+  // Same off-axis division as the SSE kernel and the scalar path.
+  const __m256 axis_eps = _mm256_set1_ps(1e-8f);
+  const __m256 off_axis = _mm256_cmp_ps(xy_norm, axis_eps, _CMP_GT_OQ);
+  const __m256 scale =
+    _mm256_and_ps(_mm256_div_ps(theta_d, _mm256_max_ps(xy_norm, axis_eps)), off_axis);
 
   const __m256 x_d = _mm256_mul_ps(xs, scale);
   const __m256 y_d = _mm256_mul_ps(ys, scale);

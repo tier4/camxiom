@@ -94,7 +94,6 @@ CameraModel64 buildGTPinhole()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -109,12 +108,11 @@ CameraModel64 buildGTKB4()
   m.intrinsics.cx = 320.0;
   m.intrinsics.cy = 240.0;
   m.intrinsics.skew = 0.0;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   // Inside the polynomial's monotone range (k1=0.01/k2=-0.005 folds at
   // ~2.64); the validator certifies the cap, see calib_intrinsics_test.
   m.projection.theta_max = 2.6;
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 4U;
   m.distortion.coeffs.fill(0.0);
   m.distortion.coeffs[0] = 0.01;
@@ -141,7 +139,6 @@ CameraModel64 buildGTMEI()
   m.projection.xi = 1.0;
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -332,7 +329,7 @@ TEST(CalibUncertainty, LockedDistortionParamsNotListed)
   const auto views = makeDiverseViews(gt, world, 0.3, rng);
   ASSERT_FALSE(views.empty());
 
-  const CameraModel seed = getDefaultSeed(ProjectionModelType::FISHEYE_THETA, 640, 480);
+  const CameraModel seed = getDefaultSeed(ProjectionModelType::EQUIDISTANT, 640, 480);
   // KB4 identifiability lock: k3=k4 fixed (FIX_DIST_2 | FIX_DIST_3).
   const PnpFlag flags = PnpFlag::FIX_DIST_2 | PnpFlag::FIX_DIST_3;
   const CalibrationResult res = calibrate(views, seed, flags, makeDefaultOptions());
@@ -529,7 +526,6 @@ CameraModel64 buildGTPinholeRadtan()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = constants::kHalfPi;
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.count = 5U;
   m.distortion.coeffs.fill(0.0);
   m.distortion.coeffs[0] = -0.20;   // k1
@@ -557,7 +553,6 @@ CameraModel buildRadtan5Seed()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = static_cast<float>(constants::kHalfPi);
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.count = 5U;
   m.distortion.coeffs.fill(0.0f);
   m.distortion.is_rational = false;

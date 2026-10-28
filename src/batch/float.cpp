@@ -36,29 +36,11 @@ namespace
 using PixelFn = PixelResult (*)(const CameraModel &, const Eigen::Vector3f &);
 using RayFn = RayResult (*)(const CameraModel &, const Pixel2 &, const SolverOptions &);
 
-bool supportsFisheyeSseDistortion(const DistortionModelType type)
+bool supportsFisheyeSseDistortion(const CameraModel &model)
 {
-  switch (type)
-  {
-    case DistortionModelType::OPENCV_FISHEYE4:
-    case DistortionModelType::KB4:
-    case DistortionModelType::EQUIDISTANT:
-      return true;
-    case DistortionModelType::NONE:
-    case DistortionModelType::RADTAN4:
-    case DistortionModelType::RADTAN5:
-    case DistortionModelType::RATIONAL8:
-    case DistortionModelType::THIN_PRISM12:
-    case DistortionModelType::TILTED14:
-    case DistortionModelType::KB8:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
-    case DistortionModelType::OMNIDIRECTIONAL:
-    case DistortionModelType::UNKNOWN:
-      break;
-  }
-  return false;
+  const detail_impl::AngleLaw law =
+    detail_impl::angleLawOf(model.projection.type, model.distortion.type);
+  return law == detail_impl::AngleLaw::EQUIDISTANT || law == detail_impl::AngleLaw::KB4;
 }
 
 PixelFn resolveForwardFn(const ProjectionModelType type)
@@ -67,7 +49,10 @@ PixelFn resolveForwardFn(const ProjectionModelType type)
   {
     case ProjectionModelType::PINHOLE:
       return &pinhole::rayToPixel;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return &fisheye::rayToPixel;
     case ProjectionModelType::OMNIDIRECTIONAL:
       return &omnidirectional::rayToPixel;
@@ -75,6 +60,9 @@ PixelFn resolveForwardFn(const ProjectionModelType type)
       return &double_sphere::rayToPixel;
     case ProjectionModelType::EUCM:
       return &eucm::rayToPixel;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return &latlong::rayToPixel;
     case ProjectionModelType::UNKNOWN:
       break;
   }
@@ -87,7 +75,10 @@ RayFn resolveInverseFn(const ProjectionModelType type)
   {
     case ProjectionModelType::PINHOLE:
       return &pinhole::pixelToRay;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return &fisheye::pixelToRay;
     case ProjectionModelType::OMNIDIRECTIONAL:
       return &omnidirectional::pixelToRay;
@@ -95,6 +86,9 @@ RayFn resolveInverseFn(const ProjectionModelType type)
       return &double_sphere::pixelToRay;
     case ProjectionModelType::EUCM:
       return &eucm::pixelToRay;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return &latlong::pixelToRay;
     case ProjectionModelType::UNKNOWN:
       break;
   }
@@ -249,8 +243,7 @@ int rayToPixelBatch(
         );
       });
     }
-    if (model.projection.type == ProjectionModelType::FISHEYE_THETA &&
-        supportsFisheyeSseDistortion(model.distortion.type))
+    if (supportsFisheyeSseDistortion(model))
     {
       return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
         return detail::rayToPixelBatchFisheyeAvx2(
@@ -299,8 +292,7 @@ int rayToPixelBatch(
       );
     });
   }
-  if (model.projection.type == ProjectionModelType::FISHEYE_THETA &&
-      supportsFisheyeSseDistortion(model.distortion.type))
+  if (supportsFisheyeSseDistortion(model))
   {
     return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
       return detail::rayToPixelBatchFisheyeSse(
@@ -526,9 +518,8 @@ int pixelToRayBatch(
 // (measured on a 12-core Jetson Orin), so those stay pinned to scalar there.
 #if defined(__aarch64__)
   const bool simd_inverse_profitable =
-    !(model.projection.type == ProjectionModelType::FISHEYE_THETA &&
-      (model.distortion.type == DistortionModelType::OPENCV_FISHEYE4 ||
-       model.distortion.type == DistortionModelType::KB4 ||
+    !(isFisheyeProjection(model.projection.type) &&
+      (model.distortion.type == DistortionModelType::KB4 ||
        model.distortion.type == DistortionModelType::KB8));
 #else
   const bool simd_inverse_profitable = true;
@@ -547,9 +538,8 @@ int pixelToRayBatch(
     // reason the aarch64 carve-out above exists. The AVX2 fisheye FORWARD
     // kernel is unaffected and stays selected -- it is 1.7x faster than SSE2.
     const bool avx2_inverse_profitable =
-      !(model.projection.type == ProjectionModelType::FISHEYE_THETA &&
-        (model.distortion.type == DistortionModelType::OPENCV_FISHEYE4 ||
-         model.distortion.type == DistortionModelType::KB4 ||
+      !(isFisheyeProjection(model.projection.type) &&
+        (model.distortion.type == DistortionModelType::KB4 ||
          model.distortion.type == DistortionModelType::KB8));
     if (detail::cpuHasAvx2() && avx2_inverse_profitable)
     {
@@ -562,7 +552,7 @@ int pixelToRayBatch(
           );
         });
       }
-      if (model.projection.type == ProjectionModelType::FISHEYE_THETA)
+      if (isFisheyeProjection(model.projection.type))
       {
         return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
           return detail::pixelToRayBatchFisheyeAvx2(
@@ -611,7 +601,7 @@ int pixelToRayBatch(
         );
       });
     }
-    if (model.projection.type == ProjectionModelType::FISHEYE_THETA)
+    if (isFisheyeProjection(model.projection.type))
     {
       return detail::runBatchKernelParallel(count, [&](const int begin, const int len) {
         return detail::pixelToRayBatchFisheyeSse(

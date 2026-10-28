@@ -38,7 +38,6 @@ CameraModel pinholeRadtan5(double fx, double fy, double k1 = 0.0)
   model.intrinsics.fx = static_cast<float>(fx);
   model.intrinsics.fy = static_cast<float>(fy);
   model.distortion.type = camxiom::DistortionModelType::RADTAN5;
-  model.distortion.space = camxiom::DistortionSpace::PLANE;
   model.distortion.count = 5U;
   model.distortion.coeffs[0] = static_cast<float>(k1);
   return model;

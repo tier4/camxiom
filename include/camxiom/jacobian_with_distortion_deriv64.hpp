@@ -51,7 +51,7 @@ struct [[nodiscard]] FullProjectionJacobian64
 
 /// Compute forward projection with full Jacobian information (double precision).
 ///
-/// Supported for PINHOLE, FISHEYE_THETA, OMNIDIRECTIONAL, DOUBLE_SPHERE, and EUCM.
+/// Supported for PINHOLE, the fisheye laws, OMNIDIRECTIONAL, DOUBLE_SPHERE, and EUCM.
 FullProjectionJacobian64 rayToPixelWithFullJacobian64(
   const CameraModel64 &model, const Eigen::Vector3d &ray_direction
 );

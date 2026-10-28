@@ -157,7 +157,12 @@ std::vector<int> fixedProjectionParamIndices(camxiom::ProjectionModelType type)
     case camxiom::ProjectionModelType::EUCM:
       return {0};
     case camxiom::ProjectionModelType::PINHOLE:
-    case camxiom::ProjectionModelType::FISHEYE_THETA:
+    case camxiom::ProjectionModelType::EQUIDISTANT:
+    case camxiom::ProjectionModelType::EQUISOLID:
+    case camxiom::ProjectionModelType::STEREOGRAPHIC:
+    case camxiom::ProjectionModelType::ORTHOGRAPHIC:
+    case camxiom::ProjectionModelType::EQUIRECTANGULAR:
+    case camxiom::ProjectionModelType::CYLINDRICAL:
     case camxiom::ProjectionModelType::UNKNOWN:
       break;
   }
@@ -513,6 +518,12 @@ bool PnpSolver::Impl::solve(
       return false;
     }
   }
+  // The cost functions have no lat-long form (lat-long models are not
+  // calibrated).
+  if (isLatLongProjection(initial_guess.camera_model.projection.type))
+  {
+    return false;
+  }
 
   auto camera_model = initial_guess.camera_model;
   std::vector<Eigen::Vector3d> rvecs = initial_guess.rvecs;
@@ -854,7 +865,7 @@ void PnpSolver::Impl::writeBack(
   camxiom::detail::rebuildDistortionAuxState(camera_model.distortion);
 
   // Recalculate theta_max from the updated distortion coefficients.
-  // For polynomial fisheye models (KB4/KB8/OpenCV_Fisheye4) the safe monotonic
+  // For polynomial fisheye models (KB4/KB8) the safe monotonic
   // range of the distortion polynomial depends on the coefficients, so
   // theta_max must be refreshed whenever they change.
   const T initial_cap = camera_model.projection.theta_max;

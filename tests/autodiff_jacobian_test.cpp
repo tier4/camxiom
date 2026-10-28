@@ -120,7 +120,6 @@ CameraModel64 makePinholeNone()
   CameraModel64 m = makeIntrinsics();
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -130,7 +129,6 @@ CameraModel64 makePinholeRadtan5()
   CameraModel64 m = makeIntrinsics();
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.coeffs[0] = -0.28;
   m.distortion.coeffs[1] = 0.11;
   m.distortion.coeffs[2] = 0.0006;
@@ -145,7 +143,6 @@ CameraModel64 makePinholeRational8()
   CameraModel64 m = makeIntrinsics();
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::RATIONAL8;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.coeffs[0] = -0.30;
   m.distortion.coeffs[1] = 0.12;
   m.distortion.coeffs[2] = 0.0005;
@@ -164,7 +161,6 @@ CameraModel64 makePinholeThinPrism12()
   CameraModel64 m = makeIntrinsics();
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::THIN_PRISM12;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.coeffs[0] = -0.28;
   m.distortion.coeffs[1] = 0.11;
   m.distortion.coeffs[2] = 0.0006;
@@ -205,10 +201,9 @@ CameraModel64 makeFisheyeEquidistant()
   m.intrinsics.fy = 285.0;
   m.intrinsics.cx = 320.0;
   m.intrinsics.cy = 240.0;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = static_cast<double>(camxiom::constants::kPiF) - 1e-4;
-  m.distortion.type = DistortionModelType::EQUIDISTANT;
-  m.distortion.space = DistortionSpace::ANGLE;
+  m.distortion.type = DistortionModelType::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -225,28 +220,28 @@ CameraModel64 makeFisheyeKb4()
   return m;
 }
 
-// The three coefficient-free trigonometric fisheye variants. Their template
+// The three other coefficient-free fisheye laws. Their template
 // forward paths used to silently fall back to equidistant, so the AutoDiff
 // PnP cost optimised the wrong model; keeping them in the representative set
 // pins template <-> analytic agreement.
 CameraModel64 makeFisheyeEquisolid()
 {
   CameraModel64 m = makeFisheyeEquidistant();
-  m.distortion.type = DistortionModelType::EQUISOLID;
+  m.projection.type = ProjectionModelType::EQUISOLID;
   return m;
 }
 
 CameraModel64 makeFisheyeStereographic()
 {
   CameraModel64 m = makeFisheyeEquidistant();
-  m.distortion.type = DistortionModelType::STEREOGRAPHIC;
+  m.projection.type = ProjectionModelType::STEREOGRAPHIC;
   return m;
 }
 
 CameraModel64 makeFisheyeOrthographic()
 {
   CameraModel64 m = makeFisheyeEquidistant();
-  m.distortion.type = DistortionModelType::ORTHOGRAPHIC;
+  m.projection.type = ProjectionModelType::ORTHOGRAPHIC;
   // theta_d = sin(theta) is monotone only on [0, pi/2].
   m.projection.theta_max = camxiom::constants::kHalfPi - 1e-4;
   return m;
@@ -263,7 +258,6 @@ CameraModel64 makeOmnidirectional()
   m.projection.theta_max = static_cast<double>(camxiom::constants::kPiF);
   m.projection.xi = 1.0;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -280,7 +274,6 @@ CameraModel64 makeDoubleSphere()
   m.projection.xi = 0.5;
   m.projection.alpha = 0.5;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -297,7 +290,6 @@ CameraModel64 makeEucm()
   m.projection.alpha = 0.6;
   m.projection.beta = 1.1;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -569,7 +561,7 @@ TEST(AutoDiffJacobian, WidePlaneModelsMatchIndependentFiniteDifferences)
 {
   for (const auto &nm : representativeModels())
   {
-    if (nm.model.projection.type == ProjectionModelType::PINHOLE || nm.model.projection.type == ProjectionModelType::FISHEYE_THETA)
+    if (nm.model.projection.type == ProjectionModelType::PINHOLE || isFisheyeProjection(nm.model.projection.type))
       continue;
     for (const auto &ray : sampleRays())
     {
@@ -617,44 +609,48 @@ TEST(AutoDiffJacobian, WideModelsRejectPolesAndOverflowWithUnrestrictedCap)
   }
 }
 
-TEST(AutoDiffJacobian, AcceptsZeroPaddedIdealFisheyeCoefficients)
+TEST(AutoDiffJacobian, PlainFisheyeLawsCarryNoCoefficients)
 {
-  for (auto type :
-       {DistortionModelType::EQUIDISTANT, DistortionModelType::EQUISOLID,
-        DistortionModelType::STEREOGRAPHIC, DistortionModelType::ORTHOGRAPHIC})
-    for (int count : {0, 4, 8, 14})
+  for (auto law :
+       {ProjectionModelType::EQUIDISTANT, ProjectionModelType::EQUISOLID,
+        ProjectionModelType::STEREOGRAPHIC, ProjectionModelType::ORTHOGRAPHIC})
+  {
+    CameraModel64 model = makePinholeRadtan5();
+    model.projection.type = law;
+    model.projection.theta_max = 1.4;
+    model.distortion = DistortionModel64{};
+    ASSERT_EQ(validateCameraModel64(model), StatusCode::OK);
+    for (const auto &ray : sampleRays())
     {
-      CameraModel64 model = makePinholeRadtan5();
-      model.projection.type = ProjectionModelType::FISHEYE_THETA;
-      model.projection.theta_max = 1.4;
-      model.distortion = DistortionModel64{};
-      model.distortion.type = type;
-      model.distortion.space = DistortionSpace::ANGLE;
-      model.distortion.count = static_cast<std::uint8_t>(count);
-      ASSERT_EQ(validateCameraModel64(model), StatusCode::OK);
-      for (const auto &ray : sampleRays())
-      {
-        const auto analytic = rayToPixelWithJacobian64(model, ray);
-        ASSERT_TRUE(analytic.ok());
-        const auto ad = autodiffJacobian(model, ray);
-        ASSERT_TRUE(ad.ok) << "type=" << int(type) << " count=" << count;
-        EXPECT_NEAR(ad.u, analytic.pixel.u, 1e-6);
-        EXPECT_NEAR(ad.v, analytic.pixel.v, 1e-6);
-        EXPECT_LT((ad.J - analytic.J).cwiseAbs().maxCoeff(), 1e-5);
-        double u, v;
-        ASSERT_TRUE(
-          camxiom::projection_template::projectGeneric(model, ray.x(), ray.y(), ray.z(), u, v)
-        );
-        EXPECT_NEAR(u, analytic.pixel.u, 1e-6);
-        EXPECT_NEAR(v, analytic.pixel.v, 1e-6);
-      }
-      if (count > 0)
-      {
-        model.distortion.coeffs[0] = 0.1;
-        EXPECT_EQ(validateCameraModel64(model), StatusCode::INVALID_MODEL);
-        EXPECT_FALSE(autodiffJacobian(model, Eigen::Vector3d(0.1, 0.2, 1)).ok);
-      }
+      const auto analytic = rayToPixelWithJacobian64(model, ray);
+      ASSERT_TRUE(analytic.ok());
+      const auto ad = autodiffJacobian(model, ray);
+      ASSERT_TRUE(ad.ok) << "law=" << camxiom::toString(law);
+      EXPECT_NEAR(ad.u, analytic.pixel.u, 1e-6);
+      EXPECT_NEAR(ad.v, analytic.pixel.v, 1e-6);
+      EXPECT_LT((ad.J - analytic.J).cwiseAbs().maxCoeff(), 1e-5);
+      double u, v;
+      ASSERT_TRUE(
+        camxiom::projection_template::projectGeneric(model, ray.x(), ray.y(), ray.z(), u, v)
+      );
+      EXPECT_NEAR(u, analytic.pixel.u, 1e-6);
+      EXPECT_NEAR(v, analytic.pixel.v, 1e-6);
     }
+    // NONE means no coefficients, even zero ones, on every path.
+    model.distortion.count = 4U;
+    EXPECT_EQ(validateCameraModel64(model), StatusCode::INVALID_MODEL);
+    EXPECT_FALSE(autodiffJacobian(model, Eigen::Vector3d(0.1, 0.2, 1)).ok);
+    double u, v;
+    EXPECT_FALSE(camxiom::projection_template::projectGeneric(model, 0.1, 0.2, 1.0, u, v));
+    // A KB correction belongs to the equidistant law only.
+    if (law != ProjectionModelType::EQUIDISTANT)
+    {
+      model.distortion.type = DistortionModelType::KB4;
+      EXPECT_EQ(validateCameraModel64(model), StatusCode::INVALID_MODEL);
+      EXPECT_FALSE(autodiffJacobian(model, Eigen::Vector3d(0.1, 0.2, 1)).ok);
+      EXPECT_FALSE(camxiom::projection_template::projectGeneric(model, 0.1, 0.2, 1.0, u, v));
+    }
+  }
 }
 
 TEST(AutoDiffJacobian, AcceptsTheLegacyFiveCoefficientRadtan4Layout)
@@ -727,7 +723,7 @@ TEST(AutoDiffJacobian, ModelDispatchPreservesRayDerivativesAtTheFisheyeCap)
   for (auto named : representativeModels())
   {
     auto &m = named.model;
-    if (m.projection.type != ProjectionModelType::FISHEYE_THETA) continue;
+    if (!isFisheyeProjection(m.projection.type)) continue;
     for (double x : {0.0, 1e-16, .25, 1.0})
     {
       const Eigen::Vector3d ray(x, 0, 1);

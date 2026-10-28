@@ -3,16 +3,20 @@
 
 **Unified C++17 camera-geometry library** — one API across the whole
 spectrum of camera models, from narrow-FOV pinhole to 180°+ fisheye and
-catadioptric: **pinhole, fisheye (Kannala–Brandt), omnidirectional (Mei),
-double sphere, and EUCM**, each with its full distortion catalogue.
+catadioptric: **pinhole, the fisheye laws (equidistant with Kannala–Brandt,
+equisolid, stereographic, orthographic), omnidirectional (Mei), double
+sphere, and EUCM**, each with the lens corrections it takes, plus
+the **latitude-longitude projections** (equirectangular and cylindrical) as
+output and remap targets.
 On top of the same model set: a Ceres-based intrinsic calibrator and
 ROS 2 / OpenCV interfaces.
 
 - **Every camera model, one API.** The primary API is two functions —
   `rayToPixel()` / `pixelToRay()`. Projection, undistortion, rectification,
-  Jacobians, PnP, and calibration all behave identically across the five
-  projection families; supporting a new camera in your application never
-  means a new code path.
+  Jacobians, PnP, and calibration all behave identically across the camera
+  models (the latitude-longitude projections take part in everything but
+  calibration and pose estimation); supporting a new camera in your application
+  never means a new code path.
 - **A calibrator with the same breadth.** The PnP / intrinsics solver is
   model-agnostic (single templated cost, analytical Jacobians, a Ceres-free
   Gauss–Newton fast path for pose-only solves), with per-parameter `FIX_*`
@@ -20,53 +24,61 @@ ROS 2 / OpenCV interfaces.
   covariance + observability diagnostics, and cross-family model conversion.
 - **Fits the ecosystems you already use.** `sensor_msgs/CameraInfo`
   adapters, `cv::Mat` drop-ins mirroring `cv::` / `cv::fisheye::` /
-  `cv::omnidir::` signatures, OpenCV-Calib3D / Kalibr / Basalt parameter
-  profiles, and ROS-layout calibration YAML.
+  `cv::omnidir::` signatures, and camxiom's own camera description for
+  every model.
 - **Light by default.** The runtime core depends only on Eigen; Ceres,
   OpenCV, ROS 2, and OpenMP are optional layers detected at configure time.
   Ament and pure-CMake packaging from the same tree.
 
-License: [Apache-2.0](LICENSE) · Version: 0.2.0 ·
+License: [Apache-2.0](LICENSE) · Version: 0.3.0 ·
 Docs: [`docs/`](docs/index.md) (MkDocs / GitHub Pages ready)
 
 ---
 
 ## Supported camera models
 
-| Projection | Distortion | Reference |
+The projection type names the law and the distortion type names the lens
+correction on top of it; each law takes the corrections listed here.
+
+| Projection (law) | Distortion (correction) | Reference |
 |---|---|---|
 | Pinhole | none / radtan4 / radtan5 (plumb_bob) / rational8 / thin-prism12 / tilted14 (Scheimpflug) | OpenCV-compatible coefficients |
-| Fisheye (θ-based) | OpenCV-fisheye4, KB4, KB8, ideal equidistant / equisolid / stereographic / orthographic | Kannala & Brandt 2006 |
+| Equidistant fisheye | none / KB4 (also OpenCV's fisheye model) / KB8 | Kannala & Brandt 2006 |
+| Equisolid / stereographic / orthographic fisheye | none | — |
 | Omnidirectional | ξ + optional radtan | Mei & Rives 2007 |
 | Double sphere | ξ, α + optional radtan | Usenko et al. 2018 |
 | EUCM | α, β + optional radtan | Khomutenko et al. 2015 |
+| Equirectangular / cylindrical | none | — |
 
 All of them share the same `CameraModel` aggregate, the same generic API,
-the same batch / Jacobian / LUT / remap machinery, and the same calibrator.
+and the same batch / Jacobian / LUT / remap machinery. The calibrator
+covers every model except the latitude-longitude projections, which are output
+and remap targets (e.g. unwrapping a fisheye into a 360 × 180 equirectangular
+image), not lenses to calibrate.
 
 ## Features
 
 | | |
 |---|---|
-| **Unified projection** | Generic `rayToPixel` / `pixelToRay` over all five models; float32 (real-time) and float64 (calibration) variants; `ValidatedCameraModel` for validate-once hot loops; Ceres-`Jet`-ready projection templates for AutoDiff cost functors |
+| **Unified projection** | Generic `rayToPixel` / `pixelToRay` over every model; float32 (real-time) and float64 (calibration) variants; `ValidatedCameraModel` for validate-once hot loops; Ceres-`Jet`-ready projection templates for AutoDiff cost functors |
 | **Calibration** *(optional, Ceres)* | Default seeds, linear + per-model init estimators, model-agnostic `PnpSolver` with per-parameter `FIX_*` flags for staged optimization, single-pass `calibrate()` with parameter-covariance and **observability diagnostics** (catches "low RMS but unobservable focal") |
 | **Model conversion** *(optional, Ceres)* | `convertCameraModel` refits across model families (e.g. KB4 → pinhole+radtan5) with honest fit-quality reporting |
 | **Bulk APIs** | Batch projection / Jacobians with SIMD (AVX2 · SSE2 · NEON) + OpenMP; `InverseLut` for O(1) approximate unprojection |
 | **Jacobians** | Analytical 2×3 point Jacobians and full parameter Jacobians (intrinsics / distortion / ξ·α·β) for optimization |
-| **Remap & rectify** | Undistort/rectify for every model: virtual output-camera generation, OpenCV-compatible `alpha` semantics (pinhole `alpha` and fisheye `balance` unified), map builders, CPU sampling kernel — no OpenCV required |
-| **Interchange** | ROS-free `camxiom::CameraInfo` POD; `makeCameraModel` parses ROS / OpenCV distortion-model strings; per-model import/export profiles (OpenCV-Calib3D, Kalibr, Basalt); `camera_calibration_parsers`-layout YAML writer |
+| **Remap & rectify** | Undistort/rectify for every model into any projection (pinhole, fisheye laws, sphere models, equirectangular / cylindrical): the output camera is a template scaled by one `alpha` (0 = no invalid pixels, 1 = whole source; pinhole `alpha` and fisheye `balance` in one), map builders, CPU sampling kernel — no OpenCV required |
+| **Interchange** | ROS-free `camxiom::CameraInfo` POD, written only when ROS can hold the lens; camxiom's own `CamxiomCameraInfo`, which holds every model; both convert to and from a model (saving them as YAML: [example](docs/guides/camera-yaml.md)) |
 | **Interop** *(optional)* | `sensor_msgs::msg::CameraInfo` adapters (binning/ROI folded correctly); `cv::Mat` drop-ins, `RemapCache`, unified `solvePnP` working with all models |
 
 ## Quick start
 
 ```cpp
-#include <camxiom/core.hpp>     // Eigen-only runtime geometry, one include
+#include <camxiom/core.hpp>     // the runtime geometry, one include
 
-// Build a model from any ROS/OpenCV-style camera description (no ROS needed):
+// Build a model from a ROS CameraInfo description (no ROS needed):
 camxiom::CameraInfo info;
 info.width = 1280;  info.height = 960;
 info.k = {800.0, 0.0, 639.5,  0.0, 800.0, 479.5,  0.0, 0.0, 1.0};
-info.distortion_model = "plumb_bob";   // or "equidistant", "double_sphere", "eucm", ...
+info.distortion_model = "plumb_bob";   // or "rational_polynomial", "equidistant"
 info.d = {-0.28, 0.07, 0.0001, -0.0002, 0.0};
 camxiom::CameraModel model = camxiom::makeCameraModel(info);
 
@@ -107,7 +119,7 @@ target_link_libraries(my_app PRIVATE camxiom::camxiom)   # or camxiom::core / ca
 
 | Dependency | Min | Role |
 |---|---|---|
-| Eigen3 | 3.3 | **required** — sole dependency of `camxiom::core` |
+| Eigen3 | 3.3 | **required** — `camxiom::core` |
 | Ceres | 2.0 | optional — enables `camxiom::calib` (`CAMXIOM_WITH_CERES`, auto-detected; Ubuntu 22.04 / JetPack apt package works) |
 | OpenCV / sensor_msgs / OpenMP | any | optional — interop layers & parallelism, auto-detected |
 
@@ -153,33 +165,8 @@ and a numerically comparable `CAMXIOM_VERSION_CODE`
 (`CAMXIOM_MAKE_VERSION(major, minor, patch)`), kept in lock-step with
 `project(VERSION)` and `package.xml` by a configure-time check.
 
-Pre-1.0 caveat: minor releases may contain breaking changes. Notable ones
-made while still pre-0.1.0, for anyone migrating from older snapshots:
-per-model projection namespaces (`camxiom::pinhole::rayToPixel` etc.) were
-removed from the public headers — use the generic `rayToPixel` /
-`pixelToRay`; result types are `[[nodiscard]]`; `toString(DistortionModelType)`
-now round-trips through `parseDistortionModelType` (some spellings changed);
-and the never-returned `StatusCode` enumerators (`NOT_IMPLEMENTED`,
-`JACOBIAN_SINGULAR`) were dropped.
-
-Breaking changes in 0.2.0 (details in the release notes):
-
-- Public struct layouts changed (`ValidatedCameraModel`,
-  `CalibrationOptions`, `CalibrationResult`, `PnpSolverOptions`,
-  `PnpResult`), so rebuild everything that uses camxiom.
-- `PnpSolver::solve()` fails, and `calibrate()` returns `NON_CONVERGED`,
-  when any view has fewer than three projectable points or fewer than half
-  of its points projectable.
-- `computeReprojErrors()` and per-view RMS values are infinity, not 0, when
-  nothing can be evaluated.
-- The five-argument `init::estimatePinholeOpenCv()` returns
-  `DEGENERATE_CONFIG` for an ill-conditioned focal solve.
-- Default omnidirectional, double sphere and EUCM seeds use
-  `theta_max = pi`, and PnP write-back keeps a narrower `theta_max` set by
-  the caller.
-- The per-model template kernels reject non-finite results and singular
-  denominators, and `projectGeneric` is templated on the model's scalar
-  type.
+Before 1.0, a minor release may contain breaking changes; each release's
+notes on GitHub list them.
 
 ## Thread safety
 

@@ -60,27 +60,10 @@ const char *toString(const DistortionModelType model_type)
       return "thin_prism12";
     case DistortionModelType::TILTED14:
       return "tilted14";
-    case DistortionModelType::OPENCV_FISHEYE4:
-      return "opencv_fisheye4";
     case DistortionModelType::KB4:
       return "kb4";
     case DistortionModelType::KB8:
       return "kb8";
-    case DistortionModelType::EQUIDISTANT:
-      // Deliberately NOT "equidistant": the ROS distortion_model string
-      // "equidistant" denotes the 4-coefficient OpenCV fisheye model, and
-      // parseDistortionModelType keeps that compatibility mapping. The
-      // coefficient-free ideal mapping gets a distinct canonical name so
-      // every toString output parses back to the same enum.
-      return "ideal_equidistant";
-    case DistortionModelType::EQUISOLID:
-      return "equisolid";
-    case DistortionModelType::STEREOGRAPHIC:
-      return "stereographic";
-    case DistortionModelType::ORTHOGRAPHIC:
-      return "orthographic";
-    case DistortionModelType::OMNIDIRECTIONAL:
-      return "omnidirectional";
     case DistortionModelType::UNKNOWN:
       break;
   }
@@ -93,14 +76,24 @@ const char *toString(const ProjectionModelType model_type)
   {
     case ProjectionModelType::PINHOLE:
       return "pinhole";
-    case ProjectionModelType::FISHEYE_THETA:
-      return "fisheye_theta";
+    case ProjectionModelType::EQUIDISTANT:
+      return "equidistant";
+    case ProjectionModelType::EQUISOLID:
+      return "equisolid";
+    case ProjectionModelType::STEREOGRAPHIC:
+      return "stereographic";
+    case ProjectionModelType::ORTHOGRAPHIC:
+      return "orthographic";
     case ProjectionModelType::OMNIDIRECTIONAL:
       return "omnidirectional";
     case ProjectionModelType::DOUBLE_SPHERE:
       return "double_sphere";
     case ProjectionModelType::EUCM:
       return "eucm";
+    case ProjectionModelType::EQUIRECTANGULAR:
+      return "equirectangular";
+    case ProjectionModelType::CYLINDRICAL:
+      return "cylindrical";
     case ProjectionModelType::UNKNOWN:
       break;
   }

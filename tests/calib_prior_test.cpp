@@ -82,7 +82,6 @@ CameraModel makeRadtan5Pinhole(
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = static_cast<float>(constants::kHalfPi);
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.count = 5U;
   m.distortion.coeffs.fill(0.0F);
   m.distortion.coeffs[0] = k1;

@@ -107,7 +107,6 @@ CameraModel64 buildGroundTruthMEIModel()
   m.projection.theta_max = 1.5707963267948966;
 
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.coeffs.fill(0.0);
   m.distortion.count = 0U;
   m.distortion.is_rational = false;
@@ -220,7 +219,6 @@ double computeReprojectionRMS(const MEIInitResult &res, const std::vector<Planar
   rec_model.projection.theta_max = 1.5707963267948966;
 
   rec_model.distortion.type = DistortionModelType::NONE;
-  rec_model.distortion.space = DistortionSpace::NONE;
   rec_model.distortion.coeffs.fill(0.0);
   rec_model.distortion.count = 0U;
   rec_model.distortion.is_rational = false;

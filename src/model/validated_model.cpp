@@ -38,7 +38,10 @@ ForwardFn resolveForwardFn(const ProjectionModelType type)
   {
     case ProjectionModelType::PINHOLE:
       return &pinhole::rayToPixelPrepared;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return &fisheye::rayToPixelPrepared;
     case ProjectionModelType::OMNIDIRECTIONAL:
       return &omnidirectional::rayToPixelPrepared;
@@ -46,6 +49,9 @@ ForwardFn resolveForwardFn(const ProjectionModelType type)
       return &double_sphere::rayToPixelPrepared;
     case ProjectionModelType::EUCM:
       return &eucm::rayToPixelPrepared;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return &latlong::rayToPixelPrepared;
     case ProjectionModelType::UNKNOWN:
       break;
   }
@@ -58,7 +64,10 @@ InverseFn resolveInverseFn(const ProjectionModelType type)
   {
     case ProjectionModelType::PINHOLE:
       return &pinhole::pixelToRayPrepared;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return &fisheye::pixelToRayPrepared;
     case ProjectionModelType::OMNIDIRECTIONAL:
       return &omnidirectional::pixelToRayPrepared;
@@ -66,6 +75,9 @@ InverseFn resolveInverseFn(const ProjectionModelType type)
       return &double_sphere::pixelToRayPrepared;
     case ProjectionModelType::EUCM:
       return &eucm::pixelToRayPrepared;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return &latlong::pixelToRayPrepared;
     case ProjectionModelType::UNKNOWN:
       break;
   }

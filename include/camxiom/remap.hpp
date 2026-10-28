@@ -60,7 +60,8 @@ RemapResult buildRemapMap(
 /// Same-projection undistort: removes distortion but keeps the projection model.
 ///
 /// For non-pinhole models (fisheye, omnidirectional, DS, EUCM), this does NOT
-/// produce a rectilinear (perspective) image. Use buildRectifyRemapMap() for that.
+/// produce a rectilinear (perspective) image. Use buildRectifyRemapMap() with a
+/// pinhole output template for that.
 RemapResult buildUndistortRemapMap(
   const CameraModel &src_model, int width, int height, float *map_x, float *map_y,
   const SolverOptions &solver_options = SolverOptions{}
@@ -69,14 +70,6 @@ RemapResult buildUndistortRemapMap(
 // ===========================================================================
 // Image-aware remap
 // ===========================================================================
-
-struct ImageSize
-{
-  int width{0};
-  int height{0};
-
-  constexpr bool isValid() const { return width > 0 && height > 0; }
-};
 
 enum class InvalidPixelPolicy : std::uint8_t { WRITE_NEGATIVE_ONE = 0U, WRITE_RAW_COORDINATE };
 
@@ -147,13 +140,24 @@ struct [[nodiscard]] FovResult
 
 /// Field of view of `model` over an image of `image_size`, in degrees.
 ///
-/// Works for ANY camera model (pinhole, fisheye, omnidirectional, double
-/// sphere, EUCM): each angle is measured between the unprojected rays of two
-/// boundary pixels (pixelToRay), the same computation the rectify APIs use to
-/// fill their *_fov_deg fields.
+/// Works for ANY camera model. For pinhole, the fisheye laws,
+/// omnidirectional, double sphere and EUCM, each angle is measured between
+/// the unprojected rays of two boundary pixels (pixelToRay), the same
+/// computation the rectify APIs use to fill their *_fov_deg fields.
 ///   * horizontal: (0, cy) .. (width-1, cy) along the principal-point row
 ///   * vertical:   (cx, 0) .. (cx, height-1) along the principal-point column
 ///   * diagonal:   (0, 0) .. (width-1, height-1)
+///
+/// For the lat-long projections (EQUIRECTANGULAR, CYLINDRICAL), whose field
+/// can exceed 180 degrees, the values are angular spans of valid pixels,
+/// edge to edge, clipped to the sphere:
+///   * horizontal: the longitude span of the principal-point row, from the
+///     left edge of column 0 (u = -0.5) to the right edge of the last column
+///   * vertical:   the latitude span of the principal-point column (u = cx),
+///     top edge to bottom edge. With skew that column's longitude changes
+///     from row to row; rows where it passes the seam are not counted.
+/// A full equirectangular image reports 360 x 180. A lat-long model has no
+/// diagonal angle; diagonal_fov_deg is 0.
 ///
 /// Returns INVALID_INPUT for an invalid size and the validation status for an
 /// invalid model. When a boundary pixel cannot be unprojected (e.g. outside
@@ -165,35 +169,87 @@ FovResult computeFov(
 );
 
 // ===========================================================================
-// Rectification: virtual output camera generation + remap
+// Rectification: fit an output camera to the source + remap
 // ===========================================================================
 
-enum class RectifiedProjectionType : std::uint8_t {
-  PINHOLE = 0U,
-  CYLINDRICAL,
-  STEREOGRAPHIC,
-  LONGITUDE_LATITUDE
-};
-
-enum class RectifyFitPolicy : std::uint8_t {
-  MAX_INSCRIBED_VALID = 0U,
-  ALLOW_INVALID_BORDER,
-  // ALL_SOURCE_CONTAINED: alpha=1-style widest-FOV fit.
-  // Finds the smallest output focal such that every source pixel's ray projects
-  // into the output bounds; rays at angles >= (pi/2 - clamp_margin) are skipped
-  // because a rectilinear pinhole target cannot represent them stably.
-  ALL_SOURCE_CONTAINED
-};
-
+/// How to build the output camera of a rectification.
+///
+/// The output camera is `output_template` scaled to fit the source: the
+/// template's projection (type, xi / alpha / beta, theta_max) and pixel shape
+/// (the ratios fx : fy : skew) are kept, one common scale s multiplies fx, fy
+/// and skew, and the principal point is put at the image centre
+/// ((W - 1) / 2, (H - 1) / 2). The template's cx and cy are not used, and its
+/// distortion must be NONE. Any projection type works, the latitude-longitude
+/// ones included; a fisheye-law template keeps its theta_max, which bounds the
+/// field it can show (the ProjectionModel default is pi/2).
+///
+/// `alpha` chooses s:
+///   * 0: the widest view in which every output pixel shows source content
+///     (no invalid border): every ray the output shows between its outermost
+///     pixel centres is a valid source direction (below) and lands at least
+///     `source_margin_px` inside the source image edge. For an
+///     equirectangular source that wraps all the way around, the view also
+///     stays off the source's seam (the image edge where longitude wraps);
+///   * 1: the narrowest view in which every valid source ray that lands
+///     between the source's outermost pixel centres, and that the output can
+///     represent, lands inside the output image, with an invalid border
+///     where the source does not reach;
+///   * in between: s interpolates linearly between the two.
+/// Both are decided over the continuous sets of rays, not on samples: the
+/// fit bounds the projections over patches of directions (interval
+/// arithmetic) and refines them until its bound is within 2e-4 of a value an
+/// actual ray attains, then keeps 1e-4 more of headroom. Where it cannot
+/// settle a patch (a root of the fold conditions it cannot bracket, its work
+/// budget), it keeps the bound it has: alpha = 0 narrower, alpha = 1 wider.
+///
+/// Scope: this holds for the model formulas evaluated in double precision,
+/// up to floating-point rounding. The 1e-4 of headroom covers that rounding,
+/// and the float evaluation of the public projections, for ordinary models;
+/// models near singular parameters (e.g. a Mei model with xi close to -1,
+/// where the float and double evaluations of its projection differ greatly)
+/// are outside it. Images need at least two pixels along each axis.
+///
+/// A source ray is valid when it lies before the source distortion's first
+/// fold: along its direction out from the source axis, the forward
+/// projection must still succeed and keep the orientation it has near the
+/// axis. Past a fold (e.g. a strong negative radtan k1 in the image corners)
+/// a pixel unprojects onto the folded branch, to a ray the lens does not see
+/// there. The fold is found from the distortion polynomials (certified
+/// Bernstein bounds), so even a fold that turns back for a fraction of a
+/// degree counts. A root where a condition only touches zero (a double
+/// root) cannot be told from a crossing one, so the rays past it count as
+/// possibly invalid: alpha = 1 keeps them and alpha = 0 stops before them.
+///
+/// The horizon margin, 0.05 rad (about 3 degrees) from where the output
+/// projection's coordinates grow without bound (the pinhole 90-degree
+/// horizon, the stereographic antipode, the cylinder's poles, the end of the
+/// sphere models' domain) or become singular (the antipode of the
+/// equidistant and equisolid laws: a finite circle, but every direction
+/// lands on it, so a pixel there has no single ray):
+///   * alpha = 1 leaves the source rays inside that margin out (near an
+///     unbounded edge they would push s to zero); those pixels may fall
+///     outside the output.
+///   * alpha = 0 ignores it as long as the source limits the view. Only when
+///     the source covers the output all the way to that edge (e.g. a fisheye
+///     whose whole image circle lies inside the frame, rectified to pinhole)
+///     is there no widest view; the view then stops at the margin.
 struct RectifiedOutputModelOptions
 {
-  RectifiedProjectionType projection_type{RectifiedProjectionType::PINHOLE};
+  /// Projection and pixel shape of the output. Default: a square-pixel
+  /// pinhole.
+  CameraModel output_template{
+    IntrinsicsModel{}, ProjectionModel{ProjectionModelType::PINHOLE}, DistortionModel{}};
+  /// Output image size; an invalid (default) size means the source size.
   ImageSize output_size{};
-  float focal_scale{1.0f};
-  RectifyFitPolicy fit_policy{RectifyFitPolicy::MAX_INSCRIBED_VALID};
+  /// 0 = no invalid output pixels, 1 = the whole source kept. In [0, 1].
+  float alpha{0.0f};
   Eigen::Matrix3f src_from_output_rotation{Eigen::Matrix3f::Identity()};
-  int boundary_sample_count{2048};
+  /// Margin in source pixels that the alpha = 0 view keeps clear of the
+  /// source image edge. alpha = 1 keeps the source out to its outermost
+  /// pixel centres regardless.
   float source_margin_px{1.0f};
+  /// Solver options for the pixelToRay calls of the fit and the map build.
+  SolverOptions solver_options{};
 };
 
 struct [[nodiscard]] RectifiedOutputModelResult
@@ -210,23 +266,20 @@ struct [[nodiscard]] RectifiedOutputModelResult
   constexpr explicit operator bool() const { return ok(); }
 };
 
-/// Generate a virtual rectified output camera model from a source camera model.
+/// Fit the output camera of a rectification (see RectifiedOutputModelOptions).
 ///
-/// Currently only supports RectifiedProjectionType::PINHOLE.
-/// For non-pinhole rectification types (CYLINDRICAL, STEREOGRAPHIC, LONGITUDE_LATITUDE),
-/// use buildRectifyRemapMap() directly — the output_model field of RectifyRemapResult
-/// will be default-constructed (UNKNOWN) because these projections are not representable
-/// as a CameraModel.
+/// On OK, `output_model` is a valid CameraModel of the template's projection
+/// and the *_fov_deg fields are computeFov(output_model, output size). The
+/// estimated_* counts come from a coarse grid over the output image.
 ///
-/// For PINHOLE, the generated model has:
-///   - projection.type = PINHOLE
-///   - distortion.type = NONE
-///   - skew = 0, fx/fy fitted independently to the selected policy
-///   - cx = (width - 1) / 2, cy = (height - 1) / 2
-///
-/// @param src_model  Source camera model.
-/// @param src_size   Source image dimensions.
-/// @param options    Rectification options (output size, focal_scale, fit policy, etc.).
+/// INVALID_MODEL for an invalid source model; INVALID_INPUT for an invalid
+/// source size or a source or output image less than two pixels wide or
+/// high, alpha outside [0, 1], or a template that is not a valid
+/// model with distortion NONE; DOMAIN_ERROR when the fit has no solution:
+/// for alpha < 1, no output view shows the source everywhere (e.g. the
+/// output's centre ray misses the source, or the output is centred on the
+/// seam of an equirectangular source that wraps around); for alpha > 0, no
+/// source ray is representable.
 RectifiedOutputModelResult makeRectifiedOutputModel(
   const CameraModel &src_model, ImageSize src_size,
   const RectifiedOutputModelOptions &options = RectifiedOutputModelOptions{}
@@ -245,82 +298,19 @@ struct [[nodiscard]] RectifyRemapResult
   constexpr explicit operator bool() const { return ok(); }
 };
 
-/// Convenience: generate rectified output model + build remap map in one call.
+/// Fit the output camera (makeRectifiedOutputModel) and build its remap map
+/// (buildImageRemapMap with options.src_from_output_rotation, source-bounds
+/// checking on). The map is exactly the one buildImageRemapMap builds from
+/// the returned output_model, so the model can be stored and the map
+/// rebuilt later.
 ///
-/// Internally calls makeRectifiedOutputModel() then buildImageRemapMap().
-///
-/// @param src_model  Source camera model.
-/// @param src_size   Source image dimensions.
-/// @param options    Rectification options.
-/// @param map_x      Output buffer for x-coordinates.
-/// @param map_y      Output buffer for y-coordinates.
+/// @param map_x  Output x-coordinates, size = output width * height.
+/// @param map_y  Output y-coordinates, same size.
 RectifyRemapResult buildRectifyRemapMap(
   const CameraModel &src_model, ImageSize src_size, const RectifiedOutputModelOptions &options,
   float *map_x, float *map_y
 );
 
-/// Options for buildRectifyMap (alpha API).
-struct BuildRectifyMapOptions
-{
-  /// Rotation from output frame to source frame.  Default identity.
-  /// Use a non-identity rotation for stereo rectify pre-processing.
-  Eigen::Matrix3f src_from_output_rotation{Eigen::Matrix3f::Identity()};
-  /// Number of boundary samples for inscribed binary search and
-  /// circumscribed direct computation.  Default 2048 matches the
-  /// existing RectifiedOutputModelOptions.
-  int boundary_sample_count{2048};
-  /// Pixel margin applied to source boundary (matches existing
-  /// RectifiedOutputModelOptions::source_margin_px).
-  float source_margin_px{1.0f};
-  /// Solver options forwarded to pixelToRay calls during remap-map build.
-  SolverOptions solver_options{};
-};
-
-/// Result of buildRectifyMap.
-struct BuildRectifyMapResult
-{
-  /// Status + per-pixel coverage counts from the underlying buildImageRemapMap.
-  ImageRemapResult remap_result{};
-  /// Generated pinhole output model (K_new).  Valid only when
-  /// remap_result.status == OK.
-  CameraModel output_model{};
-  /// Echo of the input alpha after clamping to [0, 1].
-  float alpha_used{0.0f};
-  /// Horizontal field of view of output_model, degrees.
-  float horizontal_fov_deg{0.0f};
-  /// Vertical field of view of output_model, degrees.
-  float vertical_fov_deg{0.0f};
-  /// Diagonal field of view of output_model, degrees.
-  float diagonal_fov_deg{0.0f};
-
-  constexpr bool ok() const { return remap_result.ok(); }
-  constexpr explicit operator bool() const { return ok(); }
-};
-
-/// Alpha-blended rectification map builder.
-///
-/// alpha = 0: rectified image contains only valid pixels (inscribed).
-/// alpha = 1: rectified image keeps as much source FOV as the virtual pinhole
-///            target can represent, with black borders where needed;
-///            near-90-degree rays are skipped because a rectilinear pinhole
-///            target cannot represent them stably.
-/// Intermediate alpha: focal is linearly interpolated between the two extremes.
-///
-/// @param src_model  Source camera model (any of pinhole / fisheye / omni /
-///                   double sphere / EUCM).
-/// @param src_size   Source image dimensions.
-/// @param dst_size   Output image dimensions.
-/// @param alpha      Mixing parameter; clamped to [0, 1] if outside.
-/// @param map_x      Output x-coordinates buffer, size = dst_size.width * dst_size.height.
-/// @param map_y      Output y-coordinates buffer, same size.
-/// @param options    Optional tuning (rotation, sample count, margin, solver).
-BuildRectifyMapResult buildRectifyMap(
-  const CameraModel &src_model, ImageSize src_size, ImageSize dst_size, float alpha, float *map_x,
-  float *map_y, const BuildRectifyMapOptions &options = BuildRectifyMapOptions{}
-);
-
-const char *toString(RectifiedProjectionType projection_type);
-const char *toString(RectifyFitPolicy fit_policy);
 const char *toString(InvalidPixelPolicy pixel_policy);
 
 }  // namespace camxiom

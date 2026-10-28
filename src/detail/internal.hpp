@@ -15,6 +15,7 @@
 #ifndef CAMXIOM__DETAIL__INTERNAL_HPP
 #define CAMXIOM__DETAIL__INTERNAL_HPP
 
+#include "camxiom/internal/angle_law.hpp"
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/types.hpp"
 #include "distortion/plane_impl.hpp"
@@ -72,33 +73,6 @@ inline bool removeIntrinsics(
 // Distortion model consistency helpers (type-only, shared by float and double)
 // ---------------------------------------------------------------------------
 
-inline DistortionSpace expectedSpaceFromType(const DistortionModelType type)
-{
-  switch (type)
-  {
-    case DistortionModelType::NONE:
-      return DistortionSpace::NONE;
-    case DistortionModelType::RADTAN4:
-    case DistortionModelType::RADTAN5:
-    case DistortionModelType::RATIONAL8:
-    case DistortionModelType::THIN_PRISM12:
-    case DistortionModelType::TILTED14:
-      return DistortionSpace::PLANE;
-    case DistortionModelType::OPENCV_FISHEYE4:
-    case DistortionModelType::KB4:
-    case DistortionModelType::KB8:
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
-      return DistortionSpace::ANGLE;
-    case DistortionModelType::OMNIDIRECTIONAL:
-    case DistortionModelType::UNKNOWN:
-      break;
-  }
-  return DistortionSpace::NONE;
-}
-
 inline bool typeRequiresRational(const DistortionModelType type)
 {
   return type == DistortionModelType::RATIONAL8 || type == DistortionModelType::THIN_PRISM12 ||
@@ -107,13 +81,39 @@ inline bool typeRequiresRational(const DistortionModelType type)
 
 // The polynomial theta-distortion families: theta_d is a fitted odd polynomial
 // of theta, so its monotone range depends on the coefficients (unlike the
-// ideal trig mappings, whose monotone range is fixed per type). These are the
+// plain fisheye laws, whose monotone range is fixed per law). These are the
 // types whose theta_max cap must sit inside the polynomial's positive monotone
 // range for the inverse bracket to be usable.
 inline bool isPolynomialFisheyeDistortion(const DistortionModelType type)
 {
-  return type == DistortionModelType::OPENCV_FISHEYE4 || type == DistortionModelType::KB4 ||
-         type == DistortionModelType::KB8;
+  return type == DistortionModelType::KB4 || type == DistortionModelType::KB8;
+}
+
+// Which lens corrections a projection law takes: the plane corrections sit on
+// the pinhole law and on the sphere-based models, the KB angle corrections on
+// the equidistant law only, and the other fisheye laws and the lat-long
+// projections take none.
+inline bool isSupportedModelCombination(
+  const ProjectionModelType projection, const DistortionModelType distortion
+)
+{
+  if (isFisheyeProjection(projection))
+  {
+    return detail_impl::angleLawOf(projection, distortion) != detail_impl::AngleLaw::INVALID;
+  }
+  switch (projection)
+  {
+    case ProjectionModelType::PINHOLE:
+    case ProjectionModelType::OMNIDIRECTIONAL:
+    case ProjectionModelType::DOUBLE_SPHERE:
+    case ProjectionModelType::EUCM:
+      return distortionSpaceOf(distortion) != DistortionSpace::ANGLE;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return distortion == DistortionModelType::NONE;
+    default:
+      return false;
+  }
 }
 
 inline bool typeAllowsThinPrism(const DistortionModelType type)
@@ -142,17 +142,10 @@ inline std::uint8_t minimumCoefficientCountForType(const DistortionModelType typ
       return 12U;
     case DistortionModelType::TILTED14:
       return 14U;
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
       return 4U;
     case DistortionModelType::KB8:
       return 8U;
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
-      return 0U;
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       break;
   }
@@ -174,17 +167,10 @@ inline std::uint8_t maximumCoefficientCountForType(const DistortionModelType typ
       return 12U;
     case DistortionModelType::TILTED14:
       return 14U;
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
       return 4U;
     case DistortionModelType::KB8:
       return 8U;
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
-      return 14U;
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       break;
   }
@@ -202,10 +188,6 @@ inline std::size_t requiredFiniteCoefficientCount(const DistortionModelType type
   switch (type)
   {
     case DistortionModelType::NONE:
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
       return 0U;
     case DistortionModelType::RADTAN4:
     case DistortionModelType::RADTAN5:
@@ -216,12 +198,10 @@ inline std::size_t requiredFiniteCoefficientCount(const DistortionModelType type
       return 12U;
     case DistortionModelType::TILTED14:
       return 14U;
-    case DistortionModelType::OPENCV_FISHEYE4:
     case DistortionModelType::KB4:
       return 4U;
     case DistortionModelType::KB8:
       return 8U;
-    case DistortionModelType::OMNIDIRECTIONAL:
     case DistortionModelType::UNKNOWN:
       break;
   }
@@ -229,26 +209,21 @@ inline std::size_t requiredFiniteCoefficientCount(const DistortionModelType type
 }
 
 inline StatusCode validateDistortionConsistency(
-  const DistortionModelType type, const DistortionSpace space, const std::uint8_t count,
-  const bool is_rational, const bool has_thin_prism, const bool has_tilt
+  const DistortionModelType type, const std::uint8_t count, const bool is_rational,
+  const bool has_thin_prism, const bool has_tilt
 )
 {
-  if (type == DistortionModelType::UNKNOWN || type == DistortionModelType::OMNIDIRECTIONAL)
+  if (type == DistortionModelType::UNKNOWN)
   {
     return StatusCode::INVALID_MODEL;
   }
   if (type == DistortionModelType::NONE)
   {
-    if (space != DistortionSpace::NONE || count != 0U || is_rational || has_thin_prism || has_tilt)
+    if (count != 0U || is_rational || has_thin_prism || has_tilt)
     {
       return StatusCode::INVALID_MODEL;
     }
     return StatusCode::OK;
-  }
-  const DistortionSpace expected_space = expectedSpaceFromType(type);
-  if (expected_space != DistortionSpace::NONE && space != expected_space)
-  {
-    return StatusCode::INVALID_MODEL;
   }
   if (count < minimumCoefficientCountForType(type))
   {
@@ -334,9 +309,13 @@ StatusCode undistortPlaneModelNewton(
 // Angle distortion (forward / inverse)
 // ---------------------------------------------------------------------------
 
-StatusCode distortTheta(const DistortionModel &model, float theta, float &theta_d);
+StatusCode distortTheta(
+  detail_impl::AngleLaw law, const DistortionModel &model, float theta, float &theta_d
+);
 
-StatusCode distortThetaDerivative(const DistortionModel &model, float theta, float &derivative_out);
+StatusCode distortThetaDerivative(
+  detail_impl::AngleLaw law, const DistortionModel &model, float theta, float &derivative_out
+);
 
 StatusCode undistortThetaHybrid(
   const DistortionModel &model, const ProjectionModel &projection, float radius_d,

@@ -66,7 +66,6 @@ CameraModel makePinholeRadtan5()
   m.intrinsics.cy = 241.0f;
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::RADTAN5;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.coeffs[0] = -0.28f;
   m.distortion.coeffs[1] = 0.11f;
   m.distortion.coeffs[2] = 0.0006f;
@@ -83,10 +82,9 @@ CameraModel makeFisheyeEquidistant()
   m.intrinsics.fy = 280.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi) - 1e-4f;
-  m.distortion.type = DistortionModelType::EQUIDISTANT;
-  m.distortion.space = DistortionSpace::ANGLE;
+  m.distortion.type = DistortionModelType::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -98,10 +96,9 @@ CameraModel makeFisheyeKb4()
   m.intrinsics.fy = 285.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = 3.1415926f - 1e-3f;
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.coeffs[0] = -0.012f;
   m.distortion.coeffs[1] = 0.004f;
   m.distortion.coeffs[2] = -0.0007f;
@@ -121,7 +118,6 @@ CameraModel makeOmnidirectional()
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi);
   m.projection.xi = 0.6f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -138,7 +134,6 @@ CameraModel makeDoubleSphere()
   m.projection.xi = 0.5f;
   m.projection.alpha = 0.5f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -155,33 +150,31 @@ CameraModel makeEucm()
   m.projection.alpha = 0.6f;
   m.projection.beta = 1.1f;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
 
 // Cached tilt matrices (mirrors src/model/internal.hpp computeTiltMatrices) so
 // the TILTED14 model exercises the tilt branch of the distortion Jacobian.
-void computeTiltMatrices(
-  float tau_x, float tau_y, std::array<float, 9> &tilt, std::array<float, 9> &inv_tilt
-)
+template <typename T>
+void computeTiltMatrices(T tau_x, T tau_y, std::array<T, 9> &tilt, std::array<T, 9> &inv_tilt)
 {
-  const float c_tx = std::cos(tau_x);
-  const float s_tx = std::sin(tau_x);
-  const float c_ty = std::cos(tau_y);
-  const float s_ty = std::sin(tau_y);
+  const T c_tx = std::cos(tau_x);
+  const T s_tx = std::sin(tau_x);
+  const T c_ty = std::cos(tau_y);
+  const T s_ty = std::sin(tau_y);
 
-  const std::array<float, 9> rot_xy{c_ty, s_ty * s_tx, -s_ty * c_tx, 0.0f,       c_tx,
-                                    s_tx, s_ty,        -c_ty * s_tx, c_ty * c_tx};
+  const std::array<T, 9> rot_xy{c_ty, s_ty * s_tx, -s_ty * c_tx, T(0),       c_tx,
+                                s_tx, s_ty,        -c_ty * s_tx, c_ty * c_tx};
 
-  const float r22 = rot_xy[8];
-  const std::array<float, 9> proj_z{r22, 0.0f, -rot_xy[2], 0.0f, r22, -rot_xy[5], 0.0f, 0.0f, 1.0f};
+  const T r22 = rot_xy[8];
+  const std::array<T, 9> proj_z{r22, T(0), -rot_xy[2], T(0), r22, -rot_xy[5], T(0), T(0), T(1)};
 
   for (int row = 0; row < 3; ++row)
   {
     for (int col = 0; col < 3; ++col)
     {
-      float value = 0.0f;
+      T value = T(0);
       for (int mid = 0; mid < 3; ++mid)
       {
         value += proj_z[row * 3 + mid] * rot_xy[mid * 3 + col];
@@ -190,16 +183,16 @@ void computeTiltMatrices(
     }
   }
 
-  const float inv_r22 = 1.0f / r22;
-  const std::array<float, 9> inv_proj_z{
-    inv_r22, 0.0f, rot_xy[2] * inv_r22, 0.0f, inv_r22, rot_xy[5] * inv_r22, 0.0f, 0.0f, 1.0f};
-  const std::array<float, 9> rot_xy_t{rot_xy[0], rot_xy[3], rot_xy[6], rot_xy[1], rot_xy[4],
-                                      rot_xy[7], rot_xy[2], rot_xy[5], rot_xy[8]};
+  const T inv_r22 = T(1) / r22;
+  const std::array<T, 9> inv_proj_z{
+    inv_r22, T(0), rot_xy[2] * inv_r22, T(0), inv_r22, rot_xy[5] * inv_r22, T(0), T(0), T(1)};
+  const std::array<T, 9> rot_xy_t{rot_xy[0], rot_xy[3], rot_xy[6], rot_xy[1], rot_xy[4],
+                                  rot_xy[7], rot_xy[2], rot_xy[5], rot_xy[8]};
   for (int row = 0; row < 3; ++row)
   {
     for (int col = 0; col < 3; ++col)
     {
-      float value = 0.0f;
+      T value = T(0);
       for (int mid = 0; mid < 3; ++mid)
       {
         value += rot_xy_t[row * 3 + mid] * inv_proj_z[mid * 3 + col];
@@ -218,7 +211,6 @@ CameraModel makePinholeTilted14()
   m.intrinsics.cy = 241.0f;
   m.projection.type = ProjectionModelType::PINHOLE;
   m.distortion.type = DistortionModelType::TILTED14;
-  m.distortion.space = DistortionSpace::PLANE;
   m.distortion.coeffs[0] = -0.28f;
   m.distortion.coeffs[1] = 0.11f;
   m.distortion.coeffs[2] = 0.0006f;
@@ -241,6 +233,35 @@ CameraModel makePinholeTilted14()
     m.distortion.coeffs[12], m.distortion.coeffs[13], m.distortion.tilt_matrix,
     m.distortion.inv_tilt_matrix
   );
+  return m;
+}
+
+// Rational + thin-prism model whose prism coefficients are exactly zero, so the
+// library's has_thin_prism flag is off. A calibration seeded at zero sees this
+// state, and the prism derivatives must still be non-zero here.
+CameraModel makePinholeThinPrism12AtZero()
+{
+  CameraModel m = makePinholeTilted14();
+  m.distortion.type = DistortionModelType::THIN_PRISM12;
+  for (int i = 8; i < 14; ++i)
+  {
+    m.distortion.coeffs[static_cast<std::size_t>(i)] = 0.0f;
+  }
+  m.distortion.count = 12U;
+  m.distortion.has_thin_prism = false;
+  m.distortion.has_tilt = false;
+  m.distortion.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+  m.distortion.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+  return m;
+}
+
+// TILTED14 model with zero prism coefficients and zero tilt angles: no active
+// tilt, identity tilt matrix, yet the tilt-angle derivatives are non-zero.
+CameraModel makePinholeTilted14AtZero()
+{
+  CameraModel m = makePinholeThinPrism12AtZero();
+  m.distortion.type = DistortionModelType::TILTED14;
+  m.distortion.count = 14U;
   return m;
 }
 
@@ -627,6 +648,35 @@ bool xydFromProjection(const CameraModel64 &m, const Eigen::Vector3d &ray, doubl
   return true;
 }
 
+// A finite-difference step on a coefficient must refresh the state the
+// library derives from the coefficient values (prism / tilt flags and the tilt
+// matrix); otherwise a step on a tilt angle leaves the stale tilt matrix in
+// place and the reference derivative is wrongly zero.
+void refreshPlaneDerivedState(CameraModel64 &m)
+{
+  auto &d = m.distortion;
+  const auto any_non_zero = [&](int begin, int end) {
+    for (int i = begin; i < end && i < static_cast<int>(d.count); ++i)
+    {
+      if (d.coeffs[static_cast<std::size_t>(i)] != 0.0) return true;
+    }
+    return false;
+  };
+  d.has_thin_prism =
+    (d.type == DistortionModelType::THIN_PRISM12 || d.type == DistortionModelType::TILTED14) &&
+    any_non_zero(8, 12);
+  d.has_tilt = d.type == DistortionModelType::TILTED14 && any_non_zero(12, 14);
+  if (d.has_tilt)
+  {
+    computeTiltMatrices(d.coeffs[12], d.coeffs[13], d.tilt_matrix, d.inv_tilt_matrix);
+  }
+  else
+  {
+    d.tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+    d.inv_tilt_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+  }
+}
+
 double *projParamPtr(CameraModel64 &m, const int k)
 {
   if (k == 0)
@@ -701,14 +751,14 @@ void checkFullJacobian(const CameraModel &model_f)
       CameraModel64 mm = model;
       mp.distortion.coeffs[static_cast<std::size_t>(i)] += h;
       mm.distortion.coeffs[static_cast<std::size_t>(i)] -= h;
+      refreshPlaneDerivedState(mp);
+      refreshPlaneDerivedState(mm);
       double xp = 0.0;
       double yp = 0.0;
       double xn = 0.0;
       double yn = 0.0;
-      if (!xydFromProjection(mp, ray, xp, yp) || !xydFromProjection(mm, ray, xn, yn))
-      {
-        continue;
-      }
+      ASSERT_TRUE(xydFromProjection(mp, ray, xp, yp)) << "dist[" << i << "] +h";
+      ASSERT_TRUE(xydFromProjection(mm, ray, xn, yn)) << "dist[" << i << "] -h";
       const double fdx = (xp - xn) / (2.0 * h);
       const double fdy = (yp - yn) / (2.0 * h);
       EXPECT_NEAR(full.dxd_ddist[static_cast<std::size_t>(i)], fdx, 1e-3 * std::abs(fdx) + 1e-5)
@@ -744,13 +794,40 @@ void checkFullJacobian(const CameraModel &model_f)
 
 TEST(FullJacobianChar, PointJacobianXdYdAndParameterDerivatives)
 {
-  const std::vector<CameraModel> models{makePinholeRadtan5(), makePinholeTilted14(),
-                                        makeFisheyeKb4(),     makeOmnidirectional(),
-                                        makeDoubleSphere(),   makeEucm()};
+  const std::vector<CameraModel> models{
+    makePinholeRadtan5(),
+    makePinholeTilted14(),
+    makePinholeThinPrism12AtZero(),
+    makePinholeTilted14AtZero(),
+    makeFisheyeKb4(),
+    makeOmnidirectional(),
+    makeDoubleSphere(),
+    makeEucm()};
   for (const auto &m : models)
   {
     ASSERT_EQ(validateCameraModel(m), StatusCode::OK);
     checkFullJacobian(m);
+  }
+}
+
+// A zero-angle TILTED14 model has no active tilt, so the forward projection
+// ignores the cached tilt matrix. The full Jacobian must project the same
+// pixel even when a reused model still carries a stale matrix there.
+TEST(FullJacobianChar, ZeroTiltIgnoresAStaleTiltMatrix)
+{
+  CameraModel m = makePinholeTilted14AtZero();
+  m.distortion.tilt_matrix[0] = 2.0f;
+  m.distortion.inv_tilt_matrix[0] = 0.5f;
+  ASSERT_EQ(validateCameraModel(m), StatusCode::OK);
+  const CameraModel64 model = toCameraModel64(m);
+  for (const auto &ray : sampleRays())
+  {
+    const PixelResult64 ref = rayToPixel64(model, ray);
+    ASSERT_EQ(ref.status, StatusCode::OK);
+    const FullProjectionJacobian64 full = rayToPixelWithFullJacobian64(model, ray);
+    ASSERT_EQ(full.status, StatusCode::OK);
+    EXPECT_NEAR(full.pixel.u, ref.pixel.u, 1e-9);
+    EXPECT_NEAR(full.pixel.v, ref.pixel.v, 1e-9);
   }
 }
 

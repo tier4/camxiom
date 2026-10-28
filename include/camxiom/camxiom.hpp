@@ -34,7 +34,7 @@
 // Individual headers remain available; this is purely a convenience aggregate
 // and changes no existing behaviour.
 
-// --- Runtime geometry core (Eigen-only) -------------------------------------
+// --- Runtime geometry core --------------------------------------------------
 #include "camxiom/core.hpp"
 
 // --- Calibration layer (seed / init / PnP / intrinsics) ---------------------

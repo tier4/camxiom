@@ -43,8 +43,7 @@ using RayFn64 = RayResult64 (*)(const CameraModel64 &, const Pixel2d &, const So
 bool isPinholeUndistorted64(const CameraModel64 &model)
 {
   return model.projection.type == ProjectionModelType::PINHOLE &&
-         model.distortion.type == DistortionModelType::NONE &&
-         model.distortion.space == DistortionSpace::NONE && model.distortion.count == 0U &&
+         model.distortion.type == DistortionModelType::NONE && model.distortion.count == 0U &&
          !model.distortion.is_rational && !model.distortion.has_thin_prism &&
          !model.distortion.has_tilt;
 }
@@ -272,7 +271,10 @@ PixelFn64 resolveForwardFn64(const ProjectionModelType type)
   {
     case ProjectionModelType::PINHOLE:
       return &pinhole::rayToPixel64;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return &fisheye::rayToPixel64;
     case ProjectionModelType::OMNIDIRECTIONAL:
       return &omnidirectional::rayToPixel64;
@@ -280,6 +282,9 @@ PixelFn64 resolveForwardFn64(const ProjectionModelType type)
       return &double_sphere::rayToPixel64;
     case ProjectionModelType::EUCM:
       return &eucm::rayToPixel64;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return &latlong::rayToPixel64;
     case ProjectionModelType::UNKNOWN:
       break;
   }
@@ -292,7 +297,10 @@ RayFn64 resolveInverseFn64(const ProjectionModelType type)
   {
     case ProjectionModelType::PINHOLE:
       return &pinhole::pixelToRay64;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return &fisheye::pixelToRay64;
     case ProjectionModelType::OMNIDIRECTIONAL:
       return &omnidirectional::pixelToRay64;
@@ -300,6 +308,9 @@ RayFn64 resolveInverseFn64(const ProjectionModelType type)
       return &double_sphere::pixelToRay64;
     case ProjectionModelType::EUCM:
       return &eucm::pixelToRay64;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return &latlong::pixelToRay64;
     case ProjectionModelType::UNKNOWN:
       break;
   }

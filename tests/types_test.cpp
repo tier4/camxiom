@@ -46,11 +46,8 @@ TEST(Types, DistortionModelTypeToString)
   EXPECT_STREQ(toString(DistortionModelType::RATIONAL8), "rational8");
   EXPECT_STREQ(toString(DistortionModelType::THIN_PRISM12), "thin_prism12");
   EXPECT_STREQ(toString(DistortionModelType::TILTED14), "tilted14");
-  EXPECT_STREQ(toString(DistortionModelType::OPENCV_FISHEYE4), "opencv_fisheye4");
   EXPECT_STREQ(toString(DistortionModelType::KB4), "kb4");
   EXPECT_STREQ(toString(DistortionModelType::KB8), "kb8");
-  EXPECT_STREQ(toString(DistortionModelType::EQUIDISTANT), "ideal_equidistant");
-  EXPECT_STREQ(toString(DistortionModelType::OMNIDIRECTIONAL), "omnidirectional");
   EXPECT_STREQ(toString(DistortionModelType::UNKNOWN), "unknown");
 }
 
@@ -68,14 +65,8 @@ TEST(Types, DistortionModelToStringRoundTripsThroughParse)
     DistortionModelType::RATIONAL8,
     DistortionModelType::THIN_PRISM12,
     DistortionModelType::TILTED14,
-    DistortionModelType::OPENCV_FISHEYE4,
     DistortionModelType::KB4,
     DistortionModelType::KB8,
-    DistortionModelType::EQUIDISTANT,
-    DistortionModelType::EQUISOLID,
-    DistortionModelType::STEREOGRAPHIC,
-    DistortionModelType::ORTHOGRAPHIC,
-    DistortionModelType::OMNIDIRECTIONAL,
   };
   for (const DistortionModelType type : all)
   {
@@ -84,14 +75,70 @@ TEST(Types, DistortionModelToStringRoundTripsThroughParse)
   }
 }
 
+TEST(Types, OnlyTheToStringNamesParseAsCorrections)
+{
+  // The interchange names (ROS, OpenCV) and older spellings are not
+  // correction names: makeCameraModel reads the ROS names itself.
+  for (const char *name :
+       {"equidistant", "fisheye", "opencv_fisheye4", "plumb_bob", "rational_polynomial",
+        "kannala_brandt", "brown_conrady", "thin_prism_fisheye", "tilted", "ideal_equidistant",
+        "equisolid"})
+  {
+    EXPECT_EQ(parseDistortionModelType(name), DistortionModelType::UNKNOWN) << name;
+  }
+  EXPECT_EQ(parseDistortionModelType("KB4"), DistortionModelType::KB4);
+  EXPECT_TRUE(isFisheyeDistortionModel("equidistant"));
+  EXPECT_FALSE(isFisheyeDistortionModel("kb4"));
+  EXPECT_FALSE(isFisheyeDistortionModel("plumb_bob"));
+  EXPECT_TRUE(isRationalDistortionModel("rational_polynomial"));
+  EXPECT_FALSE(isRationalDistortionModel("rational8"));
+}
+
 TEST(Types, ProjectionModelTypeToString)
 {
   EXPECT_STREQ(toString(ProjectionModelType::PINHOLE), "pinhole");
-  EXPECT_STREQ(toString(ProjectionModelType::FISHEYE_THETA), "fisheye_theta");
+  EXPECT_STREQ(toString(ProjectionModelType::EQUIDISTANT), "equidistant");
+  EXPECT_STREQ(toString(ProjectionModelType::EQUISOLID), "equisolid");
+  EXPECT_STREQ(toString(ProjectionModelType::STEREOGRAPHIC), "stereographic");
+  EXPECT_STREQ(toString(ProjectionModelType::ORTHOGRAPHIC), "orthographic");
   EXPECT_STREQ(toString(ProjectionModelType::OMNIDIRECTIONAL), "omnidirectional");
   EXPECT_STREQ(toString(ProjectionModelType::DOUBLE_SPHERE), "double_sphere");
   EXPECT_STREQ(toString(ProjectionModelType::EUCM), "eucm");
+  EXPECT_STREQ(toString(ProjectionModelType::EQUIRECTANGULAR), "equirectangular");
+  EXPECT_STREQ(toString(ProjectionModelType::CYLINDRICAL), "cylindrical");
   EXPECT_STREQ(toString(ProjectionModelType::UNKNOWN), "unknown");
+}
+
+TEST(Types, ProjectionModelToStringRoundTripsThroughParse)
+{
+  const ProjectionModelType all[] = {
+    ProjectionModelType::PINHOLE,         ProjectionModelType::EQUIDISTANT,
+    ProjectionModelType::EQUISOLID,       ProjectionModelType::STEREOGRAPHIC,
+    ProjectionModelType::ORTHOGRAPHIC,    ProjectionModelType::OMNIDIRECTIONAL,
+    ProjectionModelType::DOUBLE_SPHERE,   ProjectionModelType::EUCM,
+    ProjectionModelType::EQUIRECTANGULAR, ProjectionModelType::CYLINDRICAL,
+  };
+  for (const ProjectionModelType type : all)
+  {
+    EXPECT_EQ(parseProjectionModelType(toString(type)), type)
+      << "round trip broken for \"" << toString(type) << "\"";
+  }
+  EXPECT_EQ(parseProjectionModelType("fisheye_theta"), ProjectionModelType::UNKNOWN);
+}
+
+TEST(Types, FisheyeProjectionsAreTheAngleLaws)
+{
+  EXPECT_FALSE(isFisheyeProjection(ProjectionModelType::PINHOLE));
+  EXPECT_TRUE(isFisheyeProjection(ProjectionModelType::EQUIDISTANT));
+  EXPECT_TRUE(isFisheyeProjection(ProjectionModelType::EQUISOLID));
+  EXPECT_TRUE(isFisheyeProjection(ProjectionModelType::STEREOGRAPHIC));
+  EXPECT_TRUE(isFisheyeProjection(ProjectionModelType::ORTHOGRAPHIC));
+  EXPECT_FALSE(isFisheyeProjection(ProjectionModelType::OMNIDIRECTIONAL));
+  EXPECT_FALSE(isFisheyeProjection(ProjectionModelType::DOUBLE_SPHERE));
+  EXPECT_FALSE(isFisheyeProjection(ProjectionModelType::EUCM));
+  EXPECT_EQ(distortionSpaceOf(DistortionModelType::KB4), DistortionSpace::ANGLE);
+  EXPECT_EQ(distortionSpaceOf(DistortionModelType::RADTAN5), DistortionSpace::PLANE);
+  EXPECT_EQ(distortionSpaceOf(DistortionModelType::NONE), DistortionSpace::NONE);
 }
 
 // ---------------------------------------------------------------------------
@@ -106,10 +153,9 @@ TEST(Types, CameraModelToCameraModel64RoundTrip)
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
   m.intrinsics.skew = 0.01f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = 1.5f;
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.coeffs[0] = -0.1f;
   m.distortion.coeffs[1] = 0.02f;
   m.distortion.count = 4U;
@@ -118,10 +164,10 @@ TEST(Types, CameraModelToCameraModel64RoundTrip)
   EXPECT_DOUBLE_EQ(m64.intrinsics.fx, 500.0);
   EXPECT_DOUBLE_EQ(m64.intrinsics.fy, 510.0);
   EXPECT_NEAR(m64.intrinsics.skew, 0.01, 1e-7);
-  EXPECT_EQ(m64.projection.type, ProjectionModelType::FISHEYE_THETA);
+  EXPECT_EQ(m64.projection.type, ProjectionModelType::EQUIDISTANT);
   EXPECT_NEAR(m64.projection.theta_max, 1.5, 1e-6);
   EXPECT_EQ(m64.distortion.type, DistortionModelType::KB4);
-  EXPECT_EQ(m64.distortion.space, DistortionSpace::ANGLE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m64.distortion.type), DistortionSpace::ANGLE);
   EXPECT_EQ(m64.distortion.count, 4U);
 
   CameraModel back = fromCameraModel64(m64);
@@ -141,7 +187,7 @@ TEST(Types, DefaultsAreSane)
   EXPECT_EQ(m.intrinsics.fy, 1.0f);
   EXPECT_EQ(m.projection.type, ProjectionModelType::UNKNOWN);
   EXPECT_EQ(m.distortion.type, DistortionModelType::NONE);
-  EXPECT_EQ(m.distortion.space, DistortionSpace::NONE);
+  EXPECT_EQ(camxiom::distortionSpaceOf(m.distortion.type), DistortionSpace::NONE);
   EXPECT_EQ(m.distortion.count, 0U);
   EXPECT_FALSE(m.distortion.has_tilt);
   EXPECT_FALSE(m.distortion.has_thin_prism);

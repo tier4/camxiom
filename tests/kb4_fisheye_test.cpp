@@ -67,7 +67,7 @@ namespace
 // Ground-truth model builder.
 //
 // Sensor: 640x480.
-// Projection: FISHEYE_THETA, theta_max = pi/2 (covers full hemisphere).
+// Projection: EQUIDISTANT, theta_max = pi/2 (covers full hemisphere).
 // Intrinsics: fx = fy = 200 px, cx = 320, cy = 240 (no skew).
 // Distortion: KB4 polynomial k = (0.01, -0.005, 0.0, 0.0).
 //
@@ -97,11 +97,10 @@ CameraModel64 buildGroundTruthFisheyeKB4Model()
   m.intrinsics.cy = 240.0;
   m.intrinsics.skew = 0.0;
 
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = camxiom::constants::kHalfPi;  // pi/2
 
   m.distortion.type = DistortionModelType::KB4;
-  m.distortion.space = DistortionSpace::ANGLE;
   m.distortion.count = 4U;
   m.distortion.coeffs.fill(0.0);
   m.distortion.coeffs[0] = 0.01;    // k1
@@ -203,11 +202,10 @@ double computeReprojectionRMS(const KB4InitResult &res, const std::vector<Planar
   rec_model.intrinsics.cy = res.K(1, 2);
   rec_model.intrinsics.skew = 0.0;
 
-  rec_model.projection.type = ProjectionModelType::FISHEYE_THETA;
+  rec_model.projection.type = ProjectionModelType::EQUIDISTANT;
   rec_model.projection.theta_max = camxiom::constants::kHalfPi;
 
   rec_model.distortion.type = DistortionModelType::KB4;
-  rec_model.distortion.space = DistortionSpace::ANGLE;
   rec_model.distortion.count = 4U;
   rec_model.distortion.coeffs.fill(0.0);
   for (int i = 0; i < 4; ++i)

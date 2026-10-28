@@ -103,7 +103,6 @@ CameraModel makeModel(Family fam, std::mt19937_64 &rng)
       CameraModel m = makeCommonIntrinsics(rng, 300.0f, 800.0f);
       m.projection.type = ProjectionModelType::PINHOLE;
       m.distortion.type = DistortionModelType::NONE;
-      m.distortion.space = DistortionSpace::NONE;
       m.distortion.count = 0U;
       return m;
     }
@@ -111,7 +110,6 @@ CameraModel makeModel(Family fam, std::mt19937_64 &rng)
       CameraModel m = makeCommonIntrinsics(rng, 300.0f, 800.0f);
       m.projection.type = ProjectionModelType::PINHOLE;
       m.distortion.type = DistortionModelType::RADTAN5;
-      m.distortion.space = DistortionSpace::PLANE;
       m.distortion.coeffs[0] = frand(rng, -0.12f, 0.04f);      // k1
       m.distortion.coeffs[1] = frand(rng, -0.01f, 0.03f);      // k2
       m.distortion.coeffs[2] = frand(rng, -0.0012f, 0.0012f);  // p1
@@ -122,18 +120,16 @@ CameraModel makeModel(Family fam, std::mt19937_64 &rng)
     }
     case Family::FisheyeEquidistant: {
       CameraModel m = makeCommonIntrinsics(rng, 160.0f, 340.0f);
-      m.projection.type = ProjectionModelType::FISHEYE_THETA;
-      m.distortion.type = DistortionModelType::EQUIDISTANT;
-      m.distortion.space = DistortionSpace::ANGLE;
+      m.projection.type = ProjectionModelType::EQUIDISTANT;
+      m.distortion.type = DistortionModelType::NONE;
       m.distortion.count = 0U;
       m.projection.theta_max = static_cast<float>(kPi) - 1e-4f;
       return m;
     }
     case Family::FisheyeKB4: {
       CameraModel m = makeCommonIntrinsics(rng, 160.0f, 340.0f);
-      m.projection.type = ProjectionModelType::FISHEYE_THETA;
+      m.projection.type = ProjectionModelType::EQUIDISTANT;
       m.distortion.type = DistortionModelType::KB4;
-      m.distortion.space = DistortionSpace::ANGLE;
       m.distortion.coeffs[0] = frand(rng, -0.03f, 0.03f);
       m.distortion.coeffs[1] = frand(rng, -0.01f, 0.01f);
       m.distortion.coeffs[2] = frand(rng, -0.004f, 0.004f);
@@ -149,7 +145,6 @@ CameraModel makeModel(Family fam, std::mt19937_64 &rng)
       m.projection.xi = frand(rng, 0.3f, 1.1f);
       m.projection.theta_max = static_cast<float>(kPi);
       m.distortion.type = DistortionModelType::NONE;
-      m.distortion.space = DistortionSpace::NONE;
       m.distortion.count = 0U;
       return m;
     }
@@ -160,7 +155,6 @@ CameraModel makeModel(Family fam, std::mt19937_64 &rng)
       m.projection.alpha = frand(rng, 0.4f, 0.65f);
       m.projection.theta_max = static_cast<float>(kPi);
       m.distortion.type = DistortionModelType::NONE;
-      m.distortion.space = DistortionSpace::NONE;
       m.distortion.count = 0U;
       return m;
     }
@@ -171,7 +165,6 @@ CameraModel makeModel(Family fam, std::mt19937_64 &rng)
       m.projection.beta = frand(rng, 0.9f, 1.3f);
       m.projection.theta_max = static_cast<float>(kPi);
       m.distortion.type = DistortionModelType::NONE;
-      m.distortion.space = DistortionSpace::NONE;
       m.distortion.count = 0U;
       return m;
     }

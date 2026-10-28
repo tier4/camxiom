@@ -18,143 +18,43 @@
 namespace camxiom
 {
 
-bool isFisheyeDistortionModel(const std::string &model_name)
-{
-  const DistortionModelType model_type = parseDistortionModelType(model_name);
-  return model_type == DistortionModelType::OPENCV_FISHEYE4 ||
-         model_type == DistortionModelType::EQUIDISTANT || model_type == DistortionModelType::KB4 ||
-         model_type == DistortionModelType::KB8 || model_type == DistortionModelType::EQUISOLID ||
-         model_type == DistortionModelType::STEREOGRAPHIC ||
-         model_type == DistortionModelType::ORTHOGRAPHIC;
-}
+bool isFisheyeDistortionModel(const std::string &model_name) { return model_name == "equidistant"; }
 
 bool isRationalDistortionModel(const std::string &model_name)
 {
-  const DistortionModelType model_type = parseDistortionModelType(model_name);
-  return model_type == DistortionModelType::RATIONAL8 ||
-         model_type == DistortionModelType::THIN_PRISM12 ||
-         model_type == DistortionModelType::TILTED14;
+  return model_name == "rational_polynomial";
 }
 
 DistortionModelType parseDistortionModelType(const std::string &model_name)
 {
   const std::string model = detail::toLowerCopy(model_name);
-
-  // Canonical camxiom names first: every toString(DistortionModelType)
-  // output must parse back to the same enum so persisted model strings
-  // survive a round trip. (The remaining canonical names — radtan4/5, kb4,
-  // kb8, equisolid, stereographic, orthographic, omnidirectional — are
-  // already covered by the compatibility aliases below.) Note the ROS name
-  // "equidistant" denotes the 4-coefficient OpenCV fisheye model, so the
-  // coefficient-free ideal mapping uses the distinct canonical name
-  // "ideal_equidistant".
-  if (model == "none")
+  for (const DistortionModelType type :
+       {DistortionModelType::NONE, DistortionModelType::RADTAN4, DistortionModelType::RADTAN5,
+        DistortionModelType::RATIONAL8, DistortionModelType::THIN_PRISM12,
+        DistortionModelType::TILTED14, DistortionModelType::KB4, DistortionModelType::KB8})
   {
-    return DistortionModelType::NONE;
-  }
-  if (model == "rational8")
-  {
-    return DistortionModelType::RATIONAL8;
-  }
-  if (model == "thin_prism12")
-  {
-    return DistortionModelType::THIN_PRISM12;
-  }
-  if (model == "tilted14")
-  {
-    return DistortionModelType::TILTED14;
-  }
-  if (model == "opencv_fisheye4")
-  {
-    return DistortionModelType::OPENCV_FISHEYE4;
-  }
-  if (model == "ideal_equidistant")
-  {
-    return DistortionModelType::EQUIDISTANT;
-  }
-
-  if (model == "plumb_bob")
-  {
-    return DistortionModelType::RADTAN5;
-  }
-  if (model == "rational_polynomial")
-  {
-    return DistortionModelType::RATIONAL8;
-  }
-  if (model == "brown_conrady" || model == "brown-conrady")
-  {
-    return DistortionModelType::RADTAN5;
-  }
-  if (model == "radtan5")
-  {
-    return DistortionModelType::RADTAN5;
-  }
-  if (model == "radtan4")
-  {
-    return DistortionModelType::RADTAN4;
-  }
-  if (model == "thin_prism_fisheye")
-  {
-    return DistortionModelType::THIN_PRISM12;
-  }
-  if (model == "tilted")
-  {
-    return DistortionModelType::TILTED14;
-  }
-  if (model == "equidistant" || model == "fisheye")
-  {
-    return DistortionModelType::OPENCV_FISHEYE4;
-  }
-  if (model == "kannala_brandt" || model == "kannala-brandt" || model == "kb4")
-  {
-    return DistortionModelType::KB4;
-  }
-  if (model == "kannala_brandt8" || model == "kannala-brandt8" || model == "kb8")
-  {
-    return DistortionModelType::KB8;
-  }
-  if (model == "equisolid" || model == "equisolid_angle")
-  {
-    return DistortionModelType::EQUISOLID;
-  }
-  if (model == "stereographic" || model == "stereographic_angle")
-  {
-    return DistortionModelType::STEREOGRAPHIC;
-  }
-  if (model == "orthographic" || model == "orthographic_angle")
-  {
-    return DistortionModelType::ORTHOGRAPHIC;
-  }
-  if (model == "omnidirectional" || model == "omni")
-  {
-    return DistortionModelType::OMNIDIRECTIONAL;
+    if (model == toString(type))
+    {
+      return type;
+    }
   }
   return DistortionModelType::UNKNOWN;
 }
 
-ProjectionModelType chooseProjectionModelType(const DistortionModelType distortion_model_type)
+ProjectionModelType parseProjectionModelType(const std::string &model_name)
 {
-  switch (distortion_model_type)
+  const std::string model = detail::toLowerCopy(model_name);
+  for (const ProjectionModelType type :
+       {ProjectionModelType::PINHOLE, ProjectionModelType::EQUIDISTANT,
+        ProjectionModelType::EQUISOLID, ProjectionModelType::STEREOGRAPHIC,
+        ProjectionModelType::ORTHOGRAPHIC, ProjectionModelType::OMNIDIRECTIONAL,
+        ProjectionModelType::DOUBLE_SPHERE, ProjectionModelType::EUCM,
+        ProjectionModelType::EQUIRECTANGULAR, ProjectionModelType::CYLINDRICAL})
   {
-    case DistortionModelType::OPENCV_FISHEYE4:
-    case DistortionModelType::KB4:
-    case DistortionModelType::KB8:
-    case DistortionModelType::EQUIDISTANT:
-    case DistortionModelType::EQUISOLID:
-    case DistortionModelType::STEREOGRAPHIC:
-    case DistortionModelType::ORTHOGRAPHIC:
-      return ProjectionModelType::FISHEYE_THETA;
-    case DistortionModelType::RADTAN4:
-    case DistortionModelType::RADTAN5:
-    case DistortionModelType::RATIONAL8:
-    case DistortionModelType::THIN_PRISM12:
-    case DistortionModelType::TILTED14:
-    case DistortionModelType::NONE:
-      return ProjectionModelType::PINHOLE;
-    case DistortionModelType::OMNIDIRECTIONAL:
-      return ProjectionModelType::OMNIDIRECTIONAL;
-    case DistortionModelType::UNKNOWN:
-      break;
+    if (model == toString(type))
+    {
+      return type;
+    }
   }
   return ProjectionModelType::UNKNOWN;
 }

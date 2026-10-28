@@ -48,7 +48,9 @@ using ProjectionJacobian = ProjectionJacobianT<float>;
 ///   - ∂(x_d,y_d)/∂(x_n,y_n)     (distortion)
 ///   - ∂(u,v)/∂(x_d,y_d)         (intrinsics)
 ///
-/// Supported for PINHOLE, FISHEYE_THETA, OMNIDIRECTIONAL, DOUBLE_SPHERE, and EUCM models.
+/// Supported for every projection law: PINHOLE, the fisheye laws, OMNIDIRECTIONAL,
+/// DOUBLE_SPHERE, EUCM and the lat-long projections (EQUIRECTANGULAR,
+/// CYLINDRICAL; DOMAIN_ERROR at the poles, where the longitude is undefined).
 ProjectionJacobian rayToPixelWithJacobian(
   const CameraModel &model, const Eigen::Vector3f &ray_direction
 );

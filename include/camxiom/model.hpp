@@ -23,12 +23,18 @@
 namespace camxiom
 {
 
+/// True for the ROS CameraInfo distortion_model that names a fisheye law
+/// ("equidistant", KB4 on the equidistant law).
 [[nodiscard]] bool isFisheyeDistortionModel(const std::string &model_name);
+/// True for the ROS CameraInfo distortion_model of the rational correction
+/// ("rational_polynomial").
 [[nodiscard]] bool isRationalDistortionModel(const std::string &model_name);
+/// Inverse of toString(DistortionModelType) (case-insensitive); anything
+/// else parses to UNKNOWN. Projection-law names such as "equisolid" are not
+/// corrections and parse to UNKNOWN too.
 [[nodiscard]] DistortionModelType parseDistortionModelType(const std::string &model_name);
-[[nodiscard]] ProjectionModelType chooseProjectionModelType(
-  DistortionModelType distortion_model_type
-);
+/// Inverse of toString(ProjectionModelType); anything else parses to UNKNOWN.
+[[nodiscard]] ProjectionModelType parseProjectionModelType(const std::string &model_name);
 
 /// Full model-invariant check: structural consistency (types, spaces, counts,
 /// flags, finiteness, per-model parameter ranges) PLUS certification that a
@@ -55,8 +61,42 @@ namespace camxiom
 /// helpers).
 [[nodiscard]] StatusCode validateCameraModel64(const CameraModel64 &model);
 
-/// Create a copy of the model with distortion removed (coeffs zeroed, type=NONE).
+/// Create a copy of the model with its lens correction removed: distortion
+/// type NONE, coefficients zeroed, and the projection law (including xi,
+/// alpha, beta and theta_max) unchanged. A stereographic model stays
+/// stereographic; an equidistant model with KB4 becomes the plain
+/// equidistant law.
 [[nodiscard]] CameraModel makeDistortionFree(const CameraModel &model);
+
+/// An equirectangular model whose image covers the whole sphere:
+/// fx = W / (2 pi), fy = H / pi, cx = (W - 1) / 2, cy = (H - 1) / 2, skew 0.
+/// The left edge of column 0 is longitude -pi (directly behind the camera),
+/// the right edge of the last column +pi; the top edge of row 0 is latitude
+/// -pi/2 (straight up), the bottom edge of the last row +pi/2. INVALID_INPUT
+/// for a non-positive size; `model_out` is then reset to CameraModel{}.
+[[nodiscard]] StatusCode makeEquirectangularModel(ImageSize image_size, CameraModel &model_out);
+
+/// An equirectangular model whose image covers longitudes [lon_min, lon_max]
+/// and latitudes [lat_min, lat_max] (radians, conventions in types.hpp),
+/// edge to edge: the left edge of column 0 is lon_min, the right edge of the
+/// last column lon_max, and likewise for the rows. Requires
+/// -pi <= lon_min < lon_max <= pi and -pi/2 <= lat_min < lat_max <= pi/2;
+/// INVALID_INPUT otherwise, with `model_out` reset to CameraModel{}.
+[[nodiscard]] StatusCode makeEquirectangularModel(
+  ImageSize image_size, double lon_min, double lon_max, double lat_min, double lat_max,
+  CameraModel &model_out
+);
+
+/// A cylindrical model whose image covers longitudes [lon_min, lon_max] and
+/// latitudes [lat_min, lat_max], edge to edge as for the equirectangular
+/// factory. Rows are spaced evenly in tan(latitude), so the poles cannot be
+/// reached: requires -pi <= lon_min < lon_max <= pi and
+/// -pi/2 < lat_min < lat_max < pi/2; INVALID_INPUT otherwise, with
+/// `model_out` reset to CameraModel{}.
+[[nodiscard]] StatusCode makeCylindricalModel(
+  ImageSize image_size, double lon_min, double lon_max, double lat_min, double lat_max,
+  CameraModel &model_out
+);
 
 /// What bounds the usable angular range, independently of a declared FOV.
 enum class FisheyeDomainLimit : std::uint8_t {
@@ -76,7 +116,7 @@ struct FisheyeDomain64
   constexpr bool ok() const { return status == StatusCode::OK; }
 };
 
-/// Inspect a FISHEYE_THETA model without changing it. The declared theta_max
+/// Inspect a fisheye-law model (isFisheyeProjection) without changing it. The declared theta_max
 /// is ignored, even if non-finite or outside the current monotone range.
 /// All other model invariants must hold; errors leave both angles zero and
 /// limit UNKNOWN. Non-fisheye models return INVALID_MODEL.
@@ -85,8 +125,8 @@ struct FisheyeDomain64
 /// 1e-3 to approximately pi - 1e-4 radians, including the start sample.
 /// safe_theta_max is the last finite, non-negative, positive-slope sample;
 /// theta_limit is the first failing sample, NOT an exact polynomial root.
-/// Without a failing sample the limit is ANGULAR_LIMIT at pi. Ideal models
-/// use their geometric endpoint with a 1e-4 rad inset for safe_theta_max.
+/// Without a failing sample the limit is ANGULAR_LIMIT at pi. Coefficient-free
+/// laws use their geometric endpoint with a 1e-4 rad inset for safe_theta_max.
 /// This is a sampled estimate: folds narrower than a scan step or below
 /// the start sample can be missed. No usable positive sample is an error.
 /// Recompute after changing coefficients; observation gates and evaluation

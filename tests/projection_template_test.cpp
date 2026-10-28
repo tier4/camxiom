@@ -33,27 +33,23 @@ std::vector<CameraModel64> models()
 {
   std::vector<CameraModel64> out;
   for (auto projection :
-       {ProjectionModelType::PINHOLE, ProjectionModelType::FISHEYE_THETA,
-        ProjectionModelType::OMNIDIRECTIONAL, ProjectionModelType::DOUBLE_SPHERE,
-        ProjectionModelType::EUCM})
+       {ProjectionModelType::PINHOLE, ProjectionModelType::EQUIDISTANT,
+        ProjectionModelType::EQUISOLID, ProjectionModelType::STEREOGRAPHIC,
+        ProjectionModelType::ORTHOGRAPHIC, ProjectionModelType::OMNIDIRECTIONAL,
+        ProjectionModelType::DOUBLE_SPHERE, ProjectionModelType::EUCM})
   {
-    const bool fish = projection == ProjectionModelType::FISHEYE_THETA;
+    using Layouts = std::vector<std::pair<DistortionModelType, int>>;
+    const Layouts kb_layouts = {
+      {DistortionModelType::NONE, 0}, {DistortionModelType::KB4, 4}, {DistortionModelType::KB8, 8}};
     const std::vector<std::pair<DistortionModelType, int>> layouts =
-      fish ? std::vector<
-               std::pair<DistortionModelType, int>>{{DistortionModelType::NONE, 0},
-                                                    {DistortionModelType::OPENCV_FISHEYE4, 4},
-                                                    {DistortionModelType::KB4, 4},
-                                                    {DistortionModelType::KB8, 8},
-                                                    {DistortionModelType::EQUIDISTANT, 0},
-                                                    {DistortionModelType::EQUIDISTANT, 14},
-                                                    {DistortionModelType::EQUISOLID, 4},
-                                                    {DistortionModelType::STEREOGRAPHIC, 8},
-                                                    {DistortionModelType::ORTHOGRAPHIC, 14}}
-           : std::vector<std::pair<DistortionModelType, int>>{
-               {DistortionModelType::NONE, 0},      {DistortionModelType::RADTAN4, 4},
-               {DistortionModelType::RADTAN4, 5},   {DistortionModelType::RADTAN5, 5},
-               {DistortionModelType::RATIONAL8, 8}, {DistortionModelType::THIN_PRISM12, 12},
-               {DistortionModelType::TILTED14, 14}};
+      projection == ProjectionModelType::EQUIDISTANT ? kb_layouts
+      : isFisheyeProjection(projection)
+        ? Layouts{{DistortionModelType::NONE, 0}}
+        : std::vector<std::pair<DistortionModelType, int>>{
+            {DistortionModelType::NONE, 0},      {DistortionModelType::RADTAN4, 4},
+            {DistortionModelType::RADTAN4, 5},   {DistortionModelType::RADTAN5, 5},
+            {DistortionModelType::RATIONAL8, 8}, {DistortionModelType::THIN_PRISM12, 12},
+            {DistortionModelType::TILTED14, 14}};
     for (const auto &[distortion, count] : layouts)
     {
       CameraModel64 m;
@@ -154,7 +150,7 @@ TYPED_TEST(ProjectionTemplate, RetainsUnsmoothedFisheyeCapAtTheAxisAndBoundary)
   using T = TypeParam;
   for (auto m : models())
   {
-    if (m.projection.type != ProjectionModelType::FISHEYE_THETA) continue;
+    if (!isFisheyeProjection(m.projection.type)) continue;
     for (T x : {T(0), T(1e-16), T(1e-12), T(.25), T(1)})
       for (T z : {T(1), T(0), T(-1)})
       {
@@ -162,7 +158,7 @@ TYPED_TEST(ProjectionTemplate, RetainsUnsmoothedFisheyeCapAtTheAxisAndBoundary)
         const double angle = std::atan2(std::sqrt(x * x), z);
         const bool valid_ray =
           x * x + z * z > tpl::detail::epsilon<T>() && !(x <= tpl::detail::epsilon<T>() && z < 0);
-        const bool valid_mapping = m.distortion.type != DistortionModelType::ORTHOGRAPHIC || z >= 0;
+        const bool valid_mapping = m.projection.type != ProjectionModelType::ORTHOGRAPHIC || z >= 0;
         for (double cap :
              {std::nextafter(angle, 0.0), angle,
               std::nextafter(angle, std::numeric_limits<double>::infinity()), 1e-20, 0.5,
@@ -219,7 +215,7 @@ TYPED_TEST(ProjectionTemplate, ClassifiesDepthAndNormLikeStandardFloatingPointCh
   auto pinhole = models()[3];  // RADTAN5 consumes the checked positive depth.
   ASSERT_EQ(pinhole.distortion.type, DistortionModelType::RADTAN5);
   auto fisheye = pinhole;
-  fisheye.projection.type = ProjectionModelType::FISHEYE_THETA;
+  fisheye.projection.type = ProjectionModelType::EQUIDISTANT;
   fisheye.distortion.type = DistortionModelType::KB4;
   fisheye.distortion.count = 4;
   std::mt19937_64 random(123456);
@@ -240,8 +236,8 @@ TYPED_TEST(ProjectionTemplate, ClassifiesDepthAndNormLikeStandardFloatingPointCh
 TEST(ProjectionTemplateFallback, PreservesTheLongDoubleHalfPiBoundary)
 {
   auto model = models().front();
-  model.projection.type = ProjectionModelType::FISHEYE_THETA;
-  model.distortion.type = DistortionModelType::EQUIDISTANT;
+  model.projection.type = ProjectionModelType::EQUIDISTANT;
+  model.distortion.type = DistortionModelType::NONE;
   model.projection.theta_max = constants::kHalfPi;
   const std::array<long double, 3> ray{1, 0, 0};
   expectProjection(model, ray, std::atan2(1.0L, 0.0L) <= model.projection.theta_max);

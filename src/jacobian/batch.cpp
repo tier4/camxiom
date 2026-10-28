@@ -52,7 +52,10 @@ PerModelJacFn<T> resolveJacobianFn(const ProjectionModelType type)
   {
     case ProjectionModelType::PINHOLE:
       return &pinhole::impl::rayToPixelWithJacobian<T>;
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return &fisheye::impl::rayToPixelWithJacobian<T>;
     case ProjectionModelType::OMNIDIRECTIONAL:
       return &omnidirectional::impl::rayToPixelWithJacobian<T>;
@@ -60,6 +63,9 @@ PerModelJacFn<T> resolveJacobianFn(const ProjectionModelType type)
       return &double_sphere::impl::rayToPixelWithJacobian<T>;
     case ProjectionModelType::EUCM:
       return &eucm::impl::rayToPixelWithJacobian<T>;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return &latlong::impl::rayToPixelWithJacobian<T>;
     case ProjectionModelType::UNKNOWN:
       break;
   }

@@ -39,6 +39,7 @@
 #include "detail/projection_common.hpp"  // DeriveAtUseT / withinThetaMaxCos
 #include "distortion/angle_impl.hpp"
 #include "distortion/plane_impl.hpp"
+#include "latlong/projection_impl.hpp"
 #include "projection64/internal.hpp"  // validateCameraModelQuery64
 
 #include <Eigen/Core>
@@ -168,7 +169,7 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobian(
   using detail_impl::invalidJacobian;
   constexpr T kEpsilon = detail_impl::PlaneTraits<T>::kEpsilon;
 
-  if (model.projection.type != ProjectionModelType::FISHEYE_THETA)
+  if (!isFisheyeProjection(model.projection.type))
   {
     return invalidJacobian<T>(StatusCode::INVALID_MODEL);
   }
@@ -202,8 +203,10 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobian(
     return invalidJacobian<T>(StatusCode::DOMAIN_ERROR);
   }
 
+  const detail_impl::AngleLaw law =
+    detail_impl::angleLawOf(model.projection.type, model.distortion.type);
   T theta_d = T(0);
-  const StatusCode td_status = detail_impl::distortTheta<T>(model.distortion, theta, theta_d);
+  const StatusCode td_status = detail_impl::distortTheta<T>(law, model.distortion, theta, theta_d);
   if (td_status != StatusCode::OK)
   {
     return invalidJacobian<T>(td_status);
@@ -211,7 +214,7 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobian(
 
   T dtheta_d_dtheta = T(0);
   const StatusCode dd_status =
-    detail_impl::distortThetaDerivative<T>(model.distortion, theta, dtheta_d_dtheta);
+    detail_impl::distortThetaDerivative<T>(law, model.distortion, theta, dtheta_d_dtheta);
   if (dd_status != StatusCode::OK)
   {
     return invalidJacobian<T>(dd_status);
@@ -615,6 +618,74 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobian(
 
 }  // namespace camxiom::eucm::impl
 
+namespace camxiom::latlong::impl
+{
+
+// With h = sqrt(X^2 + Z^2) and n^2 = X^2 + Y^2 + Z^2:
+//   lambda = atan2(X, Z):       d/dX = Z / h^2,  d/dY = 0,  d/dZ = -X / h^2
+//   phi = atan2(Y, h):          d/dX = -X Y / (h n^2),  d/dY = h / n^2,
+//                               d/dZ = -Z Y / (h n^2)
+//   t = tan(phi) = Y / h:       d/dX = -X Y / h^3,  d/dY = 1 / h,
+//                               d/dZ = -Z Y / h^3
+template <typename T>
+inline ProjectionJacobianT<T> rayToPixelWithJacobian(
+  const CameraModelT<T> &model, const Eigen::Matrix<T, 3, 1> &ray_direction
+)
+{
+  using detail_impl::invalidJacobian;
+
+  const PixelResultT<T> projected = rayToPixel<T>(model, ray_direction);
+  if (projected.status != StatusCode::OK)
+  {
+    return invalidJacobian<T>(projected.status);
+  }
+
+  const T X = ray_direction.x();
+  const T Y = ray_direction.y();
+  const T Z = ray_direction.z();
+  const T h_sq = X * X + Z * Z;
+  const T h = std::sqrt(h_sq);
+
+  const T dl_dx = Z / h_sq;
+  const T dl_dz = -X / h_sq;
+  T dy_dx = T(0);
+  T dy_dy = T(0);
+  T dy_dz = T(0);
+  if (model.projection.type == ProjectionModelType::EQUIRECTANGULAR)
+  {
+    const T n_sq = h_sq + Y * Y;
+    const T scale = -Y / (h * n_sq);
+    dy_dx = X * scale;
+    dy_dy = h / n_sq;
+    dy_dz = Z * scale;
+  }
+  else
+  {
+    const T scale = -Y / (h_sq * h);
+    dy_dx = X * scale;
+    dy_dy = T(1) / h;
+    dy_dz = Z * scale;
+  }
+
+  const T fx = model.intrinsics.fx;
+  const T fy = model.intrinsics.fy;
+  const T skew = model.intrinsics.skew;
+
+  ProjectionJacobianT<T> result;
+  result.status = StatusCode::OK;
+  result.pixel = projected.pixel;
+  result.J(0, 0) = fx * dl_dx + skew * dy_dx;
+  result.J(0, 1) = skew * dy_dy;
+  result.J(0, 2) = fx * dl_dz + skew * dy_dz;
+  result.J(1, 0) = fy * dy_dx;
+  result.J(1, 1) = fy * dy_dy;
+  result.J(1, 2) = fy * dy_dz;
+
+  return detail_impl::finalizeJacobian<T>(result);
+}
+
+}  // namespace camxiom::latlong::impl
+
 namespace camxiom::detail_impl
 {
 
@@ -643,7 +714,10 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobianDispatch(
   {
     case ProjectionModelType::PINHOLE:
       return pinhole::impl::rayToPixelWithJacobian<T>(model, ray_direction);
-    case ProjectionModelType::FISHEYE_THETA:
+    case ProjectionModelType::EQUIDISTANT:
+    case ProjectionModelType::EQUISOLID:
+    case ProjectionModelType::STEREOGRAPHIC:
+    case ProjectionModelType::ORTHOGRAPHIC:
       return fisheye::impl::rayToPixelWithJacobian<T>(model, ray_direction);
     case ProjectionModelType::OMNIDIRECTIONAL:
       return omnidirectional::impl::rayToPixelWithJacobian<T>(model, ray_direction);
@@ -651,6 +725,9 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobianDispatch(
       return double_sphere::impl::rayToPixelWithJacobian<T>(model, ray_direction);
     case ProjectionModelType::EUCM:
       return eucm::impl::rayToPixelWithJacobian<T>(model, ray_direction);
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return latlong::impl::rayToPixelWithJacobian<T>(model, ray_direction);
     case ProjectionModelType::UNKNOWN:
       break;
   }

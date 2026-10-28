@@ -1,10 +1,13 @@
 # camxiom
 
 **camxiom** is a unified C++17 camera-geometry library: one API across the
-whole spectrum of camera models — **pinhole**, **fisheye (Kannala–Brandt)**,
-**omnidirectional (Mei)**, **double sphere**, and **EUCM**, each with its full
-distortion catalogue — plus a Ceres-based PnP / intrinsic-calibration layer
-and ROS 2 / OpenCV interfaces built on the same model set.
+whole spectrum of camera models — **pinhole**, the **fisheye laws**
+(equidistant with Kannala–Brandt, equisolid, stereographic, orthographic),
+**omnidirectional (Mei)**, **double sphere**, and **EUCM**, each with the lens
+corrections it takes, and the **equirectangular** and **cylindrical**
+latitude-longitude projections as output and remap targets — plus a Ceres-based
+PnP / intrinsic-calibration layer and ROS 2 / OpenCV interfaces built on the
+same model set.
 
 Eigen is the only hard dependency of the runtime core. Everything else —
 Ceres, OpenCV, ROS 2, OpenMP — is optional and detected at configure time.
@@ -20,7 +23,7 @@ camxiom collapses that into one model set handled uniformly everywhere:
 - **One API for every model.** The primary API is two functions —
   `rayToPixel()` and `pixelToRay()`. Forward projection, undistortion,
   rectification, Jacobians, PnP, and calibration behave identically across
-  the five projection families; adding a camera model never grows the API
+  the projection families; adding a camera model never grows the API
   surface, and supporting a new camera downstream never means a new code
   path.
 - **A calibrator with the same breadth.** The calibration layer
@@ -31,8 +34,8 @@ camxiom collapses that into one model set handled uniformly everywhere:
   with uncertainty and observability diagnostics, and cross-family model
   conversion.
 - **Fits existing ecosystems.** `sensor_msgs/CameraInfo` adapters, `cv::Mat`
-  drop-ins mirroring OpenCV signatures, OpenCV-Calib3D / Kalibr / Basalt
-  parameter profiles, ROS-layout calibration YAML.
+  drop-ins mirroring OpenCV signatures, and camxiom's own camera
+  description for every model.
 - **Light by default.** The runtime core (`camxiom::core`) links only Eigen —
   no OpenCV types in the core, no Ceres header installed. The calibration
   layer is built only when Ceres is found (or requested).
@@ -41,12 +44,12 @@ camxiom collapses that into one model set handled uniformly everywhere:
 
 | Area | What you get |
 |---|---|
-| [Projection](api/projection.md) | Generic `rayToPixel` / `pixelToRay` over all five models, float32 and float64 variants, `ValidatedCameraModel` for validated hot loops, Ceres-`Jet`-ready projection templates |
+| [Projection](api/projection.md) | Generic `rayToPixel` / `pixelToRay` over every model, float32 and float64 variants, `ValidatedCameraModel` for validated hot loops, Ceres-`Jet`-ready projection templates |
 | [Batch projection](api/batch.md) | Bulk ray↔pixel APIs (Eigen and raw-pointer overloads) with SIMD (AVX2 / SSE2 / NEON) and OpenMP acceleration |
 | [Jacobians](api/jacobians.md) | Analytical 2×3 point Jacobians, batch variants, and full parameter Jacobians (intrinsics / distortion / projection parameters) for optimization |
 | [Inverse LUT](api/lut.md) | Precomputed grid + bilinear interpolation for O(1) approximate `pixelToRay` |
-| [Remap & rectification](api/remap.md) | OpenCV-free undistort / rectify pipeline: virtual output-camera generation, `alpha`-blended fitting compatible with OpenCV semantics, remap-map builders, CPU sampling kernel |
-| [CameraInfo interchange](api/camera-info.md) | ROS-free `camxiom::CameraInfo` POD, `makeCameraModel` string parsing, per-model import/export profiles (OpenCV-Calib3D / Kalibr / Basalt), `camera_calibration_parsers`-layout YAML writer |
+| [Remap & rectification](api/remap.md) | OpenCV-free undistort / rectify pipeline: an output camera of any projection (the latitude-longitude projections included) fitted from a template and one `alpha`, remap-map builders, CPU sampling kernel |
+| [CameraInfo interchange](api/camera-info.md) | ROS-free `camxiom::CameraInfo` POD (written only when ROS can hold the lens) and camxiom's own `CamxiomCameraInfo` for every model, converted to and from a model; [saving them as YAML](guides/camera-yaml.md) is shown as an example for applications |
 | [Calibration](api/calibration.md) | Default seeds, linear + model-specific init estimators, model-agnostic `PnpSolver` with `FIX_*` staged optimization, single-pass `calibrate()` with covariance and observability diagnostics |
 | [Model conversion](api/conversion.md) | `convertCameraModel`: fit a model of a different family to reproduce a source model's geometry, with honest fit-quality reporting |
 | [ROS / OpenCV interop](api/interop.md) | Optional `sensor_msgs::msg::CameraInfo` conversion layer and `cv::Mat` drop-in layer (`cv::` / `cv::fisheye::` / `cv::omnidir::`-style signatures, `RemapCache`, unified `solvePnP`) |
@@ -88,8 +91,8 @@ See [Architecture](design/architecture.md) for the full design.
 
 ## Status and license
 
-- Version **0.2.0** (pre-1.0: minor releases may contain breaking changes;
-  they are listed in the README's versioning notes).
+- Version **0.3.0** (pre-1.0: minor releases may contain breaking changes;
+  they are listed in the release notes).
 - License: **Apache-2.0**.
 - Platforms exercised regularly: x86-64 (SSE2 baseline + AVX2) and
   aarch64 / NEON (NVIDIA Jetson).

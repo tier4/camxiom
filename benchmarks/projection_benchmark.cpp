@@ -130,7 +130,6 @@ camxiom::CameraModel makePinholeRadtan5()
   m.intrinsics.cy = 241.0f;
   m.projection.type = camxiom::ProjectionModelType::PINHOLE;
   m.distortion.type = camxiom::DistortionModelType::RADTAN5;
-  m.distortion.space = camxiom::DistortionSpace::PLANE;
   m.distortion.coeffs[0] = -0.28f;    // k1
   m.distortion.coeffs[1] = 0.11f;     // k2
   m.distortion.coeffs[2] = 0.0006f;   // p1
@@ -147,10 +146,9 @@ camxiom::CameraModel makeFisheyeKb4()
   m.intrinsics.fy = 285.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = camxiom::ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = camxiom::ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = 3.1415926f - 1e-3f;
   m.distortion.type = camxiom::DistortionModelType::KB4;
-  m.distortion.space = camxiom::DistortionSpace::ANGLE;
   m.distortion.coeffs[0] = -0.012f;   // k1
   m.distortion.coeffs[1] = 0.004f;    // k2
   m.distortion.coeffs[2] = -0.0007f;  // k3
@@ -168,7 +166,6 @@ camxiom::CameraModel makePinholeTilted14()
   m.intrinsics.cy = 241.0f;
   m.projection.type = camxiom::ProjectionModelType::PINHOLE;
   m.distortion.type = camxiom::DistortionModelType::TILTED14;
-  m.distortion.space = camxiom::DistortionSpace::PLANE;
   // radial (rational) + tangential + thin-prism + tilt
   m.distortion.coeffs[0] = -0.28f;    // k1
   m.distortion.coeffs[1] = 0.11f;     // k2

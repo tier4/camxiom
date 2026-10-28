@@ -67,10 +67,13 @@ capacity planning, not something to program against.
 - **The raw-pointer float overloads are the fastest path**: they feed
   SIMD kernels directly. The Eigen overloads and most of the double API run
   scalar per-point code under OpenMP.
-- **Vectorized (float32)**: pinhole, fisheye-theta (OPENCV_FISHEYE4 / KB4 /
-  EQUIDISTANT distortion), omnidirectional, double sphere, EUCM — 8-wide on
-  AVX2, 4-wide on SSE2. On aarch64 the same 4-wide kernels run through a
-  minimal NEON compatibility layer (AArch64 only; 32-bit ARM stays scalar).
+- **Vectorized (float32)**: pinhole, the equidistant fisheye law (without
+  correction or with KB4; the inverse also covers the equisolid,
+  stereographic and orthographic laws, while KB8 runs the scalar inverse),
+  omnidirectional, double sphere, EUCM — 8-wide on AVX2, 4-wide on SSE2. The
+  latitude-longitude projections (equirectangular, cylindrical) run the scalar
+  code under OpenMP. On aarch64 the same 4-wide kernels run through a minimal
+  NEON compatibility layer (AArch64 only; 32-bit ARM stays scalar).
 - **Vectorized (float64)**: only the undistorted-pinhole fast path (4-wide
   AVX on x86, 2-wide NEON on aarch64); everything else is scalar + OpenMP.
   This asymmetry is deliberate: float is the real-time API, double is the
@@ -80,7 +83,7 @@ capacity planning, not something to program against.
   compose. Below the threshold a single-threaded kernel runs (fork/join
   overhead would dominate). Requires an OpenMP-enabled build.
 - **Model-specific exception**: on aarch64 the KB-family fisheye *inverse*
-  (KB4 / KB8 / OPENCV_FISHEYE4) intentionally stays on the scalar path — the
+  (KB4 / KB8) intentionally stays on the scalar path — the
   vectorized version measured slower there (round-trip verification + scalar
   trig per lane).
 - SIMD lanes that a kernel flags as invalid are recomputed through the

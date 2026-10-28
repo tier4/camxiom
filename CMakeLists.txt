@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(camxiom VERSION 0.2.0 LANGUAGES CXX)
+project(camxiom VERSION 0.3.0 LANGUAGES CXX)
 
 # include/camxiom/version.hpp and package.xml carry the same version as
 # project(); fail the configure if any of them drift apart.
@@ -138,6 +138,8 @@ add_library(camxiom_core
   src/double_sphere/projection64.cpp
   src/eucm/projection.cpp
   src/eucm/projection64.cpp
+  src/latlong/projection.cpp
+  src/latlong/projection64.cpp
   src/jacobian/float.cpp
   src/jacobian/double.cpp
   src/jacobian/batch.cpp
@@ -158,19 +160,21 @@ add_library(camxiom_core
   src/detail/simd_avx2.cpp
   # compat/ — ROS-free, OpenCV-free K/D <-> CameraModel conversions
   # (canonical interchange through the camxiom::CameraInfo POD).
-  src/pinhole/compat.cpp
-  src/fisheye/compat.cpp
-  src/omnidirectional/compat.cpp
-  src/double_sphere/compat.cpp
-  src/eucm/compat.cpp
   src/compat/factory.cpp
   src/compat/camera_info_export.cpp
-  src/compat/camera_info_yaml.cpp
+  src/compat/camxiom_camera_info.cpp
   src/remap.cpp
   src/remap_rectify.cpp
   src/remap_kernel.cpp
 )
 add_library(camxiom::core ALIAS camxiom_core)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  # The rectify fit's interval arithmetic runs at about half speed when
+  # GCC's straight-line vectorizer (on at -O3) packs it into vector
+  # registers (measured with GCC 11).
+  set_source_files_properties(src/remap_rectify.cpp PROPERTIES
+    COMPILE_OPTIONS -fno-tree-slp-vectorize)
+endif()
 
 target_compile_features(camxiom_core PUBLIC cxx_std_17)
 target_compile_options(camxiom_core PRIVATE ${CAMXIOM_WARNING_OPTIONS})
@@ -436,6 +440,7 @@ if(BUILD_TESTING)
     # sit inside the monotone range (forward/inverse round-trip guard).
     camxiom_add_gtest(camxiom_model_validate_test tests/model_validate_test.cpp)
     camxiom_add_gtest(camxiom_fisheye_domain_test tests/fisheye_domain_test.cpp)
+    camxiom_add_gtest(camxiom_fisheye_law_inverse_test tests/fisheye_law_inverse_test.cpp)
     camxiom_add_gtest(camxiom_model_compare_test tests/model_compare_test.cpp)
     camxiom_add_gtest(camxiom_projection_smoke_test tests/projection_smoke_test.cpp)
     camxiom_add_gtest(camxiom_batch_parity_test tests/batch_parity_test.cpp)
@@ -444,17 +449,21 @@ if(BUILD_TESTING)
     # float and double, scalar and batch.
     camxiom_add_gtest(camxiom_projection_error_paths_test tests/projection_error_paths_test.cpp)
     camxiom_add_gtest(camxiom_projection_template_test tests/projection_template_test.cpp)
-    camxiom_add_gtest(camxiom_camera_info_yaml_test tests/camera_info_yaml_test.cpp)
+    camxiom_add_gtest(camxiom_camera_info_export_test tests/camera_info_export_test.cpp)
     camxiom_add_gtest(camxiom_remap_test tests/remap_test.cpp)
+    # Also drives the rectify fit's internal patch budget (src/remap_rectify.hpp).
+    if(TARGET camxiom_remap_test)
+      target_include_directories(camxiom_remap_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    endif()
     camxiom_add_gtest(camxiom_remap_kernel_test tests/remap_kernel_test.cpp)
     camxiom_add_gtest(camxiom_jacobian_batch_lut_test tests/jacobian_batch_lut_test.cpp)
     # Convenience/umbrella headers (#2). A CORE test so it is built even when
     # CAMXIOM_WITH_CERES is OFF, guarding that core.hpp / calibration.hpp /
     # camxiom.hpp stay include-safe (Ceres-free) in a core-only build.
     camxiom_add_gtest(camxiom_convenience_headers_test tests/convenience_headers_test.cpp)
-    # compat POD interchange (src/compat/*, src/<model>/compat.cpp): CameraInfo
-    # <-> CameraModel and the per-model import/export profile conversions. A CORE
-    # test (Ceres/ROS/OpenCV-free) that guards the library's canonical entry point.
+    # compat POD interchange (src/compat/*): CameraInfo -> CameraModel parsing.
+    # A CORE test (Ceres/ROS/OpenCV-free) that guards the library's canonical
+    # entry point.
     camxiom_add_gtest(camxiom_compat_test tests/compat_test.cpp)
     # ValidatedCameraModel (C1): validated-once immutable wrapper. A CORE test
     # (Ceres/ROS/OpenCV-free) asserting bit-for-bit equivalence with the generic
@@ -466,6 +475,10 @@ if(BUILD_TESTING)
     # projection invariants (project∘unproject ≈ id, FOV-interior status OK,
     # positive-scale invariance, determinism, pixel round-trip).
     camxiom_add_gtest(camxiom_property_test tests/property_test.cpp)
+    # Latitude-longitude projections (equirectangular / cylindrical) as ordinary camera
+    # models: contract (orientation, seam, poles), round trips and parity of
+    # the batch / validated / Jacobian / LUT paths. CORE test.
+    camxiom_add_gtest(camxiom_latlong_projection_test tests/latlong_projection_test.cpp)
 
     # OpenCV interop layer (src/opencv/*). A CORE test (Ceres-free) that is only
     # built when the OpenCV compat layer was compiled in (CAMXIOM_WITH_OPENCV),

@@ -18,17 +18,17 @@
 // Equality / approximate-equality for camera model structs.
 //
 // * operator==  : EXACT field-wise equality of every member, including the
-//   derived auxiliary distortion state (space / count / flags / tilt
-//   matrices). Intended for cache-invalidation checks ("did the model
-//   change at all?"). Standard float semantics apply: any NaN member makes
+//   derived auxiliary distortion state (count / flags / tilt matrices).
+//   Intended for cache-invalidation checks ("did the model change at
+//   all?"). Standard float semantics apply: any NaN member makes
 //   the comparison false.
 // * isApprox    : tolerance-based comparison of the SEMANTIC parameters
 //   (types must match exactly; intrinsics / projection scalars / the
 //   `count` leading distortion coefficients are compared with a combined
-//   absolute+relative tolerance). Derived state (space, aux flags, tilt
-//   matrices) is NOT compared — it is a function of type+coeffs. Intended
-//   for regression comparison of calibration results across
-//   solver/platform noise.
+//   absolute+relative tolerance). Derived state (aux flags, tilt matrices)
+//   is NOT compared — it is a function of type+coeffs. Intended for
+//   regression comparison of calibration results across solver/platform
+//   noise.
 //
 // Header-only templates: apply to both the float aliases (CameraModel, ...)
 // and the double aliases (CameraModel64, ...).
@@ -74,10 +74,10 @@ inline bool operator!=(const ProjectionModelT<T> &a, const ProjectionModelT<T> &
 template <typename T>
 inline bool operator==(const DistortionModelT<T> &a, const DistortionModelT<T> &b)
 {
-  return a.type == b.type && a.space == b.space && a.coeffs == b.coeffs &&
-         a.tilt_matrix == b.tilt_matrix && a.inv_tilt_matrix == b.inv_tilt_matrix &&
-         a.count == b.count && a.is_rational == b.is_rational &&
-         a.has_thin_prism == b.has_thin_prism && a.has_tilt == b.has_tilt;
+  return a.type == b.type && a.coeffs == b.coeffs && a.tilt_matrix == b.tilt_matrix &&
+         a.inv_tilt_matrix == b.inv_tilt_matrix && a.count == b.count &&
+         a.is_rational == b.is_rational && a.has_thin_prism == b.has_thin_prism &&
+         a.has_tilt == b.has_tilt;
 }
 
 template <typename T>

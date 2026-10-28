@@ -75,7 +75,6 @@ CameraModel64 makePinhole64()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = camxiom::constants::kPi / 2.0;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -89,10 +88,9 @@ CameraModel64 makeFisheye64()
   m.intrinsics.fy = 280.0;
   m.intrinsics.cx = 320.0;
   m.intrinsics.cy = 240.0;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = camxiom::constants::kPi - 1e-4;
-  m.distortion.type = DistortionModelType::EQUIDISTANT;
-  m.distortion.space = DistortionSpace::ANGLE;
+  m.distortion.type = DistortionModelType::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -109,7 +107,6 @@ CameraModel64 makeOmni64()
   m.projection.theta_max = camxiom::constants::kPi;
   m.projection.xi = 1.0;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -127,7 +124,6 @@ CameraModel64 makeDoubleSphere64()
   m.projection.xi = 0.5;
   m.projection.alpha = 0.5;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -145,7 +141,6 @@ CameraModel64 makeEucm64()
   m.projection.alpha = 0.6;
   m.projection.beta = 1.1;
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -1105,6 +1100,44 @@ TEST(DltPnp, RejectPixelToRayFailure)
     << "t_out must be unchanged when DEGENERATE_CONFIG is returned";
 }
 
+// The lat-long projections are outside the calibration layer: the linear and
+// the refined pose both refuse them up front, even for points a pose could be
+// fitted to, and leave the outputs untouched.
+TEST(DltPnp, RejectLatLongProjections)
+{
+  for (const auto type : {ProjectionModelType::EQUIRECTANGULAR, ProjectionModelType::CYLINDRICAL})
+  {
+    CameraModel64 model;
+    model.projection.type = type;
+    model.intrinsics.fx = 2048.0 / (2.0 * camxiom::constants::kPi);
+    model.intrinsics.fy = 1024.0 / camxiom::constants::kPi;
+    model.intrinsics.cx = 1023.5;
+    model.intrinsics.cy = 511.5;
+    ASSERT_EQ(camxiom::validateCameraModel64(model), StatusCode::OK);
+
+    std::mt19937 rng(42U);
+    const Eigen::Matrix3Xd world_pts = makeRandomWorld(rng, 8);
+    Eigen::Matrix2Xd pixels(2, 8);
+    for (Eigen::Index i = 0; i < 8; ++i)
+    {
+      const PixelResult64 px = camxiom::rayToPixel64(model, world_pts.col(i));
+      ASSERT_EQ(px.status, StatusCode::OK);
+      pixels(0, i) = px.pixel.u;
+      pixels(1, i) = px.pixel.v;
+    }
+
+    Eigen::Matrix3d R_out = Eigen::Matrix3d::Constant(11.0);
+    Eigen::Vector3d t_out = Eigen::Vector3d::Constant(11.0);
+    EXPECT_EQ(estimatePoseDLT(model, world_pts, pixels, R_out, t_out), StatusCode::INVALID_MODEL);
+    EXPECT_EQ(
+      estimatePoseRefined(camxiom::fromCameraModel64(model), world_pts, pixels, R_out, t_out),
+      StatusCode::INVALID_MODEL
+    );
+    EXPECT_EQ(R_out(0, 0), 11.0);
+    EXPECT_EQ(t_out(0), 11.0);
+  }
+}
+
 // ===========================================================================
 // Extra: N = exactly 6 (minimum) noise-free — boundary of the valid domain.
 //
@@ -1199,7 +1232,6 @@ camxiom::CameraModel makePinholeFloat()
   m.projection.type = ProjectionModelType::PINHOLE;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi / 2.0);
   m.distortion.type = DistortionModelType::NONE;
-  m.distortion.space = DistortionSpace::NONE;
   m.distortion.count = 0U;
   return m;
 }
@@ -1212,10 +1244,9 @@ camxiom::CameraModel makeFisheyeFloat()
   m.intrinsics.fy = 280.0f;
   m.intrinsics.cx = 320.0f;
   m.intrinsics.cy = 240.0f;
-  m.projection.type = ProjectionModelType::FISHEYE_THETA;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
   m.projection.theta_max = static_cast<float>(camxiom::constants::kPi) - 1e-4f;
-  m.distortion.type = DistortionModelType::EQUIDISTANT;
-  m.distortion.space = DistortionSpace::ANGLE;
+  m.distortion.type = DistortionModelType::NONE;
   m.distortion.count = 0U;
   return m;
 }

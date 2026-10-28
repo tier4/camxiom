@@ -24,16 +24,19 @@
 namespace camxiom::detail
 {
 
-StatusCode distortTheta(const DistortionModel &model, const float theta, float &theta_d)
+StatusCode distortTheta(
+  const detail_impl::AngleLaw law, const DistortionModel &model, const float theta, float &theta_d
+)
 {
-  return detail_impl::distortTheta<float>(model, theta, theta_d);
+  return detail_impl::distortTheta<float>(law, model, theta, theta_d);
 }
 
 StatusCode distortThetaDerivative(
-  const DistortionModel &model, const float theta, float &derivative_out
+  const detail_impl::AngleLaw law, const DistortionModel &model, const float theta,
+  float &derivative_out
 )
 {
-  return detail_impl::distortThetaDerivative<float>(model, theta, derivative_out);
+  return detail_impl::distortThetaDerivative<float>(law, model, theta, derivative_out);
 }
 
 StatusCode undistortThetaHybrid(
