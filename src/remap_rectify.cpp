@@ -488,7 +488,8 @@ bool oneSignChange(const Poly &coeffs, const double error)
 /// simple root (its coefficients change sign once) is narrowed by
 /// bisection on the sign of p, which certifies the same way.
 std::optional<double> firstNotPositive(
-  const Poly &p, const double a, const double b, const double tol, const bool from_right
+  const Poly &p, const double a, const double b, const double tol, const bool from_right,
+  const bool refine_root
 )
 {
   std::vector<std::pair<double, double>> stack{{a, b}};
@@ -510,6 +511,10 @@ std::optional<double> firstNotPositive(
     }
     if (oneSignChange(coeffs, error))
     {
+      if (!refine_root)
+      {
+        return from_right ? hi : lo;
+      }
       // p is positive from the near end up to the root and negative past it.
       while (hi - lo > tol)
       {
@@ -547,7 +552,11 @@ std::optional<double> firstNotPositive(
 /// below it. Beyond 1 the search runs on the reversed polynomial
 /// u^n p(1 / u) (same sign for u > 0), so every Bernstein expansion stays
 /// on a sub-interval of [0, 1].
-std::optional<double> firstNotPositiveIn(Poly p, const double t0, const double t1)
+// With refine_root=false only the presence of a result is meaningful:
+// a certified sign change already disproves positivity over the interval.
+std::optional<double> firstNotPositiveIn(
+  Poly p, const double t0, const double t1, const bool refine_root = true
+)
 {
   while (p.size() > 1 && p.back() == 0.0)
   {
@@ -560,7 +569,7 @@ std::optional<double> firstNotPositiveIn(Poly p, const double t0, const double t
   constexpr double kTol = 1e-12;
   if (t0 < 1.0)
   {
-    if (const auto t = firstNotPositive(p, t0, std::min(t1, 1.0), kTol, false))
+    if (const auto t = firstNotPositive(p, t0, std::min(t1, 1.0), kTol, false, refine_root))
     {
       return t;
     }
@@ -572,7 +581,7 @@ std::optional<double> firstNotPositiveIn(Poly p, const double t0, const double t
   const Poly reversed(p.rbegin(), p.rend());
   // t in [max(t0, 1), t1] is u = 1 / t in [1 / t1, 1 / max(t0, 1)]; the
   // first t is the largest u.
-  if (const auto u = firstNotPositive(reversed, 1.0 / t1, 1.0 / std::max(t0, 1.0), kTol, true))
+  if (const auto u = firstNotPositive(reversed, 1.0 / t1, 1.0 / std::max(t0, 1.0), kTol, true, refine_root))
   {
     return 1.0 / *u;
   }
@@ -1499,6 +1508,10 @@ private:
     {
       return Tri::MAYBE;
     }
+    if (const auto cached = cachedPlaneValidity(r, b0, b1))
+    {
+      return *cached;
+    }
     // Bounds over the patch's azimuths: the conditions along its middle
     // azimuth, minus or plus half its width times a bound on their change
     // with the azimuth.
@@ -1507,20 +1520,101 @@ private:
     const double s = std::sin(b0 + half);
     const Poly det = det_.along(c, s);
     const Poly det_slack = det_slack_ * half;
-    bool positive = r.hi < denominator_end_ && !firstNotPositiveIn(det - det_slack, 0.0, r.hi);
-    double end = certifiedEnd(det + det_slack);
+    const Poly det_upper = det + det_slack;
+    // A certified negative upper bound at the near radius proves that
+    // every direction has already left its positive prefix. Its exact
+    // first root is irrelevant for this patch.
+    if (certainSign(det_upper, r.lo) < 0)
+    {
+      return Tri::NO;
+    }
+    const Poly det_lower = det - det_slack;
+    bool positive = r.hi < denominator_end_ && certainSign(det_lower, r.hi) >= 0 &&
+                    !firstNotPositiveIn(det_lower, 0.0, r.hi, false);
+    Poly tilt;
+    Poly tilt_slack;
+    Poly tilt_upper;
     if (tilt_)
     {
-      const Poly tilt = tilt_->along(c, s);
-      const Poly tilt_slack = tilt_slack_ * half;
-      positive = positive && !firstNotPositiveIn(tilt - tilt_slack, 0.0, r.hi);
-      end = std::min(end, certifiedEnd(tilt + tilt_slack));
+      tilt = tilt_->along(c, s);
+      tilt_slack = tilt_slack_ * half;
+      tilt_upper = tilt + tilt_slack;
+      if (certainSign(tilt_upper, r.lo) < 0)
+      {
+        return Tri::NO;
+      }
+      const Poly tilt_lower = tilt - tilt_slack;
+      positive = positive && certainSign(tilt_lower, r.hi) >= 0 &&
+                 !firstNotPositiveIn(tilt_lower, 0.0, r.hi, false);
     }
     if (positive)
     {
       return Tri::YES;
     }
+    double end = certifiedEnd(det_upper);
+    if (tilt_)
+    {
+      end = std::min(end, certifiedEnd(tilt_upper));
+    }
     return end <= r.lo ? Tri::NO : Tri::MAYBE;
+  }
+
+  // Neighbouring search patches repeatedly ask about the same directional
+  // fold. Certify a covering angular sector once; only ambiguous radii
+  // need the narrower patch's bounds above. These bounds belong to this
+  // Source (one fit), so no model-dependent state survives a parameter edit.
+  struct PlaneValidityBounds
+  {
+    bool ready{false};
+    double positive{0.0};
+    double negative{std::numeric_limits<double>::infinity()};
+  };
+
+  std::optional<Tri> cachedPlaneValidity(const Interval r, const double b0, const double b1) const
+  {
+    constexpr int bins = 128;
+    constexpr double step = 2.0 * constants::kPi / bins;
+    const int bin = static_cast<int>(std::round(0.5 * (b0 + b1) / step));
+    const double centre = bin * step;
+    if (bin < -bins || bin >= 2 * bins || b0 < centre - step || b1 > centre + step)
+    {
+      return std::nullopt;
+    }
+    if (plane_validity_bounds_.empty())
+    {
+      plane_validity_bounds_.resize(3 * bins);
+    }
+    auto &bounds = plane_validity_bounds_[static_cast<std::size_t>(bin + bins)];
+    if (!bounds.ready)
+    {
+      const double c = std::cos(centre);
+      const double s = std::sin(centre);
+      const Poly det = det_.along(c, s);
+      const Poly slack = det_slack_ * step;
+      bounds.positive = std::min(
+        denominator_end_, positiveUpTo(det - slack, std::numeric_limits<double>::infinity())
+      );
+      bounds.negative = certifiedEnd(det + slack);
+      if (tilt_)
+      {
+        const Poly tilt = tilt_->along(c, s);
+        const Poly tilt_slack = tilt_slack_ * step;
+        bounds.positive = std::min(
+          bounds.positive, positiveUpTo(tilt - tilt_slack, std::numeric_limits<double>::infinity())
+        );
+        bounds.negative = std::min(bounds.negative, certifiedEnd(tilt + tilt_slack));
+      }
+      bounds.ready = true;
+    }
+    if (r.hi < bounds.positive)
+    {
+      return Tri::YES;
+    }
+    if (r.lo >= bounds.negative)
+    {
+      return Tri::NO;
+    }
+    return std::nullopt;
   }
 
   /// The plane correction over a patch of undistorted points (xn, yn) with
@@ -1901,6 +1995,7 @@ private:
   std::optional<Poly2> tilt_;
   Poly det_slack_;
   Poly tilt_slack_;
+  mutable std::vector<PlaneValidityBounds> plane_validity_bounds_;
 };
 
 // ===========================================================================
