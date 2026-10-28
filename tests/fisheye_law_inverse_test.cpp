@@ -1,0 +1,252 @@
+// Copyright 2026 TIER IV, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// The ideal fisheye laws (equidistant, equisolid, stereographic, orthographic
+// with no lens correction) unproject in closed form. These tests pin the law
+// each inverse undoes, the statuses at the edges of the field of view, and
+// the batch path against the scalar one.
+
+#include <camxiom/batch.hpp>
+#include <camxiom/internal/constants.hpp>
+#include <camxiom/model.hpp>
+#include <camxiom/projection.hpp>
+#include <camxiom/projection64.hpp>
+#include <camxiom/types.hpp>
+#include <camxiom/types64.hpp>
+
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <vector>
+
+namespace
+{
+using namespace camxiom;
+
+constexpr double kPi = constants::kPi;
+
+const ProjectionModelType kLaws[] = {
+  ProjectionModelType::EQUIDISTANT, ProjectionModelType::EQUISOLID,
+  ProjectionModelType::STEREOGRAPHIC, ProjectionModelType::ORTHOGRAPHIC};
+
+// Image-plane radius of a ray theta off the axis, computed independently of
+// the library so a wrong scale in either direction shows up.
+double lawRadius(const ProjectionModelType law, const double theta)
+{
+  switch (law)
+  {
+    case ProjectionModelType::EQUISOLID:
+      return 2.0 * std::sin(theta / 2.0);
+    case ProjectionModelType::STEREOGRAPHIC:
+      return 2.0 * std::tan(theta / 2.0);
+    case ProjectionModelType::ORTHOGRAPHIC:
+      return std::sin(theta);
+    default:
+      return theta;
+  }
+}
+
+CameraModel lawModel(const ProjectionModelType law)
+{
+  CameraModel m;
+  m.projection.type = law;
+  m.intrinsics.fx = 300.0f;
+  m.intrinsics.fy = 280.0f;
+  m.intrinsics.cx = 639.5f;
+  m.intrinsics.cy = 479.5f;
+  updateThetaMax(m);
+  return m;
+}
+
+// Pixel at image-plane radius r along azimuth phi (no skew in lawModel).
+template <typename Model>
+auto pixelAt(const Model &m, const double r, const double phi)
+{
+  using T = decltype(m.intrinsics.fx);
+  return Pixel2T<T>{
+    static_cast<T>(m.intrinsics.cx + m.intrinsics.fx * r * std::cos(phi)),
+    static_cast<T>(m.intrinsics.cy + m.intrinsics.fy * r * std::sin(phi))};
+}
+
+double offAxisAngle(const Eigen::Vector3d &d) { return std::atan2(d.head<2>().norm(), d.z()); }
+
+}  // namespace
+
+// Known points of each law: the inverse returns the angle the law maps to
+// that radius (e.g. stereographic 2 tan(theta / 2) = 2 at theta = pi / 2).
+TEST(FisheyeLawInverse, UndoesEachLawAtKnownPoints)
+{
+  struct Point
+  {
+    ProjectionModelType law;
+    double radius;
+    double theta;
+  };
+  const Point points[] = {
+    {ProjectionModelType::EQUIDISTANT, 1.0, 1.0},
+    {ProjectionModelType::EQUISOLID, std::sqrt(2.0), kPi / 2.0},
+    {ProjectionModelType::STEREOGRAPHIC, 2.0, kPi / 2.0},
+    {ProjectionModelType::ORTHOGRAPHIC, 0.5, kPi / 6.0}};
+  for (const Point &p : points)
+  {
+    const CameraModel64 m = toCameraModel64(lawModel(p.law));
+    const RayResult64 ray = pixelToRay64(m, pixelAt(m, p.radius, 0.3));
+    ASSERT_EQ(ray.status, StatusCode::OK) << toString(p.law);
+    EXPECT_NEAR(offAxisAngle(ray.ray.direction), p.theta, 1e-12) << toString(p.law);
+    EXPECT_NEAR(std::atan2(ray.ray.direction.y(), ray.ray.direction.x()), 0.3, 1e-12);
+  }
+}
+
+// Over the whole field of view, in both precisions, the inverse recovers the
+// angle of the ray the law maps to that radius.
+TEST(FisheyeLawInverse, RecoversTheAngleAcrossTheField)
+{
+  for (const auto law : kLaws)
+  {
+    const CameraModel mf = lawModel(law);
+    const CameraModel64 md = toCameraModel64(mf);
+    const double cap = md.projection.theta_max;
+    for (int i = 0; i < 400; ++i)
+    {
+      const double theta = cap * i / 400.0;
+      const double phi = 0.017 * i;
+      const RayResult64 rd = pixelToRay64(md, pixelAt(md, lawRadius(law, theta), phi));
+      ASSERT_EQ(rd.status, StatusCode::OK) << toString(law) << " theta " << theta;
+      EXPECT_NEAR(offAxisAngle(rd.ray.direction), theta, 1e-9) << toString(law) << " " << theta;
+
+      // float: the law's slope vanishes at the equisolid and orthographic
+      // caps, where a float radius only fixes the angle to ~sqrt(eps); a
+      // float direction resolves angles only to a few 1e-8 anywhere.
+      const double slope = std::abs(lawRadius(law, theta + 1e-6) - lawRadius(law, theta)) / 1e-6;
+      const RayResult rf = pixelToRay(mf, pixelAt(mf, lawRadius(law, theta), phi));
+      if (rf.status != StatusCode::OK)
+      {
+        // Only the last float steps at the cap may round past it.
+        EXPECT_EQ(rf.status, StatusCode::OUT_OF_FOV) << toString(law) << " " << theta;
+        EXPECT_GT(theta, cap - 1e-3) << toString(law);
+        continue;
+      }
+      const double tolerance = slope > 0.05 ? std::max(2e-5 / slope, 3e-7) : 2e-3;
+      EXPECT_NEAR(offAxisAngle(rf.ray.direction.cast<double>()), theta, tolerance)
+        << toString(law) << " theta " << theta;
+    }
+  }
+}
+
+// Stereographic rays past about 2 rad used to come back NON_CONVERGED from
+// the iterative solve; the closed form answers them like any other ray.
+TEST(FisheyeLawInverse, StereographicAnswersWideRays)
+{
+  const CameraModel mf = lawModel(ProjectionModelType::STEREOGRAPHIC);
+  const CameraModel64 md = toCameraModel64(mf);
+  for (const double theta : {2.0, 2.1, 2.2, 2.5, 3.0})
+  {
+    const RayResult64 rd = pixelToRay64(md, pixelAt(md, lawRadius(md.projection.type, theta), 1.0));
+    ASSERT_EQ(rd.status, StatusCode::OK) << theta;
+    EXPECT_NEAR(offAxisAngle(rd.ray.direction), theta, 1e-9);
+    const RayResult rf = pixelToRay(mf, pixelAt(mf, lawRadius(mf.projection.type, theta), 1.0));
+    ASSERT_EQ(rf.status, StatusCode::OK) << theta;
+    EXPECT_NEAR(offAxisAngle(rf.ray.direction.cast<double>()), theta, 1e-5);
+  }
+}
+
+// The field of view ends where it did with the iterative solve: radii past
+// the law's value at theta_max are OUT_OF_FOV, the centre is the axis, and
+// non-finite pixels are invalid input.
+TEST(FisheyeLawInverse, KeepsTheEdgeStatuses)
+{
+  for (const auto law : kLaws)
+  {
+    for (const double cap : {1.2, -1.0})
+    {
+      CameraModel64 m = toCameraModel64(lawModel(law));
+      if (cap > 0.0)
+      {
+        m.projection.theta_max = cap;
+      }
+      const double edge = lawRadius(law, m.projection.theta_max);
+      const RayResult64 inside = pixelToRay64(m, pixelAt(m, edge * (1.0 - 1e-9), 0.5));
+      ASSERT_EQ(inside.status, StatusCode::OK) << toString(law);
+      EXPECT_LE(offAxisAngle(inside.ray.direction), m.projection.theta_max + 1e-12);
+      EXPECT_EQ(
+        pixelToRay64(m, pixelAt(m, edge * (1.0 + 1e-6), 0.5)).status, StatusCode::OUT_OF_FOV
+      ) << toString(law);
+      EXPECT_EQ(pixelToRay64(m, pixelAt(m, edge + 1.0, 0.5)).status, StatusCode::OUT_OF_FOV)
+        << toString(law);
+    }
+
+    const CameraModel64 m = toCameraModel64(lawModel(law));
+    const RayResult64 centre = pixelToRay64(m, Pixel2d{m.intrinsics.cx, m.intrinsics.cy});
+    ASSERT_EQ(centre.status, StatusCode::OK);
+    EXPECT_EQ(centre.ray.direction, Eigen::Vector3d(0.0, 0.0, 1.0));
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_EQ(pixelToRay64(m, Pixel2d{nan, 1.0}).status, StatusCode::INVALID_INPUT);
+    const CameraModel mf = lawModel(law);
+    EXPECT_EQ(
+      pixelToRay(mf, Pixel2{std::numeric_limits<float>::quiet_NaN(), 1.0f}).status,
+      StatusCode::INVALID_INPUT
+    );
+  }
+
+  // The equisolid circle (radius 2) and the orthographic disc (radius 1).
+  const CameraModel64 equisolid = toCameraModel64(lawModel(ProjectionModelType::EQUISOLID));
+  EXPECT_EQ(
+    pixelToRay64(equisolid, pixelAt(equisolid, 2.0001, 0.0)).status, StatusCode::OUT_OF_FOV
+  );
+  const CameraModel64 ortho = toCameraModel64(lawModel(ProjectionModelType::ORTHOGRAPHIC));
+  const double rim_radius = lawRadius(ortho.projection.type, ortho.projection.theta_max);
+  const RayResult64 rim = pixelToRay64(ortho, pixelAt(ortho, rim_radius * (1.0 - 1e-12), 0.0));
+  ASSERT_EQ(rim.status, StatusCode::OK);
+  EXPECT_NEAR(offAxisAngle(rim.ray.direction), ortho.projection.theta_max, 1e-5);
+  EXPECT_EQ(pixelToRay64(ortho, pixelAt(ortho, 1.0001, 0.0)).status, StatusCode::OUT_OF_FOV);
+}
+
+// The batch path gives the scalar answer for every law, including pixels at
+// and past the edge of the field of view.
+TEST(FisheyeLawInverse, BatchMatchesScalar)
+{
+  for (const auto law : kLaws)
+  {
+    const CameraModel m = lawModel(law);
+    std::vector<float> u;
+    std::vector<float> v;
+    for (int j = -40; j < 1000; j += 13)
+    {
+      for (int i = -40; i < 1320; i += 11)
+      {
+        u.push_back(static_cast<float>(i) + 0.25f);
+        v.push_back(static_cast<float>(j) + 0.5f);
+      }
+    }
+    const int count = static_cast<int>(u.size());
+    std::vector<float> dirs(3 * u.size());
+    std::vector<StatusCode> statuses(u.size());
+    (void)pixelToRayBatch(m, u.data(), v.data(), count, dirs.data(), statuses.data());
+    for (int i = 0; i < count; ++i)
+    {
+      const RayResult scalar = pixelToRay(m, Pixel2{u[i], v[i]});
+      ASSERT_EQ(statuses[i], scalar.status) << toString(law) << " (" << u[i] << ", " << v[i] << ")";
+      if (scalar.status == StatusCode::OK)
+      {
+        for (int k = 0; k < 3; ++k)
+        {
+          EXPECT_NEAR(dirs[3 * i + k], scalar.ray.direction[k], 2e-5f)
+            << toString(law) << " (" << u[i] << ", " << v[i] << ")";
+        }
+      }
+    }
+  }
+}

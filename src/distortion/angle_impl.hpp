@@ -28,7 +28,8 @@
 // bisection fallback and a step-tolerance re-verify. Git history shows the
 // previous float and double versions were authored together (commit d375cfd)
 // and never tuned separately, so the divergence was unintentional rather than a
-// deliberate speed/precision trade-off.
+// deliberate speed/precision trade-off. Only the KB polynomials need it: the
+// ideal laws invert in closed form (invertIdealAngleLaw).
 
 #include "camxiom/internal/angle_law.hpp"
 #include "camxiom/internal/constants.hpp"
@@ -170,9 +171,55 @@ inline StatusCode distortThetaDerivative(
   return StatusCode::OK;
 }
 
+// Closed-form inverse of an ideal law (no KB correction) for radius_d > 0 and
+// a usable theta_max. It keeps the bracketed solve's OUT_OF_FOV test: no angle
+// in [0, theta_max] reaches a radius past the law's value at theta_max.
+template <typename T>
+inline StatusCode invertIdealAngleLaw(
+  const AngleLaw law, const DistortionModelT<T> &model, const T theta_max, const T radius_d,
+  T &theta_out
+)
+{
+  T radius_at_cap = T(0);
+  const StatusCode status = distortTheta<T>(law, model, theta_max, radius_at_cap);
+  if (status != StatusCode::OK)
+  {
+    return status;
+  }
+  if (radius_at_cap - radius_d < T(0))
+  {
+    return StatusCode::OUT_OF_FOV;
+  }
+
+  T theta = radius_d;  // EQUIDISTANT: theta_d = theta
+  switch (law)
+  {
+    case AngleLaw::EQUISOLID:  // theta_d = 2 sin(theta / 2)
+      theta = T(2) * std::asin(radius_d * T(0.5));
+      break;
+    case AngleLaw::STEREOGRAPHIC:  // theta_d = 2 tan(theta / 2)
+      theta = T(2) * std::atan(radius_d * T(0.5));
+      break;
+    case AngleLaw::ORTHOGRAPHIC:  // theta_d = sin(theta)
+      theta = std::asin(radius_d);
+      break;
+    default:
+      break;
+  }
+  if (!std::isfinite(theta))
+  {
+    return StatusCode::NUMERIC_ERROR;
+  }
+  // radius_d is at most the law's value at theta_max, so theta exceeds
+  // theta_max only by the rounding of the inverse; keep a pixel on the cap in.
+  theta_out = std::min(theta, theta_max);
+  return StatusCode::OK;
+}
+
 // Inverse theta solve: bracketed Newton with bisection fallback (the historical
 // float algorithm), now shared by both precisions. kEpsilon is per-type via
 // PlaneTraits<T> (float 1e-8, double 1e-15), matching the previous thresholds.
+// The ideal laws skip the iteration and invert in closed form.
 template <typename T>
 inline StatusCode undistortThetaHybrid(
   const DistortionModelT<T> &model, const ProjectionModelT<T> &projection, const T radius_d,
@@ -200,6 +247,10 @@ inline StatusCode undistortThetaHybrid(
     return StatusCode::INVALID_MODEL;
   }
   const AngleLaw law = angleLawOf(projection.type, model.type);
+  if (law == AngleLaw::EQUIDISTANT || law == AngleLaw::EQUISOLID || law == AngleLaw::STEREOGRAPHIC || law == AngleLaw::ORTHOGRAPHIC)
+  {
+    return invertIdealAngleLaw<T>(law, model, theta_max, radius_d, theta_out);
+  }
 
   T f_min = T(0);
   StatusCode status = distortTheta<T>(law, model, theta_min, f_min);
