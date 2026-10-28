@@ -42,6 +42,7 @@
 // All tests are deterministic (std::mt19937 seed 42). No rand().
 
 #include "camxiom/calib/intrinsics.hpp"
+#include "camxiom/compat.hpp"
 #include "camxiom/default_seed.hpp"
 #include "camxiom/init/dlt_pnp.hpp"
 #include "camxiom/internal/constants.hpp"
@@ -60,6 +61,7 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -853,6 +855,59 @@ TEST(CalibIntrinsics, NoisyRecoveryEUCM)
   EXPECT_LT(fx_rel_err, 0.02) << "EUCM sigma=0.3: fx relative error = " << fx_rel_err
                               << " exceeds 2% (recovered fx=" << res.camera_model.intrinsics.fx
                               << ")";
+}
+
+// ===========================================================================
+// Section B2: plane-distortion terms seeded at zero.
+//
+// A seed usually starts every distortion coefficient at zero. The prism and
+// tilt terms must still be estimated from there: their derivatives cannot
+// vanish just because their current values are zero.
+// ===========================================================================
+
+TEST(CalibIntrinsics, PrismAndTiltTermsLeaveAZeroSeed)
+{
+  const std::vector<double> prism = {-0.1, 0.02, 0.0005, -0.0004, 0.0,   0.0,
+                                     0.0,  0.0,  0.004,  -0.002,  0.003, 0.001};
+  std::vector<double> tilt = prism;
+  tilt.push_back(0.01);
+  tilt.push_back(-0.008);
+
+  const std::vector<std::pair<std::string, std::vector<double>>> cases = {
+    {"thin_prism_fisheye", prism}, {"tilted", tilt}};
+  for (const auto &[name, coeffs] : cases)
+  {
+    SCOPED_TRACE(name);
+    CameraInfo info;
+    info.width = 640;
+    info.height = 480;
+    info.k = {500.0, 0.0, 320.0, 0.0, 500.0, 240.0, 0.0, 0.0, 1.0};
+    info.distortion_model = name;
+    info.d = coeffs;
+    const CameraModel64 gt_model = makeCameraModel64(info);
+    ASSERT_EQ(validateCameraModel64(gt_model), StatusCode::OK);
+
+    info.k = {480.0, 0.0, 320.0, 0.0, 480.0, 240.0, 0.0, 0.0, 1.0};
+    info.d.assign(coeffs.size(), 0.0);
+    const CameraModel64 seed = makeCameraModel64(info);
+    ASSERT_EQ(validateCameraModel64(seed), StatusCode::OK);
+
+    const auto world_pts = makeCheckerboard3D(8, 6, 0.05);
+    std::mt19937 rng(7U);
+    const auto views = makeCanonicalViews(gt_model, world_pts, 0.0, &rng);
+    ASSERT_FALSE(views.empty()) << "View setup failed";
+
+    // The rational denominator (k4..k6) trades off against k1..k3 on noise-free
+    // planar data; hold it at its true value (zero) so the rest is identifiable.
+    const PnpFlag lock = PnpFlag::FIX_DIST_5 | PnpFlag::FIX_DIST_6 | PnpFlag::FIX_DIST_7;
+    const auto res = camxiom::calib::calibrate64(views, seed, lock, makeDefaultOptions());
+    ASSERT_EQ(res.status, StatusCode::OK);
+    EXPECT_LT(res.rms_reprojection_error_px, 1e-3);
+    for (std::size_t i = 8; i < coeffs.size(); ++i)
+    {
+      EXPECT_NEAR(res.camera_model.distortion.coeffs[i], coeffs[i], 1e-4) << "coefficient " << i;
+    }
+  }
 }
 
 // ===========================================================================
