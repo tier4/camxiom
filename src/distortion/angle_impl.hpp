@@ -44,19 +44,26 @@ namespace camxiom::detail_impl
 {
 
 // `law` selects the radial function (see internal/angle_law.hpp); `model`
-// supplies the KB coefficients when the law has them.
-template <typename T>
-inline StatusCode distortTheta(
-  const AngleLaw law, const DistortionModelT<T> &model, const T theta, T &theta_d
-)
+// supplies the KB coefficients when the law has them. CheckTheta may be
+// false only where the caller already guarantees a finite, nonnegative theta;
+// output finiteness is always checked.
+template <typename T, bool CheckTheta = true>
+#if defined(__GNUC__) || defined(__clang__)
+[[gnu::always_inline]]
+#endif
+inline StatusCode
+distortTheta(const AngleLaw law, const DistortionModelT<T> &model, const T theta, T &theta_d)
 {
-  if (!std::isfinite(theta))
+  if constexpr (CheckTheta)
   {
-    return StatusCode::INVALID_INPUT;
-  }
-  if (theta < T(0))
-  {
-    return StatusCode::DOMAIN_ERROR;
+    if (!std::isfinite(theta))
+    {
+      return StatusCode::INVALID_INPUT;
+    }
+    if (theta < T(0))
+    {
+      return StatusCode::DOMAIN_ERROR;
+    }
   }
 
   switch (law)
@@ -109,14 +116,21 @@ inline StatusCode distortTheta(
   return StatusCode::OK;
 }
 
-template <typename T>
-inline StatusCode distortThetaDerivative(
+template <typename T, bool CheckTheta = true>
+#if defined(__GNUC__) || defined(__clang__)
+[[gnu::always_inline]]
+#endif
+inline StatusCode
+distortThetaDerivative(
   const AngleLaw law, const DistortionModelT<T> &model, const T theta, T &derivative_out
 )
 {
-  if (!std::isfinite(theta) || theta < T(0))
+  if constexpr (CheckTheta)
   {
-    return StatusCode::INVALID_INPUT;
+    if (!std::isfinite(theta) || theta < T(0))
+    {
+      return StatusCode::INVALID_INPUT;
+    }
   }
 
   switch (law)
@@ -220,40 +234,19 @@ inline StatusCode invertIdealAngleLaw(
 // float algorithm), now shared by both precisions. kEpsilon is per-type via
 // PlaneTraits<T> (float 1e-8, double 1e-15), matching the previous thresholds.
 // The ideal laws skip the iteration and invert in closed form.
-template <typename T>
-inline StatusCode undistortThetaHybrid(
+// Dispatch the polynomial degree before entering Newton's loop, so each
+// iteration only evaluates the selected law. The wrapper checks radius/cap;
+// the clamp and safeguarded Newton step keep theta finite and nonnegative.
+template <typename T, AngleLaw law>
+inline StatusCode undistortThetaPolynomial(
   const DistortionModelT<T> &model, const ProjectionModelT<T> &projection, const T radius_d,
   const int max_iterations, const T residual_tolerance, const T step_tolerance, T &theta_out
 )
 {
-  if (!std::isfinite(radius_d))
-  {
-    return StatusCode::INVALID_INPUT;
-  }
-  if (radius_d < T(0))
-  {
-    return StatusCode::DOMAIN_ERROR;
-  }
-  if (radius_d <= PlaneTraits<T>::kEpsilon)
-  {
-    theta_out = T(0);
-    return StatusCode::OK;
-  }
-
   T theta_min = T(0);
   T theta_max = projection.theta_max;
-  if (!std::isfinite(theta_max) || theta_max <= T(0))
-  {
-    return StatusCode::INVALID_MODEL;
-  }
-  const AngleLaw law = angleLawOf(projection.type, model.type);
-  if (law == AngleLaw::EQUIDISTANT || law == AngleLaw::EQUISOLID || law == AngleLaw::STEREOGRAPHIC || law == AngleLaw::ORTHOGRAPHIC)
-  {
-    return invertIdealAngleLaw<T>(law, model, theta_max, radius_d, theta_out);
-  }
-
   T f_min = T(0);
-  StatusCode status = distortTheta<T>(law, model, theta_min, f_min);
+  StatusCode status = distortTheta<T, false>(law, model, theta_min, f_min);
   if (status != StatusCode::OK)
   {
     return status;
@@ -261,7 +254,7 @@ inline StatusCode undistortThetaHybrid(
   f_min -= radius_d;
 
   T f_max = T(0);
-  status = distortTheta<T>(law, model, theta_max, f_max);
+  status = distortTheta<T, false>(law, model, theta_max, f_max);
   if (status != StatusCode::OK)
   {
     return status;
@@ -278,7 +271,7 @@ inline StatusCode undistortThetaHybrid(
   for (int iter = 0; iter < max_iter; ++iter)
   {
     T theta_d = T(0);
-    status = distortTheta<T>(law, model, theta, theta_d);
+    status = distortTheta<T, false>(law, model, theta, theta_d);
     if (status != StatusCode::OK)
     {
       return status;
@@ -302,7 +295,7 @@ inline StatusCode undistortThetaHybrid(
     }
 
     T derivative = T(0);
-    status = distortThetaDerivative<T>(law, model, theta, derivative);
+    status = distortThetaDerivative<T, false>(law, model, theta, derivative);
     if (status != StatusCode::OK)
     {
       return status;
@@ -327,7 +320,7 @@ inline StatusCode undistortThetaHybrid(
     if (step <= step_tolerance)
     {
       T theta_d_check = T(0);
-      status = distortTheta<T>(law, model, theta, theta_d_check);
+      status = distortTheta<T, false>(law, model, theta, theta_d_check);
       if (status != StatusCode::OK)
       {
         return status;
@@ -342,6 +335,52 @@ inline StatusCode undistortThetaHybrid(
 
   theta_out = std::clamp(theta, T(0), projection.theta_max);
   return StatusCode::NON_CONVERGED;
+}
+
+template <typename T>
+inline StatusCode undistortThetaHybrid(
+  const DistortionModelT<T> &model, const ProjectionModelT<T> &projection, const T radius_d,
+  const int max_iterations, const T residual_tolerance, const T step_tolerance, T &theta_out
+)
+{
+  if (!std::isfinite(radius_d))
+  {
+    return StatusCode::INVALID_INPUT;
+  }
+  if (radius_d < T(0))
+  {
+    return StatusCode::DOMAIN_ERROR;
+  }
+  if (radius_d <= PlaneTraits<T>::kEpsilon)
+  {
+    theta_out = T(0);
+    return StatusCode::OK;
+  }
+
+  T theta_max = projection.theta_max;
+  if (!std::isfinite(theta_max) || theta_max <= T(0))
+  {
+    return StatusCode::INVALID_MODEL;
+  }
+  if (projection.type == ProjectionModelType::EQUIDISTANT && model.type == DistortionModelType::KB4)
+  {
+    return undistortThetaPolynomial<T, AngleLaw::KB4>(
+      model, projection, radius_d, max_iterations, residual_tolerance, step_tolerance, theta_out
+    );
+  }
+  const AngleLaw law = angleLawOf(projection.type, model.type);
+  if (law == AngleLaw::EQUIDISTANT || law == AngleLaw::EQUISOLID || law == AngleLaw::STEREOGRAPHIC || law == AngleLaw::ORTHOGRAPHIC)
+  {
+    return invertIdealAngleLaw<T>(law, model, theta_max, radius_d, theta_out);
+  }
+
+  if (law == AngleLaw::KB8)
+  {
+    return undistortThetaPolynomial<T, AngleLaw::KB8>(
+      model, projection, radius_d, max_iterations, residual_tolerance, step_tolerance, theta_out
+    );
+  }
+  return StatusCode::INVALID_MODEL;
 }
 
 // ---------------------------------------------------------------------------
@@ -393,13 +432,13 @@ struct PolynomialFisheyeDomain
 
 /// Sample the positive monotone prefix and retain why/where the scan stops.
 /// Sub-grid folds are not certified; theta_limit is not an exact root.
-template <typename T>
-inline PolynomialFisheyeDomain<T> scanPolynomialFisheyeDomain(const DistortionModelT<T> &model)
+template <typename T, AngleLaw law>
+inline PolynomialFisheyeDomain<T> scanPolynomialFisheyeDomainForLaw(const DistortionModelT<T> &model
+)
 {
   constexpr T theta_start = fisheyeThetaScanStart<T>();
   constexpr T theta_cap = fisheyeThetaScanCap<T>();
-  // The KB corrections only exist on top of the equidistant law.
-  const AngleLaw law = angleLawOf(ProjectionModelType::EQUIDISTANT, model.type);
+  // Every sample is finite and positive by construction.
 
   PolynomialFisheyeDomain<T> result;
   // Validate the starting sample too: blindly returning theta_start used to
@@ -411,7 +450,7 @@ inline PolynomialFisheyeDomain<T> scanPolynomialFisheyeDomain(const DistortionMo
     result.theta_limit = theta;
 
     T theta_d = T(0);
-    result.limit_status = distortTheta<T>(law, model, theta, theta_d);
+    result.limit_status = distortTheta<T, false>(law, model, theta, theta_d);
     if (result.limit_status != StatusCode::OK)
     {
       return result;
@@ -423,7 +462,7 @@ inline PolynomialFisheyeDomain<T> scanPolynomialFisheyeDomain(const DistortionMo
     }
 
     T derivative = T(0);
-    result.limit_status = distortThetaDerivative<T>(law, model, theta, derivative);
+    result.limit_status = distortThetaDerivative<T, false>(law, model, theta, derivative);
     if (result.limit_status != StatusCode::OK)
     {
       return result;
@@ -438,6 +477,24 @@ inline PolynomialFisheyeDomain<T> scanPolynomialFisheyeDomain(const DistortionMo
   }
 
   return result;
+}
+
+// Keep model dispatch outside the 513-sample scan. This also lets the
+// compiler hoist coefficient work out of the loop for each KB degree.
+template <typename T>
+inline PolynomialFisheyeDomain<T> scanPolynomialFisheyeDomain(const DistortionModelT<T> &model)
+{
+  switch (model.type)
+  {
+    case DistortionModelType::KB4:
+      return scanPolynomialFisheyeDomainForLaw<T, AngleLaw::KB4>(model);
+    case DistortionModelType::KB8:
+      return scanPolynomialFisheyeDomainForLaw<T, AngleLaw::KB8>(model);
+    case DistortionModelType::NONE:
+      return scanPolynomialFisheyeDomainForLaw<T, AngleLaw::EQUIDISTANT>(model);
+    default:
+      return scanPolynomialFisheyeDomainForLaw<T, AngleLaw::INVALID>(model);
+  }
 }
 
 /// Last usable sample (~pi/512 rad resolution), or zero if none was found.
