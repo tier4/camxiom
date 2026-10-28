@@ -185,7 +185,10 @@ private:
 );
 
 /// Undistort pixel coordinates to normalized image coordinates.
-/// @return Number of successfully undistorted points, or -1 on invalid input/model.
+/// @return Number of successfully undistorted points, or -1 on invalid
+/// input/model. The lat-long projections (EQUIRECTANGULAR, CYLINDRICAL)
+/// return -1: their rays span both sides of the camera, which the
+/// normalized image plane (x/z, y/z) cannot tell apart.
 [[nodiscard]] int undistortPoints(
   const CameraModel &model, const std::vector<cv::Point2f> &src_points,
   std::vector<cv::Point2f> &dst_points_out, const cv::Mat &R = cv::Mat(),

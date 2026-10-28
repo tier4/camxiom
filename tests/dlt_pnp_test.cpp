@@ -1100,6 +1100,44 @@ TEST(DltPnp, RejectPixelToRayFailure)
     << "t_out must be unchanged when DEGENERATE_CONFIG is returned";
 }
 
+// The lat-long projections are outside the calibration layer: the linear and
+// the refined pose both refuse them up front, even for points a pose could be
+// fitted to, and leave the outputs untouched.
+TEST(DltPnp, RejectLatLongProjections)
+{
+  for (const auto type : {ProjectionModelType::EQUIRECTANGULAR, ProjectionModelType::CYLINDRICAL})
+  {
+    CameraModel64 model;
+    model.projection.type = type;
+    model.intrinsics.fx = 2048.0 / (2.0 * camxiom::constants::kPi);
+    model.intrinsics.fy = 1024.0 / camxiom::constants::kPi;
+    model.intrinsics.cx = 1023.5;
+    model.intrinsics.cy = 511.5;
+    ASSERT_EQ(camxiom::validateCameraModel64(model), StatusCode::OK);
+
+    std::mt19937 rng(42U);
+    const Eigen::Matrix3Xd world_pts = makeRandomWorld(rng, 8);
+    Eigen::Matrix2Xd pixels(2, 8);
+    for (Eigen::Index i = 0; i < 8; ++i)
+    {
+      const PixelResult64 px = camxiom::rayToPixel64(model, world_pts.col(i));
+      ASSERT_EQ(px.status, StatusCode::OK);
+      pixels(0, i) = px.pixel.u;
+      pixels(1, i) = px.pixel.v;
+    }
+
+    Eigen::Matrix3d R_out = Eigen::Matrix3d::Constant(11.0);
+    Eigen::Vector3d t_out = Eigen::Vector3d::Constant(11.0);
+    EXPECT_EQ(estimatePoseDLT(model, world_pts, pixels, R_out, t_out), StatusCode::INVALID_MODEL);
+    EXPECT_EQ(
+      estimatePoseRefined(camxiom::fromCameraModel64(model), world_pts, pixels, R_out, t_out),
+      StatusCode::INVALID_MODEL
+    );
+    EXPECT_EQ(R_out(0, 0), 11.0);
+    EXPECT_EQ(t_out(0), 11.0);
+  }
+}
+
 // ===========================================================================
 // Extra: N = exactly 6 (minimum) noise-free — boundary of the valid domain.
 //

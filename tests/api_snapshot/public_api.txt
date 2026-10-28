@@ -386,6 +386,9 @@ camxiom | [[nodiscard]] CameraModel64 makeDistortionFree64(const CameraModel64 &
 camxiom | [[nodiscard]] DistortionModelType parseDistortionModelType(const std::string &model_name)
 camxiom | [[nodiscard]] FisheyeDomain64 getFisheyeDomain64(const CameraModel64 &model)
 camxiom | [[nodiscard]] ProjectionModelType parseProjectionModelType(const std::string &model_name)
+camxiom | [[nodiscard]] StatusCode makeCylindricalModel( ImageSize image_size, double lon_min, double lon_max, double lat_min, double lat_max, CameraModel &model_out )
+camxiom | [[nodiscard]] StatusCode makeEquirectangularModel( ImageSize image_size, double lon_min, double lon_max, double lat_min, double lat_max, CameraModel &model_out )
+camxiom | [[nodiscard]] StatusCode makeEquirectangularModel(ImageSize image_size, CameraModel &model_out)
 camxiom | [[nodiscard]] StatusCode validateCameraModel(const CameraModel &model)
 camxiom | [[nodiscard]] StatusCode validateCameraModel64(const CameraModel64 &model)
 camxiom | [[nodiscard]] bool isFisheyeDistortionModel(const std::string &model_name)
@@ -643,7 +646,6 @@ camxiom | enum class RectifyFitPolicy : std::uint8_t
 camxiom | struct BuildRectifyMapOptions
 camxiom | struct BuildRectifyMapResult
 camxiom | struct ImageRemapOptions
-camxiom | struct ImageSize
 camxiom | struct RectifiedOutputModelOptions
 camxiom | struct [[nodiscard]] FovResult
 camxiom | struct [[nodiscard]] ImageRemapResult
@@ -666,9 +668,6 @@ camxiom::ImageRemapOptions | Eigen::Matrix3f src_from_dst_rotation
 camxiom::ImageRemapOptions | InvalidPixelPolicy invalid_pixel_policy
 camxiom::ImageRemapOptions | SolverOptions solver_options
 camxiom::ImageRemapOptions | bool require_source_in_bounds
-camxiom::ImageSize | constexpr bool isValid() const
-camxiom::ImageSize | int height
-camxiom::ImageSize | int width
 camxiom::InvalidPixelPolicy | #000 WRITE_NEGATIVE_ONE = 0U
 camxiom::InvalidPixelPolicy | #001 WRITE_RAW_COORDINATE
 camxiom::RectifiedOutputModelOptions | Eigen::Matrix3f src_from_output_rotation
@@ -717,10 +716,12 @@ camxiom | const char *toString(ProjectionModelType model_type)
 camxiom | const char *toString(StatusCode status_code)
 camxiom | constexpr DistortionSpace distortionSpaceOf(const DistortionModelType type) noexcept
 camxiom | constexpr bool isFisheyeProjection(const ProjectionModelType type) noexcept
+camxiom | constexpr bool isLatLongProjection(const ProjectionModelType type) noexcept
 camxiom | enum class DistortionModelType : std::uint8_t
 camxiom | enum class DistortionSpace : std::uint8_t
 camxiom | enum class ProjectionModelType : std::uint8_t
 camxiom | enum class [[nodiscard]] StatusCode : std::uint8_t
+camxiom | struct ImageSize
 camxiom | struct SolverOptions
 camxiom | template <typename T> struct CameraModelT
 camxiom | template <typename T> struct DistortionModelT
@@ -761,6 +762,9 @@ camxiom::DistortionModelType | #008 UNKNOWN
 camxiom::DistortionSpace | #000 NONE = 0U
 camxiom::DistortionSpace | #001 PLANE
 camxiom::DistortionSpace | #002 ANGLE
+camxiom::ImageSize | constexpr bool isValid() const
+camxiom::ImageSize | int height
+camxiom::ImageSize | int width
 camxiom::IntrinsicsModelT | T cx
 camxiom::IntrinsicsModelT | T cy
 camxiom::IntrinsicsModelT | T fx
@@ -781,7 +785,9 @@ camxiom::ProjectionModelType | #004 ORTHOGRAPHIC
 camxiom::ProjectionModelType | #005 OMNIDIRECTIONAL
 camxiom::ProjectionModelType | #006 DOUBLE_SPHERE
 camxiom::ProjectionModelType | #007 EUCM
-camxiom::ProjectionModelType | #008 UNKNOWN
+camxiom::ProjectionModelType | #008 EQUIRECTANGULAR
+camxiom::ProjectionModelType | #009 CYLINDRICAL
+camxiom::ProjectionModelType | #010 UNKNOWN
 camxiom::Ray3T | Eigen::Matrix<T, 3, 1> direction
 camxiom::Ray3T | Eigen::Matrix<T, 3, 1> origin
 camxiom::SolverOptions | bool skip_verify

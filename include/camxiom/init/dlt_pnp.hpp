@@ -97,6 +97,10 @@ namespace camxiom::init
 ///                    (P_cam = R * P_world + t).
 ///
 /// @return StatusCode::OK                 success.
+///         StatusCode::INVALID_MODEL      a lat-long projection
+///                                        (EQUIRECTANGULAR, CYLINDRICAL),
+///                                        which the calibration layer
+///                                        does not take.
 ///         StatusCode::INVALID_INPUT      N < 6, column mismatch, any
 ///                                        non-finite element, or empty
 ///                                        inputs.

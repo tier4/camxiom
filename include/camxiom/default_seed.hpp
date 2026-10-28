@@ -51,8 +51,9 @@ namespace camxiom
 /// validateCameraModel(model) == StatusCode::OK.
 ///
 /// Invalid input handling: if image_width <= 0, image_height <= 0, or
-/// model_type is not one of the valid projection types (i.e. UNKNOWN
-/// or any out-of-range value), a default-constructed CameraModel{} is
+/// model_type is not one of the calibratable projection types (i.e. a
+/// lat-long projection, UNKNOWN or any out-of-range value), a
+/// default-constructed CameraModel{} is
 /// returned. Its projection.type is ProjectionModelType::UNKNOWN, which
 /// validateCameraModel rejects (StatusCode::INVALID_MODEL), giving callers
 /// a detectable sentinel without throwing or clamping.

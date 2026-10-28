@@ -819,6 +819,10 @@ template <typename T>
       );
     }
 
+    // The lat-long projections have no template form: this header serves the
+    // calibration cost functions, and lat-long models are not calibrated.
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
     case ProjectionModelType::UNKNOWN:
       break;
   }

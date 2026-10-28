@@ -51,8 +51,8 @@ namespace camxiom
 // re-deriving the state. The plain overloads derive it themselves, so they stay
 // drop-in for callers that hold nothing but a CameraModel. Every model declares
 // both, including the ones that read nothing from the prepared state (pinhole,
-// fisheye), so ValidatedCameraModel binds one uniform signature across all
-// five.
+// fisheye, lat-long), so ValidatedCameraModel binds one uniform signature
+// across all of them.
 #define CAMXIOM_DECLARE_MODEL_PROJECTION(model_ns)                                              \
   namespace model_ns                                                                            \
   {                                                                                             \
@@ -80,6 +80,7 @@ CAMXIOM_DECLARE_MODEL_PROJECTION(fisheye)
 CAMXIOM_DECLARE_MODEL_PROJECTION(omnidirectional)
 CAMXIOM_DECLARE_MODEL_PROJECTION(double_sphere)
 CAMXIOM_DECLARE_MODEL_PROJECTION(eucm)
+CAMXIOM_DECLARE_MODEL_PROJECTION(latlong)
 
 #undef CAMXIOM_DECLARE_MODEL_PROJECTION
 

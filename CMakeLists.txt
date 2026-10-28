@@ -138,6 +138,8 @@ add_library(camxiom_core
   src/double_sphere/projection64.cpp
   src/eucm/projection.cpp
   src/eucm/projection64.cpp
+  src/latlong/projection.cpp
+  src/latlong/projection64.cpp
   src/jacobian/float.cpp
   src/jacobian/double.cpp
   src/jacobian/batch.cpp
@@ -467,6 +469,10 @@ if(BUILD_TESTING)
     # projection invariants (project∘unproject ≈ id, FOV-interior status OK,
     # positive-scale invariance, determinism, pixel round-trip).
     camxiom_add_gtest(camxiom_property_test tests/property_test.cpp)
+    # Latitude-longitude projections (equirectangular / cylindrical) as ordinary camera
+    # models: contract (orientation, seam, poles), round trips and parity of
+    # the batch / validated / Jacobian / LUT paths. CORE test.
+    camxiom_add_gtest(camxiom_latlong_projection_test tests/latlong_projection_test.cpp)
 
     # OpenCV interop layer (src/opencv/*). A CORE test (Ceres-free) that is only
     # built when the OpenCV compat layer was compiled in (CAMXIOM_WITH_OPENCV),

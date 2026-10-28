@@ -189,6 +189,60 @@ float computeFovDeg(
   return static_cast<float>(std::acos(std::clamp(dot, -1.0f, 1.0f)) * 180.0f / detail::kPi);
 }
 
+// Length of [a, b] (either order) inside [lo, hi], in degrees.
+float clippedSpanDeg(const double a, const double b, const double lo, const double hi)
+{
+  const double span = std::min(std::max(a, b), hi) - std::max(std::min(a, b), lo);
+  return span > 0.0 ? static_cast<float>(span * 180.0 / constants::kPi) : 0.0f;
+}
+
+// A lat-long model's field of view is the longitude and latitude range covered by
+// the valid pixels of the principal row and column, edge to edge (the angle
+// between two edge rays, used for the other models, cannot exceed 180
+// degrees). It has no diagonal angle.
+FovResult latLongFov(const CameraModel &model, const ImageSize image_size)
+{
+  const double fx = model.intrinsics.fx;
+  const double fy = model.intrinsics.fy;
+  const double cx = model.intrinsics.cx;
+  const double cy = model.intrinsics.cy;
+  const double skew = model.intrinsics.skew;
+  const double right = static_cast<double>(image_size.width) - 0.5;
+  const double bottom = static_cast<double>(image_size.height) - 0.5;
+
+  FovResult result{};
+  // On the principal row (y_d = 0) the longitude is (u - cx) / fx.
+  result.horizontal_fov_deg =
+    clippedSpanDeg((-0.5 - cx) / fx, (right - cx) / fx, -constants::kPi, constants::kPi);
+
+  // Down the principal column (u = cx) the longitude is -skew * y_d / fx, so
+  // with skew the column leaves the valid range once that passes the seam; only
+  // the rows where it stays inside [-pi, pi] count.
+  double y_lo = std::min((-0.5 - cy) / fy, (bottom - cy) / fy);
+  double y_hi = std::max((-0.5 - cy) / fy, (bottom - cy) / fy);
+  if (skew != 0.0)
+  {
+    const double y_seam = constants::kPi * std::abs(fx / skew);
+    y_lo = std::max(y_lo, -y_seam);
+    y_hi = std::min(y_hi, y_seam);
+  }
+  if (y_lo >= y_hi)
+  {
+    result.vertical_fov_deg = 0.0f;
+  }
+  else if (model.projection.type == ProjectionModelType::EQUIRECTANGULAR)
+  {
+    result.vertical_fov_deg = clippedSpanDeg(y_lo, y_hi, -constants::kHalfPi, constants::kHalfPi);
+  }
+  else
+  {
+    result.vertical_fov_deg =
+      clippedSpanDeg(std::atan(y_lo), std::atan(y_hi), -constants::kHalfPi, constants::kHalfPi);
+  }
+  result.diagonal_fov_deg = 0.0f;
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Non-pinhole rectification: pixel → unit ray for virtual output projections
 // ---------------------------------------------------------------------------
@@ -427,6 +481,10 @@ FovResult computeFov(
     result.status = valid;
     return result;
   }
+  if (isLatLongProjection(model.projection.type))
+  {
+    return latLongFov(model, image_size);
+  }
 
   const float w = static_cast<float>(image_size.width);
   const float h = static_cast<float>(image_size.height);
@@ -572,7 +630,9 @@ RectifiedOutputModelResult makeRectifiedOutputModel(
     result.status = StatusCode::INVALID_INPUT;
     return result;
   }
-  if (validateCameraModel(src_model) != StatusCode::OK)
+  // The boundary-only fit below cannot bound a lat-long source, whose
+  // representable region has edges inside the image; refuse it.
+  if (validateCameraModel(src_model) != StatusCode::OK || isLatLongProjection(src_model.projection.type))
   {
     result.status = StatusCode::INVALID_MODEL;
     return result;
@@ -666,7 +726,9 @@ RectifyRemapResult buildRectifyRemapMap(
 {
   RectifyRemapResult result{};
 
-  if (validateCameraModel(src_model) != StatusCode::OK)
+  // Lat-long sources are refused for the same reason as in
+  // makeRectifiedOutputModel: the fits only sample the source boundary.
+  if (validateCameraModel(src_model) != StatusCode::OK || isLatLongProjection(src_model.projection.type))
   {
     result.remap_result.status = StatusCode::INVALID_MODEL;
     return result;
@@ -805,7 +867,9 @@ BuildRectifyMapResult buildRectifyMap(
   result.alpha_used = alpha;
 
   // Validation.
-  if (validateCameraModel(src_model) != StatusCode::OK)
+  // Lat-long sources are refused for the same reason as in
+  // makeRectifiedOutputModel: the fits only sample the source boundary.
+  if (validateCameraModel(src_model) != StatusCode::OK || isLatLongProjection(src_model.projection.type))
   {
     result.remap_result.status = StatusCode::INVALID_MODEL;
     return result;

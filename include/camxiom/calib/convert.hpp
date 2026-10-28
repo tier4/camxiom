@@ -96,7 +96,8 @@ struct [[nodiscard]] ModelConversionResult64
 ///         rms_fit_error_px for quality. NON_CONVERGED with the best-effort
 ///         model otherwise, including ordinary iteration-capped fits;
 ///         INVALID_INPUT / INVALID_MODEL / DEGENERATE_CONFIG on bad inputs
-///         (fewer than 8 usable grid correspondences).
+///         (fewer than 8 usable grid correspondences). INVALID_MODEL also
+///         when either model is a lat-long projection.
 [[nodiscard]] ModelConversionResult convertCameraModel(
   const CameraModel &src_model, int image_width, int image_height, const CameraModel &dst_seed,
   const ModelConversionOptions &options = ModelConversionOptions{}

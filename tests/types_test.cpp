@@ -104,16 +104,19 @@ TEST(Types, ProjectionModelTypeToString)
   EXPECT_STREQ(toString(ProjectionModelType::OMNIDIRECTIONAL), "omnidirectional");
   EXPECT_STREQ(toString(ProjectionModelType::DOUBLE_SPHERE), "double_sphere");
   EXPECT_STREQ(toString(ProjectionModelType::EUCM), "eucm");
+  EXPECT_STREQ(toString(ProjectionModelType::EQUIRECTANGULAR), "equirectangular");
+  EXPECT_STREQ(toString(ProjectionModelType::CYLINDRICAL), "cylindrical");
   EXPECT_STREQ(toString(ProjectionModelType::UNKNOWN), "unknown");
 }
 
 TEST(Types, ProjectionModelToStringRoundTripsThroughParse)
 {
   const ProjectionModelType all[] = {
-    ProjectionModelType::PINHOLE,       ProjectionModelType::EQUIDISTANT,
-    ProjectionModelType::EQUISOLID,     ProjectionModelType::STEREOGRAPHIC,
-    ProjectionModelType::ORTHOGRAPHIC,  ProjectionModelType::OMNIDIRECTIONAL,
-    ProjectionModelType::DOUBLE_SPHERE, ProjectionModelType::EUCM,
+    ProjectionModelType::PINHOLE,         ProjectionModelType::EQUIDISTANT,
+    ProjectionModelType::EQUISOLID,       ProjectionModelType::STEREOGRAPHIC,
+    ProjectionModelType::ORTHOGRAPHIC,    ProjectionModelType::OMNIDIRECTIONAL,
+    ProjectionModelType::DOUBLE_SPHERE,   ProjectionModelType::EUCM,
+    ProjectionModelType::EQUIRECTANGULAR, ProjectionModelType::CYLINDRICAL,
   };
   for (const ProjectionModelType type : all)
   {

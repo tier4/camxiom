@@ -43,6 +43,9 @@ PixelResult64 rayToPixel64(const CameraModel64 &model, const Eigen::Vector3d &ra
       return double_sphere::rayToPixel64(model, ray_direction);
     case ProjectionModelType::EUCM:
       return eucm::rayToPixel64(model, ray_direction);
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return latlong::rayToPixel64(model, ray_direction);
     case ProjectionModelType::UNKNOWN:
       break;
   }
@@ -74,6 +77,9 @@ RayResult64 pixelToRay64(
       return double_sphere::pixelToRay64(model, pixel, opts);
     case ProjectionModelType::EUCM:
       return eucm::pixelToRay64(model, pixel, opts);
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return latlong::pixelToRay64(model, pixel, opts);
     case ProjectionModelType::UNKNOWN:
       break;
   }

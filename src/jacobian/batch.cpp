@@ -63,6 +63,9 @@ PerModelJacFn<T> resolveJacobianFn(const ProjectionModelType type)
       return &double_sphere::impl::rayToPixelWithJacobian<T>;
     case ProjectionModelType::EUCM:
       return &eucm::impl::rayToPixelWithJacobian<T>;
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return &latlong::impl::rayToPixelWithJacobian<T>;
     case ProjectionModelType::UNKNOWN:
       break;
   }

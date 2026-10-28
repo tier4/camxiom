@@ -90,6 +90,10 @@ const char *toString(const ProjectionModelType model_type)
       return "double_sphere";
     case ProjectionModelType::EUCM:
       return "eucm";
+    case ProjectionModelType::EQUIRECTANGULAR:
+      return "equirectangular";
+    case ProjectionModelType::CYLINDRICAL:
+      return "cylindrical";
     case ProjectionModelType::UNKNOWN:
       break;
   }

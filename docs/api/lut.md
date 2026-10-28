@@ -50,6 +50,10 @@ template <typename T> class InverseLutT {
   flagged invalid; queries interpolating into invalid nodes return a non-OK
   status instead of a fabricated direction. `build`'s return value is the
   coverage indicator.
+- The grid has one node past the right and bottom image edges. For a
+  whole-sphere equirectangular image those nodes lie beyond the seam and the
+  pole and are invalid, so queries in the last grid cell before those edges (up
+  to `step` columns and rows) return `OUT_OF_FOV`; use `pixelToRay` there.
 - Storage is structure-of-arrays (`x/y/z` direction components + 1-byte
   validity per node), so memory is roughly
   `(3·sizeof(T) + 1) · (W/step) · (H/step)` bytes.

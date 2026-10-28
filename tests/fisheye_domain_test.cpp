@@ -238,6 +238,7 @@ TEST(FisheyeDomain64, RejectsNonFisheyeAndMalformedModels)
   for (auto type :
        {ProjectionModelType::PINHOLE, ProjectionModelType::OMNIDIRECTIONAL,
         ProjectionModelType::DOUBLE_SPHERE, ProjectionModelType::EUCM,
+        ProjectionModelType::EQUIRECTANGULAR, ProjectionModelType::CYLINDRICAL,
         ProjectionModelType::UNKNOWN})
   {
     auto model = fisheye();

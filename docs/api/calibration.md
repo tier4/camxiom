@@ -51,8 +51,12 @@ equidistant); projection parameters at literature-typical values
 (equidistant `θ_max = π` with a zero KB4 correction, the other fisheye laws
 their own monotone range without correction; Mei `ξ = 1.0`; DS
 `ξ = −0.2, α = 0.5`; EUCM `α = 0.5, β = 1.0`). Guaranteed to validate for any valid input;
-invalid input returns an `UNKNOWN`-type sentinel that
-`validateCameraModel` rejects.
+invalid input — and the latitude-longitude projections (equirectangular,
+cylindrical), which the calibration layer
+does not estimate — returns an `UNKNOWN`-type sentinel that
+`validateCameraModel` rejects. `calibrate`, `PnpSolver::solve`,
+`init::estimatePoseDLT`, `init::estimatePoseRefined` (`INVALID_MODEL`) and
+`convertCameraModel` likewise refuse latitude-longitude models.
 
 ## Init estimators (`camxiom::init`)
 

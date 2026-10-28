@@ -45,6 +45,9 @@ PixelResult rayToPixel(const CameraModel &model, const Eigen::Vector3f &ray_dire
       return double_sphere::rayToPixel(model, ray_direction);
     case ProjectionModelType::EUCM:
       return eucm::rayToPixel(model, ray_direction);
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return latlong::rayToPixel(model, ray_direction);
     case ProjectionModelType::UNKNOWN:
       break;
   }
@@ -97,6 +100,9 @@ RayResult pixelToRay(
       return double_sphere::pixelToRay(model, pixel, solver_options);
     case ProjectionModelType::EUCM:
       return eucm::pixelToRay(model, pixel, solver_options);
+    case ProjectionModelType::EQUIRECTANGULAR:
+    case ProjectionModelType::CYLINDRICAL:
+      return latlong::pixelToRay(model, pixel, solver_options);
     case ProjectionModelType::UNKNOWN:
       break;
   }
