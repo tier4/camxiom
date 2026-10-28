@@ -22,6 +22,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -140,6 +141,55 @@ inline int expectedDistortionCount(const EucmCompatProfile profile)
     default:
       return -2;
   }
+}
+
+/// Binning and ROI of a ROS CameraInfo. sensor_msgs/CameraInfo defines K and
+/// P in FULL-RESOLUTION coordinates, while the image that accompanies it is
+/// the ROI crop decimated by the binning factors. Per the message spec,
+/// binning 0 means 1 and an ROI with width/height 0 means the full image.
+struct BinningAndRoi
+{
+  std::uint32_t binning_x{0U};
+  std::uint32_t binning_y{0U};
+  std::uint32_t x_offset{0U};
+  std::uint32_t y_offset{0U};
+  std::uint32_t width{0U};
+  std::uint32_t height{0U};
+};
+
+/// Fold binning and ROI into K, P and the image size — the same adjustment
+/// image_geometry::PinholeCameraModel applies — so the model read from the
+/// result maps the published image's pixels. D is in normalised coordinates
+/// and needs no adjustment.
+inline void foldBinningAndRoi(const BinningAndRoi &crop, CameraInfo &info)
+{
+  const double bx = (crop.binning_x > 1U) ? static_cast<double>(crop.binning_x) : 1.0;
+  const double by = (crop.binning_y > 1U) ? static_cast<double>(crop.binning_y) : 1.0;
+  const bool cropped = (crop.x_offset != 0U || crop.y_offset != 0U) ||
+                       (crop.width != 0U && crop.width != info.width) ||
+                       (crop.height != 0U && crop.height != info.height);
+  if (bx == 1.0 && by == 1.0 && !cropped)
+  {
+    return;
+  }
+  const double ox = static_cast<double>(crop.x_offset);
+  const double oy = static_cast<double>(crop.y_offset);
+  info.k[0] /= bx;                    // fx
+  info.k[1] /= bx;                    // skew
+  info.k[2] = (info.k[2] - ox) / bx;  // cx
+  info.k[4] /= by;                    // fy
+  info.k[5] = (info.k[5] - oy) / by;  // cy
+  info.p[0] /= bx;                    // fx'
+  info.p[1] /= bx;                    // skew'
+  info.p[2] = (info.p[2] - ox) / bx;  // cx'
+  info.p[3] /= bx;                    // Tx (= -fx' * baseline)
+  info.p[5] /= by;                    // fy'
+  info.p[6] = (info.p[6] - oy) / by;  // cy'
+  info.p[7] /= by;                    // Ty
+  const std::uint32_t roi_w = (crop.width != 0U) ? crop.width : info.width;
+  const std::uint32_t roi_h = (crop.height != 0U) ? crop.height : info.height;
+  info.width = static_cast<std::uint32_t>(static_cast<double>(roi_w) / bx);
+  info.height = static_cast<std::uint32_t>(static_cast<double>(roi_h) / by);
 }
 
 template <typename T>

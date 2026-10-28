@@ -30,7 +30,7 @@ namespace camxiom
 /// type used by every compat conversion). It mirrors the field layout of a ROS
 /// sensor_msgs/CameraInfo message but carries no ROS dependency, so the heavy
 /// K/D/distortion-model parsing in makeCameraModel() lives entirely in the
-/// dependency-free core. The optional ROS layer (camxiom/ros.hpp) and OpenCV
+/// ROS-free core. The optional ROS layer (camxiom/ros.hpp) and OpenCV
 /// layer (camxiom/opencv.hpp) only do trivial field copies into this struct.
 struct CameraInfo
 {
@@ -44,6 +44,29 @@ struct CameraInfo
     {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};  // projection matrix (row-major)
   std::uint32_t width{0U};
   std::uint32_t height{0U};
+};
+
+/// camxiom's own camera description: every valid CameraModel, field by field.
+/// Unlike CameraInfo it keeps the projection law and its parameters apart
+/// from the lens correction, names both the way toString does, and says
+/// "none" when there is no correction instead of writing zeros.
+struct CamxiomCameraInfo
+{
+  std::uint32_t image_width{0U};
+  std::uint32_t image_height{0U};
+  /// toString(ProjectionModelType), e.g. "pinhole", "equidistant", "eucm".
+  std::string projection_model{};
+  /// The law's own parameters: xi (omnidirectional), xi and alpha (double
+  /// sphere), alpha and beta (EUCM); empty for every other law.
+  std::vector<double> projection_parameters{};
+  /// toString(DistortionModelType), e.g. "none", "radtan5", "kb4".
+  std::string distortion_model{};
+  /// Exactly the correction's coefficients (4 for radtan4 and kb4, 5 for
+  /// radtan5, 8 for rational8 and kb8, 12 for thin_prism12, 14 for tilted14,
+  /// none for "none"), in the order the model stores them.
+  std::vector<double> distortion_parameters{};
+  /// fx, fy, cx, cy, skew.
+  std::array<double, 5> intrinsic_parameters{{1.0, 1.0, 0.0, 0.0, 0.0}};
 };
 
 /// Build a CameraModel from a raw camera description (canonical mapping; the
@@ -217,6 +240,29 @@ struct EucmExternalModel
 [[nodiscard]] StatusCode exportCameraInfo(const CameraModel &model, CameraInfo &camera_info_out);
 [[nodiscard]] StatusCode exportCameraInfo64(
   const CameraModel64 &model, CameraInfo &camera_info_out
+);
+
+/// Build a CameraModel from camxiom's own description. The names must be the
+/// toString names, projection_parameters must hold exactly the law's
+/// parameters and distortion_parameters exactly the correction's
+/// coefficients; theta_max is derived from the model (updateThetaMax). A
+/// description that does not give a valid model comes back as one that
+/// validateCameraModel rejects.
+[[nodiscard]] CameraModel makeCameraModel(const CamxiomCameraInfo &camera_info);
+[[nodiscard]] CameraModel64 makeCameraModel64(const CamxiomCameraInfo &camera_info);
+
+/// Export any valid model as camxiom's own description; it reads back as the
+/// same model (makeCameraModel), theta_max apart, which is derived again on
+/// reading, and a five-term RADTAN4, which is written and read back as
+/// RADTAN5 (the same lens). A float model's values are written as the shortest decimal that
+/// reads back as the same float. An invalid model returns its validation
+/// status and leaves camera_info_out unchanged. image_width/image_height are
+/// left to the caller.
+[[nodiscard]] StatusCode exportCameraInfo(
+  const CameraModel &model, CamxiomCameraInfo &camera_info_out
+);
+[[nodiscard]] StatusCode exportCameraInfo64(
+  const CameraModel64 &model, CamxiomCameraInfo &camera_info_out
 );
 
 /// Double-precision counterparts of the profile-aware interchange functions.

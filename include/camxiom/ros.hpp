@@ -31,7 +31,7 @@
 //
 // All conversions funnel through the ROS-free camxiom::CameraInfo POD declared
 // in camxiom/compat.hpp, so the heavy K/D/distortion-model parsing stays in the
-// dependency-free core and is never duplicated here.
+// ROS-free core and is never duplicated here.
 
 #if defined(CAMXIOM_HAS_ROS) && __has_include(<sensor_msgs/msg/camera_info.hpp>)
 

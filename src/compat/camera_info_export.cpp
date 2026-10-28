@@ -17,7 +17,7 @@
 // Moved here from the optional ROS layer (src/compat/ros.cpp) so the packing —
 // per-family distortion_model string, d-vector layout (xi/alpha prefixes for
 // omnidirectional / double sphere / EUCM), identity r and [K | 0] p — lives in
-// the dependency-free core. The ROS layer now delegates to these functions and
+// the ROS-free core. The ROS layer now delegates to these functions and
 // only copies fields into sensor_msgs.
 
 #include "camxiom/compat.hpp"

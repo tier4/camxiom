@@ -34,41 +34,17 @@ CameraInfo toCameraInfo(const sensor_msgs::msg::CameraInfo &camera_info)
   info.width = camera_info.width;
   info.height = camera_info.height;
 
-  // sensor_msgs/CameraInfo defines K and P in FULL-RESOLUTION coordinates,
-  // while the image accompanying the message is the ROI crop decimated by
-  // the binning factors. Fold both into K / P — the same adjustment
-  // image_geometry::PinholeCameraModel applies — so the resulting model maps
-  // the published image's pixel coordinates instead of being silently off by
-  // the binning factor / ROI offset. Per the message spec, binning 0 means 1
-  // and an ROI with width/height 0 means the full image. (D is expressed in
-  // normalised coordinates and needs no adjustment.)
-  const double bx = (camera_info.binning_x > 1U) ? static_cast<double>(camera_info.binning_x) : 1.0;
-  const double by = (camera_info.binning_y > 1U) ? static_cast<double>(camera_info.binning_y) : 1.0;
-  const auto &roi = camera_info.roi;
-  const bool cropped = (roi.x_offset != 0U || roi.y_offset != 0U) ||
-                       (roi.width != 0U && roi.width != camera_info.width) ||
-                       (roi.height != 0U && roi.height != camera_info.height);
-  if (bx != 1.0 || by != 1.0 || cropped)
-  {
-    const double ox = static_cast<double>(roi.x_offset);
-    const double oy = static_cast<double>(roi.y_offset);
-    info.k[0] /= bx;                    // fx
-    info.k[1] /= bx;                    // skew
-    info.k[2] = (info.k[2] - ox) / bx;  // cx
-    info.k[4] /= by;                    // fy
-    info.k[5] = (info.k[5] - oy) / by;  // cy
-    info.p[0] /= bx;                    // fx'
-    info.p[1] /= bx;                    // skew'
-    info.p[2] = (info.p[2] - ox) / bx;  // cx'
-    info.p[3] /= bx;                    // Tx (= -fx' * baseline)
-    info.p[5] /= by;                    // fy'
-    info.p[6] = (info.p[6] - oy) / by;  // cy'
-    info.p[7] /= by;                    // Ty
-    const std::uint32_t roi_w = (roi.width != 0U) ? roi.width : camera_info.width;
-    const std::uint32_t roi_h = (roi.height != 0U) ? roi.height : camera_info.height;
-    info.width = static_cast<std::uint32_t>(static_cast<double>(roi_w) / bx);
-    info.height = static_cast<std::uint32_t>(static_cast<double>(roi_h) / by);
-  }
+  // Fold binning/ROI into K / P (the image_geometry adjustment), so the
+  // resulting model maps the published image's pixel coordinates instead of
+  // being silently off by the binning factor / ROI offset.
+  BinningAndRoi crop;
+  crop.binning_x = camera_info.binning_x;
+  crop.binning_y = camera_info.binning_y;
+  crop.x_offset = camera_info.roi.x_offset;
+  crop.y_offset = camera_info.roi.y_offset;
+  crop.width = camera_info.roi.width;
+  crop.height = camera_info.roi.height;
+  foldBinningAndRoi(crop, info);
   return info;
 }
 

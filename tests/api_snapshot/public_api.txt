@@ -153,10 +153,18 @@ namespace camxiom::calib
 === include/camxiom/calibration.hpp ===
 
 === include/camxiom/camera_info_yaml.hpp ===
+camxiom | [[nodiscard]] StatusCode loadCameraModelYaml( const std::string &path, CameraModel &model_out, ImageSize &image_size_out )
+camxiom | [[nodiscard]] StatusCode loadCameraModelYaml64( const std::string &path, CameraModel64 &model_out, ImageSize &image_size_out )
+camxiom | [[nodiscard]] StatusCode parseCameraInfoYaml(const std::string &yaml, CameraInfo &camera_info_out)
+camxiom | [[nodiscard]] StatusCode parseCameraModelYaml( const std::string &yaml, CameraModel &model_out, ImageSize &image_size_out )
+camxiom | [[nodiscard]] StatusCode parseCameraModelYaml64( const std::string &yaml, CameraModel64 &model_out, ImageSize &image_size_out )
+camxiom | [[nodiscard]] StatusCode parseCamxiomCameraInfoYaml( const std::string &yaml, CamxiomCameraInfo &camera_info_out )
 camxiom | [[nodiscard]] StatusCode saveCameraInfoYaml( const std::string &path, const CameraInfo &camera_info, const std::string &camera_name = "" )
 camxiom | [[nodiscard]] StatusCode saveCameraInfoYaml( const std::string &path, const CameraInfo &camera_info, const std::string &camera_name, CameraInfoYamlPrecision precision )
+camxiom | [[nodiscard]] StatusCode saveCamxiomCameraInfoYaml( const std::string &path, const CamxiomCameraInfo &camera_info )
 camxiom | [[nodiscard]] std::string toCameraInfoYaml( const CameraInfo &camera_info, const std::string &camera_name = "" )
 camxiom | [[nodiscard]] std::string toCameraInfoYaml( const CameraInfo &camera_info, const std::string &camera_name, CameraInfoYamlPrecision precision )
+camxiom | [[nodiscard]] std::string toCamxiomCameraInfoYaml(const CamxiomCameraInfo &camera_info)
 camxiom | enum class CameraInfoYamlPrecision : std::uint8_t
 camxiom::CameraInfoYamlPrecision | #000 FIXED = 0U
 camxiom::CameraInfoYamlPrecision | #001 ROUND_TRIP = 1U
@@ -166,9 +174,13 @@ namespace camxiom
 
 === include/camxiom/compat.hpp ===
 camxiom | [[nodiscard]] CameraModel makeCameraModel(const CameraInfo &camera_info)
+camxiom | [[nodiscard]] CameraModel makeCameraModel(const CamxiomCameraInfo &camera_info)
 camxiom | [[nodiscard]] CameraModel64 makeCameraModel64(const CameraInfo &camera_info)
+camxiom | [[nodiscard]] CameraModel64 makeCameraModel64(const CamxiomCameraInfo &camera_info)
+camxiom | [[nodiscard]] StatusCode exportCameraInfo( const CameraModel &model, CamxiomCameraInfo &camera_info_out )
 camxiom | [[nodiscard]] StatusCode exportCameraInfo(const CameraModel &model, CameraInfo &camera_info_out)
 camxiom | [[nodiscard]] StatusCode exportCameraInfo64( const CameraModel64 &model, CameraInfo &camera_info_out )
+camxiom | [[nodiscard]] StatusCode exportCameraInfo64( const CameraModel64 &model, CamxiomCameraInfo &camera_info_out )
 camxiom | [[nodiscard]] StatusCode exportDoubleSphereCameraInfo( const CameraModel &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out )
 camxiom | [[nodiscard]] StatusCode exportDoubleSphereCameraInfo64( const CameraModel64 &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out)
 camxiom | [[nodiscard]] StatusCode exportDoubleSphereModel( const CameraModel &model, DoubleSphereCompatProfile profile, DoubleSphereExternalModel &external_model_out )
@@ -210,6 +222,7 @@ camxiom | enum class FisheyeCompatProfile : std::uint8_t
 camxiom | enum class OmnidirectionalCompatProfile : std::uint8_t
 camxiom | enum class PinholeCompatProfile : std::uint8_t
 camxiom | struct CameraInfo
+camxiom | struct CamxiomCameraInfo
 camxiom | struct DoubleSphereExternalModel
 camxiom | struct EucmExternalModel
 camxiom | struct FisheyeExternalModel
@@ -222,6 +235,13 @@ camxiom::CameraInfo | std::string distortion_model
 camxiom::CameraInfo | std::uint32_t height
 camxiom::CameraInfo | std::uint32_t width
 camxiom::CameraInfo | std::vector<double> d
+camxiom::CamxiomCameraInfo | std::array<double, 5> intrinsic_parameters
+camxiom::CamxiomCameraInfo | std::string distortion_model
+camxiom::CamxiomCameraInfo | std::string projection_model
+camxiom::CamxiomCameraInfo | std::uint32_t image_height
+camxiom::CamxiomCameraInfo | std::uint32_t image_width
+camxiom::CamxiomCameraInfo | std::vector<double> distortion_parameters
+camxiom::CamxiomCameraInfo | std::vector<double> projection_parameters
 camxiom::DoubleSphereCompatProfile | #000 CANONICAL = 0U
 camxiom::DoubleSphereCompatProfile | #001 BASALT_D0
 camxiom::DoubleSphereCompatProfile | #002 BASALT_D4

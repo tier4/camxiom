@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// exportCameraInfo: a model is written to a ROS CameraInfo only when a ROS
+// exportCameraInfo, both targets. ROS: a model is written only when a ROS
 // distortion model holds the same lens, and every model written reads back
-// (makeCameraModel) as a model that projects every ray to the same pixel.
+// (makeCameraModel) as one that projects every ray to the same pixel.
+// camxiom's own description: every valid model is written and reads back as
+// the same model.
 
 #include "camxiom/compat.hpp"
 #include "camxiom/model.hpp"
@@ -30,6 +32,7 @@
 #include <array>
 #include <cmath>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -43,13 +46,27 @@ struct NamedModel
   CameraModel model;
 };
 
-CameraModel fromCameraInfo(const std::string &distortion_model, const std::vector<double> &d)
+// camxiom's description of a model with fixed intrinsics.
+CamxiomCameraInfo describe(
+  const std::string &law, const std::vector<double> &law_parameters, const std::string &correction,
+  const std::vector<double> &coefficients
+)
 {
-  CameraInfo info;
-  info.k = {400.0, 0.0, 320.0, 0.0, 410.0, 240.0, 0.0, 0.0, 1.0};
-  info.distortion_model = distortion_model;
-  info.d = d;
-  return makeCameraModel(info);
+  CamxiomCameraInfo info;
+  info.projection_model = law;
+  info.projection_parameters = law_parameters;
+  info.distortion_model = correction;
+  info.distortion_parameters = coefficients;
+  info.intrinsic_parameters = {400.0, 410.0, 320.0, 240.0, 0.0};
+  return info;
+}
+
+CameraModel model(
+  const std::string &law, const std::vector<double> &law_parameters, const std::string &correction,
+  const std::vector<double> &coefficients
+)
+{
+  return makeCameraModel(describe(law, law_parameters, correction, coefficients));
 }
 
 std::vector<double> sequence(const std::size_t count, const double start, const double step)
@@ -137,25 +154,25 @@ TEST(CameraInfoExportRos, WritesEveryLensRosCanHold)
   std::vector<double> kb8_zero_tail = kb4;
   kb8_zero_tail.resize(8U, 0.0);
   const std::vector<Case> cases{
-    {{"pinhole none", fromCameraInfo("none", {})}, "plumb_bob", {0.0, 0.0, 0.0, 0.0, 0.0}},
-    {{"radtan4", fromCameraInfo("radtan4", {-0.2, 0.05, 0.001, -0.002})},
+    {{"pinhole none", model("pinhole", {}, "none", {})}, "plumb_bob", {0.0, 0.0, 0.0, 0.0, 0.0}},
+    {{"radtan4", model("pinhole", {}, "radtan4", {-0.2, 0.05, 0.001, -0.002})},
      "plumb_bob",
      {-0.2, 0.05, 0.001, -0.002, 0.0}},
-    {{"radtan5", fromCameraInfo("radtan5", {-0.2, 0.05, 0.001, -0.002, 0.01})},
+    {{"radtan5", model("pinhole", {}, "radtan5", {-0.2, 0.05, 0.001, -0.002, 0.01})},
      "plumb_bob",
      {-0.2, 0.05, 0.001, -0.002, 0.01}},
-    {{"rational8", fromCameraInfo("rational8", rational)}, "rational_polynomial", rational},
-    {{"thin_prism12 with zero prism", fromCameraInfo("thin_prism12", prism_zero)},
+    {{"rational8", model("pinhole", {}, "rational8", rational)}, "rational_polynomial", rational},
+    {{"thin_prism12 with zero prism", model("pinhole", {}, "thin_prism12", prism_zero)},
      "rational_polynomial",
      rational},
-    {{"tilted14 with zero prism and tilt", fromCameraInfo("tilted14", tilt_zero)},
+    {{"tilted14 with zero prism and tilt", model("pinhole", {}, "tilted14", tilt_zero)},
      "rational_polynomial",
      rational},
-    {{"equidistant kb4", fromCameraInfo("kb4", kb4)}, "equidistant", kb4},
-    {{"ideal equidistant", fromCameraInfo("ideal_equidistant", {})},
+    {{"equidistant kb4", model("equidistant", {}, "kb4", kb4)}, "equidistant", kb4},
+    {{"ideal equidistant", model("equidistant", {}, "none", {})},
      "equidistant",
      {0.0, 0.0, 0.0, 0.0}},
-    {{"kb8 with zero k5..k8", fromCameraInfo("kb8", kb8_zero_tail)}, "equidistant", kb4},
+    {{"kb8 with zero k5..k8", model("equidistant", {}, "kb8", kb8_zero_tail)}, "equidistant", kb4},
   };
 
   for (const Case &c : cases)
@@ -254,16 +271,16 @@ TEST(CameraInfoExportRos, RefusesLensesRosCannotHold)
   );
 
   const std::vector<NamedModel> refused{
-    {"thin_prism12 with a prism term", fromCameraInfo("thin_prism12", prism)},
-    {"tilted14 with a tilt term", fromCameraInfo("tilted14", tilt)},
-    {"kb8 with a k7 term", fromCameraInfo("kb8", kb8)},
-    {"equisolid", fromCameraInfo("equisolid", {})},
-    {"stereographic", fromCameraInfo("stereographic", {})},
-    {"orthographic", fromCameraInfo("orthographic", {})},
-    {"omnidirectional", fromCameraInfo("omnidirectional", {0.8, -0.2, 0.05, 0.001, -0.001})},
-    {"omnidirectional without correction", fromCameraInfo("omnidirectional", {0.8})},
-    {"double sphere", fromCameraInfo("double_sphere", {-0.2, 0.6})},
-    {"eucm", fromCameraInfo("eucm", {0.6, 1.1})},
+    {"thin_prism12 with a prism term", model("pinhole", {}, "thin_prism12", prism)},
+    {"tilted14 with a tilt term", model("pinhole", {}, "tilted14", tilt)},
+    {"kb8 with a k7 term", model("equidistant", {}, "kb8", kb8)},
+    {"equisolid", model("equisolid", {}, "none", {})},
+    {"stereographic", model("stereographic", {}, "none", {})},
+    {"orthographic", model("orthographic", {}, "none", {})},
+    {"omnidirectional", model("omnidirectional", {0.8}, "radtan4", {-0.2, 0.05, 0.001, -0.001})},
+    {"omnidirectional without correction", model("omnidirectional", {0.8}, "none", {})},
+    {"double sphere", model("double_sphere", {-0.2, 0.6}, "none", {})},
+    {"eucm", model("eucm", {0.6, 1.1}, "none", {})},
     {"equirectangular", equirect},
     {"cylindrical", cylindrical},
   };
@@ -275,7 +292,7 @@ TEST(CameraInfoExportRos, RefusesLensesRosCannotHold)
     expectUntouched(out, m.name);
   }
 
-  CameraModel invalid = fromCameraInfo("radtan5", {-0.2, 0.05, 0.001, -0.002, 0.01});
+  CameraModel invalid = model("pinhole", {}, "radtan5", {-0.2, 0.05, 0.001, -0.002, 0.01});
   invalid.intrinsics.fx = std::nanf("");
   CameraInfo out = sentinel();
   EXPECT_NE(exportCameraInfo(invalid, out), StatusCode::OK);
@@ -297,4 +314,172 @@ TEST(CameraInfoExportRos, DoublePrecisionKeepsEveryDigit)
   EXPECT_EQ(out.d, in.d);
   EXPECT_EQ(out.k, in.k);
   EXPECT_EQ(makeCameraModel64(out).distortion.coeffs, model.distortion.coeffs);
+}
+
+namespace
+{
+
+// Every law and correction combination a model can have, with values that
+// are not round in float.
+std::vector<std::pair<const char *, CamxiomCameraInfo>> everyModel()
+{
+  std::vector<double> rational = sequence(8U, -0.21, 0.031);
+  std::vector<double> prism = sequence(12U, -0.21, 0.031);
+  std::vector<double> tilt = sequence(14U, -0.21, 0.017);
+  const std::vector<double> kb4{0.021, -0.0043, 0.00081, -0.00012};
+  const std::vector<double> kb8{0.021, -0.0043, 0.00081, -0.00012, 1.3e-5, -2.1e-6, 3.0e-7, 0.0};
+  return {
+    {"pinhole none", describe("pinhole", {}, "none", {})},
+    {"pinhole radtan4", describe("pinhole", {}, "radtan4", {-0.21, 0.051, 0.0013, -0.0021})},
+    {"pinhole radtan5", describe("pinhole", {}, "radtan5", {-0.21, 0.051, 0.0013, -0.0021, 0.011})},
+    {"pinhole rational8", describe("pinhole", {}, "rational8", rational)},
+    {"pinhole thin_prism12", describe("pinhole", {}, "thin_prism12", prism)},
+    {"pinhole tilted14", describe("pinhole", {}, "tilted14", tilt)},
+    {"equidistant none", describe("equidistant", {}, "none", {})},
+    {"equidistant kb4", describe("equidistant", {}, "kb4", kb4)},
+    {"equidistant kb4 at zero", describe("equidistant", {}, "kb4", {0.0, 0.0, 0.0, 0.0})},
+    {"equidistant kb8", describe("equidistant", {}, "kb8", kb8)},
+    {"equisolid", describe("equisolid", {}, "none", {})},
+    {"stereographic", describe("stereographic", {}, "none", {})},
+    {"orthographic", describe("orthographic", {}, "none", {})},
+    {"omnidirectional none", describe("omnidirectional", {0.83}, "none", {})},
+    {"omnidirectional radtan4",
+     describe("omnidirectional", {0.83}, "radtan4", {-0.21, 0.051, 0.0013, -0.0021})},
+    {"double sphere none", describe("double_sphere", {-0.21, 0.61}, "none", {})},
+    {"double sphere radtan5",
+     describe(
+       "double_sphere", {-0.21, 0.61}, "radtan5", {-0.021, 0.0051, 0.0013, -0.0021, 0.0011}
+     )},
+    {"eucm none", describe("eucm", {0.61, 1.13}, "none", {})},
+    {"eucm rational8", describe("eucm", {0.61, 1.13}, "rational8", sequence(8U, -0.021, 0.0031))},
+    {"equirectangular", describe("equirectangular", {}, "none", {})},
+    {"cylindrical", describe("cylindrical", {}, "none", {})},
+  };
+}
+
+template <typename T>
+void expectSameModel(const CameraModelT<T> &a, const CameraModelT<T> &b, const char *what)
+{
+  EXPECT_EQ(a.intrinsics.fx, b.intrinsics.fx) << what;
+  EXPECT_EQ(a.intrinsics.fy, b.intrinsics.fy) << what;
+  EXPECT_EQ(a.intrinsics.cx, b.intrinsics.cx) << what;
+  EXPECT_EQ(a.intrinsics.cy, b.intrinsics.cy) << what;
+  EXPECT_EQ(a.intrinsics.skew, b.intrinsics.skew) << what;
+  EXPECT_EQ(a.projection.type, b.projection.type) << what;
+  EXPECT_EQ(a.projection.xi, b.projection.xi) << what;
+  EXPECT_EQ(a.projection.alpha, b.projection.alpha) << what;
+  EXPECT_EQ(a.projection.beta, b.projection.beta) << what;
+  EXPECT_EQ(a.projection.theta_max, b.projection.theta_max) << what;
+  EXPECT_EQ(a.distortion.type, b.distortion.type) << what;
+  EXPECT_EQ(a.distortion.count, b.distortion.count) << what;
+  EXPECT_EQ(a.distortion.coeffs, b.distortion.coeffs) << what;
+}
+
+}  // namespace
+
+// Every valid model is written, field by field under the toString names, and
+// reads back as the same model, in float and in double.
+TEST(CameraInfoExportCamxiom, WritesAndReadsBackEveryModel)
+{
+  for (const auto &[what, description] : everyModel())
+  {
+    const CameraModel source = makeCameraModel(description);
+    ASSERT_EQ(validateCameraModel(source), StatusCode::OK) << what;
+    CamxiomCameraInfo out;
+    out.image_width = 7U;
+    out.image_height = 5U;
+    ASSERT_EQ(exportCameraInfo(source, out), StatusCode::OK) << what;
+    EXPECT_EQ(out.projection_model, description.projection_model) << what;
+    EXPECT_EQ(out.distortion_model, description.distortion_model) << what;
+    EXPECT_EQ(out.projection_parameters.size(), description.projection_parameters.size()) << what;
+    EXPECT_EQ(out.distortion_parameters.size(), description.distortion_parameters.size()) << what;
+    EXPECT_EQ(out.image_width, 7U) << what;  // the image size is the caller's
+    EXPECT_EQ(out.image_height, 5U) << what;
+    expectSameModel(makeCameraModel(out), source, what);
+
+    const CameraModel64 source64 = makeCameraModel64(description);
+    ASSERT_EQ(validateCameraModel64(source64), StatusCode::OK) << what;
+    CamxiomCameraInfo out64;
+    ASSERT_EQ(exportCameraInfo64(source64, out64), StatusCode::OK) << what;
+    // Double values are written as they are.
+    EXPECT_EQ(out64.projection_parameters, description.projection_parameters) << what;
+    EXPECT_EQ(out64.distortion_parameters, description.distortion_parameters) << what;
+    EXPECT_EQ(out64.intrinsic_parameters, description.intrinsic_parameters) << what;
+    expectSameModel(makeCameraModel64(out64), source64, what);
+  }
+}
+
+// A RADTAN4 model may carry k3 in a fifth coefficient, which projection
+// evaluates; it is written as the radtan5 lens it is, not truncated.
+TEST(CameraInfoExportCamxiom, WritesAFiveTermRadtan4AsRadtan5)
+{
+  CameraModel source;
+  source.intrinsics.fx = 400.0f;
+  source.intrinsics.fy = 400.0f;
+  source.projection.type = ProjectionModelType::PINHOLE;
+  source.distortion.type = DistortionModelType::RADTAN4;
+  source.distortion.count = 5U;
+  source.distortion.coeffs = {-0.2f, 0.05f, 0.001f, -0.002f, 0.01f};
+  ASSERT_EQ(validateCameraModel(source), StatusCode::OK);
+  CamxiomCameraInfo out;
+  ASSERT_EQ(exportCameraInfo(source, out), StatusCode::OK);
+  EXPECT_EQ(out.distortion_model, "radtan5");
+  EXPECT_EQ(out.distortion_parameters, (std::vector<double>{-0.2, 0.05, 0.001, -0.002, 0.01}));
+  const CameraModel back = makeCameraModel(out);
+  ASSERT_EQ(validateCameraModel(back), StatusCode::OK);
+  EXPECT_EQ(back.distortion.coeffs, source.distortion.coeffs);
+  expectSameLens(source, back, "radtan4 with k3");
+  // The ray (1, 0, 1) shows k3: 404 px with it, 400 px without.
+  const PixelResult pixel = rayToPixel(back, Eigen::Vector3f(1.0f, 0.0f, 1.0f));
+  ASSERT_EQ(pixel.status, StatusCode::OK);
+  EXPECT_NEAR(pixel.pixel.u, rayToPixel(source, Eigen::Vector3f(1.0f, 0.0f, 1.0f)).pixel.u, 1e-3f);
+}
+
+// A float model is written as the shortest decimal that reads back as the
+// same float: 0.021 rather than 0.020999999716877937.
+TEST(CameraInfoExportCamxiom, FloatValuesAreWrittenAsShortDecimals)
+{
+  const CameraModel source =
+    makeCameraModel(describe("pinhole", {}, "radtan5", {-0.21, 0.051, 0.0013, -0.0021, 0.011}));
+  CamxiomCameraInfo out;
+  ASSERT_EQ(exportCameraInfo(source, out), StatusCode::OK);
+  EXPECT_EQ(out.distortion_parameters, (std::vector<double>{-0.21, 0.051, 0.0013, -0.0021, 0.011}));
+  EXPECT_EQ(out.intrinsic_parameters, (std::array<double, 5>{400.0, 410.0, 320.0, 240.0, 0.0}));
+}
+
+// A description that is not a valid model reads as one validation rejects:
+// unknown names, parameter counts that do not match the law or the
+// correction, and combinations no model has.
+TEST(CameraInfoExportCamxiom, RejectsDescriptionsThatAreNotModels)
+{
+  const std::vector<std::pair<const char *, CamxiomCameraInfo>> invalid{
+    {"unknown law", describe("fisheye_theta", {}, "none", {})},
+    {"unknown correction", describe("pinhole", {}, "radtan6", {})},
+    {"empty law", describe("", {}, "none", {})},
+    {"missing law parameter", describe("double_sphere", {-0.2}, "none", {})},
+    {"extra law parameter", describe("pinhole", {0.5}, "none", {})},
+    {"too few coefficients", describe("pinhole", {}, "radtan5", {-0.2, 0.05, 0.001, -0.002})},
+    {"coefficients without a correction", describe("equisolid", {}, "none", {0.0, 0.0, 0.0, 0.0})},
+    {"kb4 on pinhole", describe("pinhole", {}, "kb4", {0.02, -0.004, 0.0008, -0.0001})},
+    {"radtan5 on the equidistant law",
+     describe("equidistant", {}, "radtan5", {-0.2, 0.05, 0.001, -0.002, 0.01})},
+    {"correction on equirectangular",
+     describe("equirectangular", {}, "radtan4", {-0.2, 0.05, 0.001, -0.002})},
+  };
+  for (const auto &[what, description] : invalid)
+  {
+    EXPECT_NE(validateCameraModel(makeCameraModel(description)), StatusCode::OK) << what;
+    EXPECT_NE(validateCameraModel64(makeCameraModel64(description)), StatusCode::OK) << what;
+  }
+}
+
+TEST(CameraInfoExportCamxiom, RefusesAnInvalidModelWithoutWriting)
+{
+  CameraModel invalid = model("pinhole", {}, "radtan5", {-0.2, 0.05, 0.001, -0.002, 0.01});
+  invalid.intrinsics.fy = std::nanf("");
+  CamxiomCameraInfo out;
+  out.projection_model = "untouched";
+  EXPECT_NE(exportCameraInfo(invalid, out), StatusCode::OK);
+  EXPECT_EQ(out.projection_model, "untouched");
+  EXPECT_TRUE(out.distortion_model.empty());
 }
