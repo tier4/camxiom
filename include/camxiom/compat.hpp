@@ -67,17 +67,16 @@ struct CamxiomCameraInfo
   std::array<double, 5> intrinsic_parameters{{1.0, 1.0, 0.0, 0.0, 0.0}};
 };
 
-/// Build a CameraModel from a raw camera description. The distortion_model
-/// name gives the projection law and the lens correction: the ROS names
-/// `plumb_bob` / `rational_polynomial` (pinhole with radtan / rational, the
-/// correction chosen by the length of d) and `equidistant` (the equidistant
-/// law with KB4), and camxiom's own names (`radtan4`, `radtan5`, `rational8`,
-/// `thin_prism12`, `tilted14`, `kb4`, `kb8`, `ideal_equidistant`, `equisolid`,
-/// `stereographic`, `orthographic`, `omnidirectional` / `double_sphere` /
-/// `eucm` with their projection parameters first in d, and older aliases).
-/// An empty name means pinhole, with the correction chosen by the length of
-/// d. A description that is not a valid model comes back as one that
-/// validateCameraModel rejects.
+/// Build a CameraModel from a ROS CameraInfo. distortion_model must be one of
+/// the ROS names exportCameraInfo writes: `plumb_bob` (pinhole without a
+/// correction for 0 coefficients, with radtan for 4 or 5),
+/// `rational_polynomial` (pinhole with rational; 8 coefficients, or 12 / 14
+/// with the thin-prism / tilt terms) or `equidistant` (the equidistant law
+/// with KB4; 4 coefficients). K gives fx, skew, cx, fy, cy. Any other name,
+/// or a description that is not a valid model, comes back as a model
+/// validateCameraModel rejects. The ROS and YAML readers funnel through
+/// here; camxiom's own description (CamxiomCameraInfo) holds every other
+/// model.
 [[nodiscard]] CameraModel makeCameraModel(const CameraInfo &camera_info);
 
 /// Parse K/D directly into double storage, without a float intermediate.

@@ -37,19 +37,6 @@ inline std::string toLowerCopy(const std::string &input)
   return lower;
 }
 
-/// The projection law and correction an interchange `distortion_model` name
-/// (ROS CameraInfo, OpenCV, camxiom's own names) stands for. Defined in
-/// model/parse.cpp. Names of the sphere-based models (omnidirectional,
-/// double sphere, EUCM) are read by the CameraInfo factory itself, because
-/// their D vectors also carry projection parameters.
-struct InterchangeModel
-{
-  ProjectionModelType projection{ProjectionModelType::UNKNOWN};
-  DistortionModelType distortion{DistortionModelType::UNKNOWN};
-};
-
-InterchangeModel readInterchangeModelName(const std::string &model_name);
-
 // hasAnyNonZero / setIdentity3x3 / computeTiltMatrices moved to the
 // precision-agnostic model/distortion_aux.hpp (single source shared with the
 // PnP solver write-back and the analytical double cost), together with

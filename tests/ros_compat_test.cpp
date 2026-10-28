@@ -136,32 +136,19 @@ TEST(RosCompatMakeCameraModel, PlumbBobIsPinholeRadtan5)
   EXPECT_NEAR(model.distortion.coeffs[0], -0.2f, 1e-5);
 }
 
-TEST(RosCompatMakeCameraModel, DoubleSphereString)
+// Only the ROS names exportCameraInfo writes are read; any other name (here
+// camxiom's former double_sphere packing, and an empty name) gives a model
+// validation rejects.
+TEST(RosCompatMakeCameraModel, OtherNamesAreRefused)
 {
-  RosCameraInfo msg;
-  msg.k = makeK(200.0, 200.0, 320.0, 240.0);
-  msg.distortion_model = "double_sphere";
-  msg.d = {-0.2, 0.5};  // xi, alpha
-
-  const CameraModel model = makeCameraModel(msg);
-  EXPECT_EQ(validateCameraModel(model), StatusCode::OK);
-  EXPECT_EQ(model.projection.type, ProjectionModelType::DOUBLE_SPHERE);
-  EXPECT_NEAR(model.projection.xi, -0.2f, 1e-5);
-  EXPECT_NEAR(model.projection.alpha, 0.5f, 1e-5);
-}
-
-TEST(RosCompatMakeCameraModel, EmptyStringIsPinholeNoDistortion)
-{
-  RosCameraInfo msg;
-  msg.k = makeK(500.0, 500.0, 320.0, 240.0);
-  msg.distortion_model = "";
-  msg.d = {};
-
-  const CameraModel model = makeCameraModel(msg);
-  EXPECT_EQ(validateCameraModel(model), StatusCode::OK);
-  EXPECT_EQ(model.projection.type, ProjectionModelType::PINHOLE);
-  EXPECT_EQ(model.distortion.type, DistortionModelType::NONE);
-  EXPECT_EQ(model.distortion.count, 0U);
+  for (const char *name : {"double_sphere", ""})
+  {
+    RosCameraInfo msg;
+    msg.k = makeK(200.0, 200.0, 320.0, 240.0);
+    msg.distortion_model = name;
+    msg.d = {-0.2, 0.5};
+    EXPECT_NE(validateCameraModel(makeCameraModel(msg)), StatusCode::OK) << name;
+  }
 }
 
 // ===========================================================================
@@ -213,26 +200,29 @@ TEST(RosCompatRoundTrip, EquidistantKb4)
 
 // The sphere models read from camxiom's own names, but ROS has no distortion
 // model for them: the export refuses and leaves the message as it was.
+// The sphere models have no ROS distortion model: the export refuses and
+// leaves the message as it was.
 TEST(RosCompatExport, RefusesLensesRosCannotHold)
 {
   const std::vector<std::pair<std::string, std::vector<double>>> cases{
     {"omnidirectional", {1.0}}, {"double_sphere", {-0.2, 0.5}}, {"eucm", {0.5, 1.0}}};
-  for (const auto &[name, d] : cases)
+  for (const auto &[law, parameters] : cases)
   {
-    RosCameraInfo msg;
-    msg.k = makeK(200.0, 200.0, 320.0, 240.0);
-    msg.distortion_model = name;
-    msg.d = d;
-    const CameraModel model = camxiom::makeCameraModel(msg);
-    ASSERT_EQ(validateCameraModel(model), StatusCode::OK) << name;
+    CamxiomCameraInfo description;
+    description.projection_model = law;
+    description.projection_parameters = parameters;
+    description.distortion_model = "none";
+    description.intrinsic_parameters = {200.0, 200.0, 320.0, 240.0, 0.0};
+    const CameraModel model = camxiom::makeCameraModel(description);
+    ASSERT_EQ(validateCameraModel(model), StatusCode::OK) << law;
 
     RosCameraInfo out;
     out.distortion_model = "untouched";
     out.binning_x = 2U;
-    EXPECT_EQ(exportCameraInfo(model, out), StatusCode::INVALID_MODEL) << name;
-    EXPECT_EQ(out.distortion_model, "untouched") << name;
-    EXPECT_TRUE(out.d.empty()) << name;
-    EXPECT_EQ(out.binning_x, 2U) << name;
+    EXPECT_EQ(exportCameraInfo(model, out), StatusCode::INVALID_MODEL) << law;
+    EXPECT_EQ(out.distortion_model, "untouched") << law;
+    EXPECT_TRUE(out.d.empty()) << law;
+    EXPECT_EQ(out.binning_x, 2U) << law;
   }
 }
 

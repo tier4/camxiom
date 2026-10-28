@@ -925,7 +925,7 @@ TEST(CalibIntrinsics, PrismAndTiltTermsLeaveAZeroSeed)
   tilt.push_back(-0.008);
 
   const std::vector<std::pair<std::string, std::vector<double>>> cases = {
-    {"thin_prism_fisheye", prism}, {"tilted", tilt}};
+    {"rational_polynomial", prism}, {"rational_polynomial", tilt}};
   for (const auto &[name, coeffs] : cases)
   {
     SCOPED_TRACE(name);
