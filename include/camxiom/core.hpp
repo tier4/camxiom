@@ -17,7 +17,7 @@
 
 // Convenience umbrella for the RUNTIME geometry layer (camxiom::core).
 //
-// Pulls in every public header of the runtime core: types, camera
+// Pulls in every public header of the Eigen-only runtime core: types, camera
 // model, projection (float + double + AutoDiff template), Jacobians, inverse
 // LUT, batch projection, remap, and the ROS/OpenCV-free CameraInfo compat POD.
 //
@@ -47,7 +47,6 @@
 #include "camxiom/validated_model.hpp"
 
 // --- ROS-free, OpenCV-free K/D <-> CameraModel interchange (CameraInfo POD) --
-#include "camxiom/camera_info_yaml.hpp"
 #include "camxiom/compat.hpp"
 
 // --- Projection: ray <-> pixel (float, double, AutoDiff template) -----------

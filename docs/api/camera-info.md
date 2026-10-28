@@ -9,9 +9,11 @@ How camera descriptions enter and leave camxiom. There are two formats:
 - **camxiom's own description** (`camxiom::CamxiomCameraInfo`): holds every
   valid `CameraModel`, field by field, and reads back as the same model.
 
-Headers: `<camxiom/compat.hpp>`, `<camxiom/camera_info_yaml.hpp>` (both core,
-no ROS / no OpenCV). The ROS message adapters live in
-[`<camxiom/ros.hpp>`](interop.md).
+Header: `<camxiom/compat.hpp>` (core, no ROS / no OpenCV). The ROS message
+adapters live in [`<camxiom/ros.hpp>`](interop.md). camxiom does not read or
+write files: storing a description is left to the application, and
+[Camera files in YAML](../guides/camera-yaml.md) shows how to do it with
+yaml-cpp in both layouts.
 
 ## ROS CameraInfo
 
@@ -132,98 +134,18 @@ the five-term layout, which is written as `radtan5` and reads back as that
 (the same lens, all five coefficients kept). `image_width` /
 `image_height` are left to the caller on export.
 
-## YAML
-
-```cpp
-// ROS camera_calibration_parsers layout
-std::string toCameraInfoYaml(const CameraInfo &info, const std::string &camera_name = "camera");
-StatusCode  saveCameraInfoYaml(const std::string &path, const CameraInfo &info,
-                               const std::string &camera_name = "camera");
-std::string toCameraInfoYaml(const CameraInfo &, const std::string &camera_name,
-                             CameraInfoYamlPrecision precision);   // FIXED | ROUND_TRIP
-StatusCode  saveCameraInfoYaml(const std::string &path, const CameraInfo &,
-                               const std::string &camera_name, CameraInfoYamlPrecision precision);
-StatusCode  parseCameraInfoYaml(const std::string &yaml, CameraInfo &out);
-
-// camxiom's own layout
-std::string toCamxiomCameraInfoYaml(const CamxiomCameraInfo &info);
-StatusCode  saveCamxiomCameraInfoYaml(const std::string &path, const CamxiomCameraInfo &info);
-StatusCode  parseCamxiomCameraInfoYaml(const std::string &yaml, CamxiomCameraInfo &out);
-
-// Either layout, straight to a model
-StatusCode parseCameraModelYaml(const std::string &yaml, CameraModel &model_out, ImageSize &size_out);
-StatusCode loadCameraModelYaml(const std::string &path, CameraModel &model_out, ImageSize &size_out);
-// ... and parseCameraModelYaml64 / loadCameraModelYaml64 for CameraModel64
-```
-
-**ROS layout.** `toCameraInfoYaml` writes the standard calibration-file keys —
-`image_width`, `image_height`, `camera_name`, `camera_matrix`,
-`distortion_model`, `distortion_coefficients`, `rectification_matrix`,
-`projection_matrix` — accepted by `camera_calibration_parsers` and camera
-drivers' `camera_info_url`, without camxiom depending on ROS. `FIXED` (the
-default) writes matrices at 6 decimals in aligned blocks and the distortion
-coefficients at 12 decimals; `ROUND_TRIP` writes 17 significant digits, so
-every finite double, negative zero and subnormals included, reads back
-exactly. `parseCameraInfoYaml` reads that layout (`rectification_matrix`,
-`projection_matrix`, `binning_x`, `binning_y` and `roi` when present; other
-keys such as `camera_name` are ignored). Binning and ROI are folded into K,
-P and the image size exactly as the [ROS layer](interop.md) does for a
-message, so a file and the same CameraInfo as a message give the same model.
-The writer has no binning or ROI to write: its CameraInfo already describes
-the image's own pixels.
-
-**camxiom's layout.** One key per field:
-
-```yaml
-image_width: 1280
-image_height: 960
-projection_model: equidistant
-projection_parameters: []
-distortion_model: kb4
-distortion_parameters: [0.02, -0.005, 0.0, 0.0]
-intrinsic_parameters: [320.0, 320.0, 639.5, 479.5, 0.0]
-```
-
-Every number is written with the fewest digits that read back as the same
-double, so a file round-trips exactly. `parseCamxiomCameraInfoYaml` reads
-exactly these seven keys and refuses a missing or extra one.
-
-**Reading a model.** `parseCameraModelYaml` / `loadCameraModelYaml` take
-either layout: a document with a `projection_model` key is camxiom's, any
-other a ROS CameraInfo. On `OK` the model is valid and `size_out` is the
-image size the file gives; a document that cannot be read (or a file that
-cannot be opened) is `INVALID_INPUT`, and one that does not describe a valid
-model returns the validation status.
-
-All writers and readers are independent of the global locale (numbers always
-use `.`), and the writers quote and escape strings only when they are not
-identifier-like, so the output is always valid YAML. The writers emit what
-they are given and do not validate it.
-
-The readers go through yaml-cpp (0.7 or newer, a dependency of the core).
-They read whatever YAML yaml-cpp reads, and refuse malformed YAML (tab
-indentation, an unclosed collection), a second document, a root that is not
-a mapping, a repeated key and a quoted number. For untrusted input they also
-refuse more than 1 MiB (a file larger than that is not read), collections
-nested more than 16 deep, more than 256 keys in a mapping, more than 4096
-items in a sequence, and aliases that expand past about a million nodes.
-
 ## Round-trip picture
 
 ```
                      exportCameraInfo (ROS lenses only)
-  CameraModel ──────────────────────────────────────────► CameraInfo ── toCameraInfoYaml ──► ROS YAML
+  CameraModel ──────────────────────────────────────────► CameraInfo
        ▲  ▲                                                   │  ▲
        │  └────────────────── makeCameraModel ────────────────┘  └── ros.hpp: sensor_msgs (binning/ROI folded)
        │
        │             exportCameraInfo (every model)
-       ├────────────────────────────────────────────────► CamxiomCameraInfo ── toCamxiomCameraInfoYaml ──► camxiom YAML
+       ├────────────────────────────────────────────────► CamxiomCameraInfo
        └───────────────────── makeCameraModel ◄───────────────┘
-
-  parseCameraModelYaml / loadCameraModelYaml: either YAML ──► CameraModel + image size
 ```
 
-`makeCameraModel64`, `exportCameraInfo64` and the `*64` YAML readers pass
-intrinsics, coefficients and projection parameters through without rounding
-them to float. To keep a double model exactly in a file, write camxiom's
-layout, or the ROS layout with `CameraInfoYamlPrecision::ROUND_TRIP`.
+`makeCameraModel64` and `exportCameraInfo64` pass intrinsics, coefficients
+and projection parameters through without rounding them to float.
