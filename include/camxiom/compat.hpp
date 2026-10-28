@@ -74,9 +74,8 @@ struct CamxiomCameraInfo
 /// with the thin-prism / tilt terms) or `equidistant` (the equidistant law
 /// with KB4; 4 coefficients). K gives fx, skew, cx, fy, cy. Any other name,
 /// or a description that is not a valid model, comes back as a model
-/// validateCameraModel rejects. The ROS and YAML readers funnel through
-/// here; camxiom's own description (CamxiomCameraInfo) holds every other
-/// model.
+/// validateCameraModel rejects. The ROS layer funnels through here;
+/// camxiom's own description (CamxiomCameraInfo) holds every other model.
 [[nodiscard]] CameraModel makeCameraModel(const CameraInfo &camera_info);
 
 /// Parse K/D directly into double storage, without a float intermediate.

@@ -5,8 +5,7 @@
 | Dependency | Minimum | Required? | Enables |
 |---|---|---|---|
 | C++17 compiler, CMake ≥ 3.14 | — | **required** | — |
-| Eigen3 | 3.3 | **required** | the runtime core (`camxiom::core`). apt: `libeigen3-dev` |
-| yaml-cpp | 0.7 | **required** | the runtime core, for reading camera YAML files (`parseCameraInfoYaml`, `loadCameraModelYaml`, ...). apt: `libyaml-cpp-dev` |
+| Eigen3 | 3.3 | **required** | the runtime core (`camxiom::core`) — its only dependency. apt: `libeigen3-dev` |
 | Ceres | 2.0 | optional | the calibration layer (`camxiom::calib`). apt: `libceres-dev` — the 2.0.0 shipped by Ubuntu 22.04 / JetPack works (the 2.0 vs 2.1+ Manifold API difference is absorbed inside the solver implementation). |
 | OpenCV | any | optional | the `cv::Mat` interop layer (`opencv.hpp`, `opencv/pnp.hpp`) |
 | sensor_msgs (ROS 2) | any | optional | the ROS interop layer (`ros.hpp`) |
@@ -72,9 +71,9 @@ target_link_libraries(my_calib   PRIVATE camxiom::calib)   # calibration (needs 
 ```
 
 The generated package config re-resolves the public dependencies for you
-(`find_dependency` for Eigen3 and yaml-cpp, and — only when the corresponding
-layer was built — OpenMP, Ceres, OpenCV, sensor_msgs). Consumers do not need to
-find those packages themselves.
+(`find_dependency` for Eigen3, and — only when the corresponding layer was
+built — OpenMP, Ceres, OpenCV, sensor_msgs). Consumers do not need to find
+those packages themselves.
 
 When a ROS- or OpenCV-enabled camxiom build is consumed, the exported targets
 propagate the `CAMXIOM_HAS_ROS` / `CAMXIOM_HAS_OPENCV` compile definitions

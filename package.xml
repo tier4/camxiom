@@ -16,7 +16,6 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>eigen</depend>
-  <depend>yaml-cpp</depend>
   <depend>libceres-dev</depend>
   <!-- Optional interop layers: compiled into camxiom only when present at build
        time (see CMakeLists.txt). Declared here so a ROS/colcon build resolves

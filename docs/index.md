@@ -9,8 +9,8 @@ latitude-longitude projections as output and remap targets — plus a Ceres-base
 PnP / intrinsic-calibration layer and ROS 2 / OpenCV interfaces built on the
 same model set.
 
-The runtime core depends on Eigen and yaml-cpp. Everything else — Ceres,
-OpenCV, ROS 2, OpenMP — is optional and detected at configure time.
+Eigen is the only hard dependency of the runtime core. Everything else —
+Ceres, OpenCV, ROS 2, OpenMP — is optional and detected at configure time.
 
 ## Why camxiom
 
@@ -34,11 +34,11 @@ camxiom collapses that into one model set handled uniformly everywhere:
   with uncertainty and observability diagnostics, and cross-family model
   conversion.
 - **Fits existing ecosystems.** `sensor_msgs/CameraInfo` adapters, `cv::Mat`
-  drop-ins mirroring OpenCV signatures, ROS-layout calibration YAML, and
-  camxiom's own camera description for every model.
-- **Light by default.** The runtime core (`camxiom::core`) links only Eigen
-  and yaml-cpp — no OpenCV types in the core, no Ceres header installed. The
-  calibration layer is built only when Ceres is found (or requested).
+  drop-ins mirroring OpenCV signatures, and camxiom's own camera
+  description for every model.
+- **Light by default.** The runtime core (`camxiom::core`) links only Eigen —
+  no OpenCV types in the core, no Ceres header installed. The calibration
+  layer is built only when Ceres is found (or requested).
 
 ## Feature overview
 
@@ -49,7 +49,7 @@ camxiom collapses that into one model set handled uniformly everywhere:
 | [Jacobians](api/jacobians.md) | Analytical 2×3 point Jacobians, batch variants, and full parameter Jacobians (intrinsics / distortion / projection parameters) for optimization |
 | [Inverse LUT](api/lut.md) | Precomputed grid + bilinear interpolation for O(1) approximate `pixelToRay` |
 | [Remap & rectification](api/remap.md) | OpenCV-free undistort / rectify pipeline: an output camera of any projection (the latitude-longitude projections included) fitted from a template and one `alpha`, remap-map builders, CPU sampling kernel |
-| [CameraInfo interchange](api/camera-info.md) | ROS-free `camxiom::CameraInfo` POD (written only when ROS can hold the lens), camxiom's own `CamxiomCameraInfo` for every model, YAML for both and a reader that takes either |
+| [CameraInfo interchange](api/camera-info.md) | ROS-free `camxiom::CameraInfo` POD (written only when ROS can hold the lens) and camxiom's own `CamxiomCameraInfo` for every model, converted to and from a model |
 | [Calibration](api/calibration.md) | Default seeds, linear + model-specific init estimators, model-agnostic `PnpSolver` with `FIX_*` staged optimization, single-pass `calibrate()` with covariance and observability diagnostics |
 | [Model conversion](api/conversion.md) | `convertCameraModel`: fit a model of a different family to reproduce a source model's geometry, with honest fit-quality reporting |
 | [ROS / OpenCV interop](api/interop.md) | Optional `sensor_msgs::msg::CameraInfo` conversion layer and `cv::Mat` drop-in layer (`cv::` / `cv::fisheye::` / `cv::omnidir::`-style signatures, `RemapCache`, unified `solvePnP`) |
@@ -63,8 +63,7 @@ camxiom ships as one package with three CMake targets, split on a
 camxiom::camxiom  (INTERFACE umbrella — link this for everything)
 ├── camxiom::core   runtime geometry: types, model, projection, jacobian,
 │                   lut, batch, SIMD, remap, CameraInfo compat
-│                   depends on Eigen3 and yaml-cpp (+ optional OpenMP / ROS / OpenCV
-│                   interop)
+│                   depends on Eigen3 only (+ optional OpenMP / ROS / OpenCV interop)
 └── camxiom::calib  calibration: default seeds, init estimators, PnP solver,
                     intrinsics calibrator, model conversion
                     depends on camxiom::core + Ceres (built only with CAMXIOM_WITH_CERES)

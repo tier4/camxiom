@@ -347,7 +347,7 @@ using optimizer::PnpFlag;
 ///
 /// @param views          One CalibrationView per board observation.
 /// @param initial_model   Fully specified seed (e.g. from getDefaultSeed
-///                         or init::estimatePinholeOpenCv, or a yaml load).
+///                         or init::estimatePinholeOpenCv, or a model read from a file).
 ///                         A lat-long projection (EQUIRECTANGULAR,
 ///                         CYLINDRICAL) is rejected with INVALID_MODEL.
 /// @param lock_flags       Ceres parameter locks (PnpFlag bitset).

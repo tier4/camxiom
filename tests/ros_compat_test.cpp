@@ -35,7 +35,6 @@
 
 #if __has_include(<sensor_msgs/msg/camera_info.hpp>)
 
-#include "camxiom/camera_info_yaml.hpp"
 #include "camxiom/compat.hpp"
 #include "camxiom/model.hpp"
 #include "camxiom/ros.hpp"
@@ -352,52 +351,6 @@ TEST(RosCompatBinningRoi, ExportResetsBinningAndRoi)
   EXPECT_NEAR(again.intrinsics.fy, model.intrinsics.fy, 1e-6);
   EXPECT_NEAR(again.intrinsics.cx, model.intrinsics.cx, 1e-6);
   EXPECT_NEAR(again.intrinsics.cy, model.intrinsics.cy, 1e-6);
-}
-
-// The same binned, cropped CameraInfo read as a message and as a ROS YAML
-// file gives the same model.
-TEST(RosCompatBinningRoi, YamlAndMessageGiveTheSameModel)
-{
-  RosCameraInfo msg = makeFullResPinholeMsg();
-  msg.binning_x = 2U;
-  msg.binning_y = 2U;
-  msg.roi.x_offset = 100U;
-  msg.roi.y_offset = 50U;
-  msg.roi.width = 640U;
-  msg.roi.height = 480U;
-  const CameraModel from_message = camxiom::makeCameraModel(msg);
-  ASSERT_EQ(validateCameraModel(from_message), StatusCode::OK);
-
-  const std::string yaml =
-    "image_width: 1280\n"
-    "image_height: 960\n"
-    "camera_matrix:\n"
-    "  rows: 3\n"
-    "  cols: 3\n"
-    "  data: [1000.0, 0.0, 640.0, 0.0, 1000.0, 480.0, 0.0, 0.0, 1.0]\n"
-    "distortion_model: plumb_bob\n"
-    "distortion_coefficients:\n"
-    "  rows: 1\n"
-    "  cols: 5\n"
-    "  data: [0.0, 0.0, 0.0, 0.0, 0.0]\n"
-    "binning_x: 2\n"
-    "binning_y: 2\n"
-    "roi:\n"
-    "  x_offset: 100\n"
-    "  y_offset: 50\n"
-    "  height: 480\n"
-    "  width: 640\n"
-    "  do_rectify: false\n";
-  CameraModel from_yaml;
-  camxiom::ImageSize size;
-  ASSERT_EQ(camxiom::parseCameraModelYaml(yaml, from_yaml, size), StatusCode::OK);
-  EXPECT_EQ(from_yaml.intrinsics.fx, from_message.intrinsics.fx);
-  EXPECT_EQ(from_yaml.intrinsics.fy, from_message.intrinsics.fy);
-  EXPECT_EQ(from_yaml.intrinsics.cx, from_message.intrinsics.cx);
-  EXPECT_EQ(from_yaml.intrinsics.cy, from_message.intrinsics.cy);
-  EXPECT_EQ(from_yaml.distortion.type, from_message.distortion.type);
-  EXPECT_EQ(size.width, 320);
-  EXPECT_EQ(size.height, 240);
 }
 
 TEST(RosCompatBinningRoi, DefaultBinningAndFullRoiAreNoOp)

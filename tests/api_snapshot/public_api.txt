@@ -152,24 +152,6 @@ namespace camxiom::calib
 
 === include/camxiom/calibration.hpp ===
 
-=== include/camxiom/camera_info_yaml.hpp ===
-camxiom | [[nodiscard]] StatusCode loadCameraModelYaml( const std::string &path, CameraModel &model_out, ImageSize &image_size_out )
-camxiom | [[nodiscard]] StatusCode loadCameraModelYaml64( const std::string &path, CameraModel64 &model_out, ImageSize &image_size_out )
-camxiom | [[nodiscard]] StatusCode parseCameraInfoYaml(const std::string &yaml, CameraInfo &camera_info_out)
-camxiom | [[nodiscard]] StatusCode parseCameraModelYaml( const std::string &yaml, CameraModel &model_out, ImageSize &image_size_out )
-camxiom | [[nodiscard]] StatusCode parseCameraModelYaml64( const std::string &yaml, CameraModel64 &model_out, ImageSize &image_size_out )
-camxiom | [[nodiscard]] StatusCode parseCamxiomCameraInfoYaml( const std::string &yaml, CamxiomCameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode saveCameraInfoYaml( const std::string &path, const CameraInfo &camera_info, const std::string &camera_name = "" )
-camxiom | [[nodiscard]] StatusCode saveCameraInfoYaml( const std::string &path, const CameraInfo &camera_info, const std::string &camera_name, CameraInfoYamlPrecision precision )
-camxiom | [[nodiscard]] StatusCode saveCamxiomCameraInfoYaml( const std::string &path, const CamxiomCameraInfo &camera_info )
-camxiom | [[nodiscard]] std::string toCameraInfoYaml( const CameraInfo &camera_info, const std::string &camera_name = "" )
-camxiom | [[nodiscard]] std::string toCameraInfoYaml( const CameraInfo &camera_info, const std::string &camera_name, CameraInfoYamlPrecision precision )
-camxiom | [[nodiscard]] std::string toCamxiomCameraInfoYaml(const CamxiomCameraInfo &camera_info)
-camxiom | enum class CameraInfoYamlPrecision : std::uint8_t
-camxiom::CameraInfoYamlPrecision | #000 FIXED = 0U
-camxiom::CameraInfoYamlPrecision | #001 ROUND_TRIP = 1U
-namespace camxiom
-
 === include/camxiom/camxiom.hpp ===
 
 === include/camxiom/compat.hpp ===

@@ -8,7 +8,7 @@ geometry vs calibration** boundary — a semantic split, deliberately *not*
 
 | Target | Alias | Depends on | Contents |
 |---|---|---|---|
-| `camxiom_core` | `camxiom::core` | **Eigen3 + yaml-cpp** (+ optional OpenMP; optional ROS / OpenCV interop) | types, model parsing/validation, generic + per-model projection (float & double), Jacobians, LUT, batch + SIMD kernels, remap/rectify, CameraInfo compat + YAML |
+| `camxiom_core` | `camxiom::core` | **Eigen3 only** (+ optional OpenMP; optional ROS / OpenCV interop) | types, model parsing/validation, generic + per-model projection (float & double), Jacobians, LUT, batch + SIMD kernels, remap/rectify, CameraInfo compat |
 | `camxiom_calib` | `camxiom::calib` | `camxiom::core` + **Ceres** (PUBLIC) | default seeds, all init estimators, PnP optimizer, `calibrate()`, `convertCameraModel()`. Built only when `CAMXIOM_WITH_CERES`. |
 | `camxiom` | `camxiom::camxiom` | whatever was built | INTERFACE umbrella: core + calib when present. The backward-compatible "link everything" target. |
 
@@ -21,8 +21,6 @@ Two boundary decisions worth spelling out:
 - The ROS and OpenCV **interop layers compile into `core`** (they are
   Ceres-free adapters), guarded by `CAMXIOM_HAS_ROS` / `CAMXIOM_HAS_OPENCV`
   and compiled only when the dependency is found.
-- **YAML reading** goes through yaml-cpp, linked privately into `core`: no
-  installed header includes it, and the writers are plain C++.
 
 ## Dependency policy
 
@@ -44,7 +42,8 @@ Two boundary decisions worth spelling out:
   the core: `camxiom::CameraInfo`, a POD with the fields of a ROS
   CameraInfo (`ros.hpp` only copies message fields into it), and
   `camxiom::CamxiomCameraInfo`, camxiom's own description of every model.
-  Both are written to and read from YAML by the core without ROS.
+  The core converts both to and from a model without ROS; storing them
+  in files is left to the application.
 - **No exceptions across the API.** Fallible operations return `StatusCode`
   or result structs; see [Error handling](error-handling.md).
 
@@ -96,7 +95,7 @@ include/camxiom/
 ├── projection.hpp / projection64.hpp / projection_template.hpp
 ├── jacobian*.hpp  lut*.hpp  batch*.hpp
 ├── remap.hpp  remap_kernel.hpp
-├── compat.hpp  camera_info_yaml.hpp           # ROS-free interchange
+├── compat.hpp                                 # ROS-free interchange
 ├── ros.hpp  opencv.hpp  opencv/pnp.hpp        # optional interop (self-guarded)
 ├── default_seed.hpp  init/*.hpp               # calibration layer
 ├── optimizer/pnp_flag.hpp  optimizer/pnp_solver.hpp
@@ -131,7 +130,7 @@ configure-time check keeps `project(VERSION)`, `version.hpp`, and
 
 - GoogleTest suites per subsystem: core geometry (types, projection smoke,
   batch↔scalar parity, error paths, property/fuzz invariants, remap, LUT,
-  Jacobians, compat, YAML, validated model, umbrella-header include-safety)
+  Jacobians, compat, validated model, umbrella-header include-safety)
   plus calibration suites (per-estimator, solver, uncertainty, conversion,
   integration with real-correspondence fixtures). Interop and calibration
   tests are presence-gated, so every build configuration tests exactly what
