@@ -167,6 +167,8 @@ namespace camxiom
 === include/camxiom/compat.hpp ===
 camxiom | [[nodiscard]] CameraModel makeCameraModel(const CameraInfo &camera_info)
 camxiom | [[nodiscard]] CameraModel64 makeCameraModel64(const CameraInfo &camera_info)
+camxiom | [[nodiscard]] StatusCode exportCameraInfo(const CameraModel &model, CameraInfo &camera_info_out)
+camxiom | [[nodiscard]] StatusCode exportCameraInfo64( const CameraModel64 &model, CameraInfo &camera_info_out )
 camxiom | [[nodiscard]] StatusCode exportDoubleSphereCameraInfo( const CameraModel &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out )
 camxiom | [[nodiscard]] StatusCode exportDoubleSphereCameraInfo64( const CameraModel64 &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out)
 camxiom | [[nodiscard]] StatusCode exportDoubleSphereModel( const CameraModel &model, DoubleSphereCompatProfile profile, DoubleSphereExternalModel &external_model_out )

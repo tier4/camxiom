@@ -194,6 +194,31 @@ struct EucmExternalModel
   const CameraModel &model, EucmCompatProfile profile, CameraInfo &camera_info_out
 );
 
+/// Export a model as a ROS CameraInfo, only when the ROS distortion models
+/// can hold the same lens:
+///
+/// | model                                        | distortion_model      | D          |
+/// |----------------------------------------------|-----------------------|------------|
+/// | PINHOLE + NONE / RADTAN4 / RADTAN5           | `plumb_bob`           | 5 (padded) |
+/// | PINHOLE + RATIONAL8                          | `rational_polynomial` | 8          |
+/// | PINHOLE + THIN_PRISM12 / TILTED14, extra 0   | `rational_polynomial` | 8          |
+/// | EQUIDISTANT + NONE / KB4                     | `equidistant`         | 4 (padded) |
+/// | EQUIDISTANT + KB8 with k5..k8 = 0            | `equidistant`         | 4          |
+///
+/// Zeros are added only where the ROS name fixes the length; no non-zero
+/// coefficient is dropped (a RADTAN4 model that carries k3 in a fifth
+/// coefficient writes it). Every other model returns INVALID_MODEL and
+/// leaves camera_info_out unchanged: a prism or tilt term, KB8 terms past
+/// k4, a non-zero skew (ROS defines K without one and its receivers ignore
+/// it), and every projection other than pinhole and the equidistant law. An
+/// invalid model returns its validation status, also without writing. On
+/// OK, k is [fx 0 cx; 0 fy cy; 0 0 1], r the identity and p [K | 0];
+/// width/height are left to the caller.
+[[nodiscard]] StatusCode exportCameraInfo(const CameraModel &model, CameraInfo &camera_info_out);
+[[nodiscard]] StatusCode exportCameraInfo64(
+  const CameraModel64 &model, CameraInfo &camera_info_out
+);
+
 /// Double-precision counterparts of the profile-aware interchange functions.
 [[nodiscard]] StatusCode importPinholeModel64(
   const PinholeExternalModel &external_model, PinholeCompatProfile profile, CameraModel64 &model_out);

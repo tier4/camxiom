@@ -455,6 +455,7 @@ if(BUILD_TESTING)
     camxiom_add_gtest(camxiom_projection_error_paths_test tests/projection_error_paths_test.cpp)
     camxiom_add_gtest(camxiom_projection_template_test tests/projection_template_test.cpp)
     camxiom_add_gtest(camxiom_camera_info_yaml_test tests/camera_info_yaml_test.cpp)
+    camxiom_add_gtest(camxiom_camera_info_export_test tests/camera_info_export_test.cpp)
     camxiom_add_gtest(camxiom_remap_test tests/remap_test.cpp)
     # Also drives the rectify fit's internal patch budget (src/remap_rectify.hpp).
     if(TARGET camxiom_remap_test)
