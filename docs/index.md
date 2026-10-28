@@ -92,7 +92,7 @@ See [Architecture](design/architecture.md) for the full design.
 ## Status and license
 
 - Version **0.2.0** (pre-1.0: minor releases may contain breaking changes;
-  they are listed in the README's versioning notes).
+  they are listed in the release notes).
 - License: **Apache-2.0**.
 - Platforms exercised regularly: x86-64 (SSE2 baseline + AVX2) and
   aarch64 / NEON (NVIDIA Jetson).
