@@ -30,6 +30,8 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace
@@ -247,6 +249,155 @@ TEST(FisheyeLawInverse, BatchMatchesScalar)
             << toString(law) << " (" << u[i] << ", " << v[i] << ")";
         }
       }
+    }
+  }
+}
+
+namespace
+{
+
+// Unproject pixel (r cos phi, r sin phi) of a unit-intrinsics model and check
+// that an OK ray projects back onto it and that a refused one is refused as
+// the forward map refuses the back axis or the field of view. A pixel clearly
+// inside the rim (must_be_ok) has to come back OK, so the back-axis test
+// cannot spread over valid pixels.
+template <typename T>
+void checkReprojects(
+  const CameraModelT<T> &m, const T r, const T phi, const char *what, const bool must_be_ok = false
+)
+{
+  const Pixel2T<T> px{r * std::cos(phi), r * std::sin(phi)};
+  RayResultT<T> ray;
+  PixelResultT<T> back;
+  if constexpr (std::is_same_v<T, float>)
+  {
+    ray = pixelToRay(m, px);
+    back = rayToPixel(m, ray.ray.direction);
+  }
+  else
+  {
+    ray = pixelToRay64(m, px);
+    back = rayToPixel64(m, ray.ray.direction);
+  }
+  if (must_be_ok)
+  {
+    ASSERT_EQ(ray.status, StatusCode::OK) << what << " r " << r;
+  }
+  if (ray.status != StatusCode::OK)
+  {
+    EXPECT_TRUE(ray.status == StatusCode::DOMAIN_ERROR || ray.status == StatusCode::OUT_OF_FOV)
+      << what << " r " << r << ": " << toString(ray.status);
+    return;
+  }
+  ASSERT_EQ(back.status, StatusCode::OK) << what << " r " << r;
+  EXPECT_NEAR(back.pixel.u, px.u, T(1e-3)) << what << " r " << r;
+  EXPECT_NEAR(back.pixel.v, px.v, T(1e-3)) << what << " r " << r;
+}
+
+// Image radius of the rim (theta_max) in the model's own precision, in the
+// same order of operations as the library's forward law.
+template <typename T>
+T rimRadius(const CameraModelT<T> &m)
+{
+  const T theta = m.projection.theta_max;
+  if (m.projection.type == ProjectionModelType::EQUISOLID)
+  {
+    return T(2) * std::sin(theta * T(0.5));
+  }
+  if (m.distortion.type == DistortionModelType::KB4)
+  {
+    const T t3 = theta * theta * theta;
+    return theta + m.distortion.coeffs[0] * t3;
+  }
+  return theta;
+}
+
+template <typename T>
+void checkBackAxis(const CameraModelT<T> &m, const char *what)
+{
+  const T cap_radius = rimRadius(m);
+  // The rim radius itself is the back axis: refused, not flipped.
+  if constexpr (std::is_same_v<T, float>)
+  {
+    EXPECT_EQ(pixelToRay(m, Pixel2T<T>{cap_radius, T(0)}).status, StatusCode::DOMAIN_ERROR) << what;
+  }
+  else
+  {
+    EXPECT_EQ(pixelToRay64(m, Pixel2T<T>{cap_radius, T(0)}).status, StatusCode::DOMAIN_ERROR)
+      << what;
+  }
+  for (const T phi : {T(0), T(0.4), T(2.5), T(-1.9)})
+  {
+    T r = cap_radius;
+    for (int step = 0; step < 24; ++step)
+    {
+      checkReprojects(m, r, phi, what);
+      r = std::nextafter(r, T(0));
+    }
+    checkReprojects(m, cap_radius - T(1e-6), phi, what);
+    for (const T below : {T(1e-4), T(1e-3), T(1e-2)})
+    {
+      checkReprojects(m, cap_radius - below, phi, what, /*must_be_ok=*/true);
+    }
+    checkReprojects(m, std::nextafter(cap_radius, T(10)), phi, what);
+  }
+}
+
+template <typename T>
+CameraModelT<T> backAxisModel(const ProjectionModelType law, const DistortionModelType correction)
+{
+  CameraModelT<T> m;
+  m.projection.type = law;
+  m.distortion.type = correction;
+  if (correction == DistortionModelType::KB4)
+  {
+    m.distortion.count = 4U;
+    m.distortion.coeffs[0] = static_cast<T>(0.001);
+  }
+  // Float pi exceeds the true one; double takes the true pi. Both validate.
+  m.projection.theta_max =
+    std::is_same_v<T, float> ? static_cast<T>(constants::kPiF) : static_cast<T>(constants::kPi);
+  return m;
+}
+
+}  // namespace
+
+// Laws that reach theta = pi map the back axis to the whole rim circle. The
+// inverse refuses the rim like the forward map refuses the back axis, never
+// flips a ray across the axis, and every ray it returns projects back.
+TEST(FisheyeLawInverse, BackAxisIsRefusedLikeTheForwardMap)
+{
+  const std::pair<ProjectionModelType, DistortionModelType> laws[] = {
+    {ProjectionModelType::EQUIDISTANT, DistortionModelType::NONE},
+    {ProjectionModelType::EQUISOLID, DistortionModelType::NONE},
+    {ProjectionModelType::EQUIDISTANT, DistortionModelType::KB4}};
+  for (const auto &[law, correction] : laws)
+  {
+    const CameraModel mf = backAxisModel<float>(law, correction);
+    const CameraModel64 md = backAxisModel<double>(law, correction);
+    ASSERT_EQ(validateCameraModel(mf), StatusCode::OK) << toString(law);
+    ASSERT_EQ(validateCameraModel64(md), StatusCode::OK) << toString(law);
+    checkBackAxis(mf, toString(law));
+    checkBackAxis(md, toString(law));
+
+    // The batch path agrees, its SIMD groups and its scalar tail alike.
+    std::vector<float> u;
+    std::vector<float> v;
+    float r = rimRadius(mf);
+    for (int i = 0; i < 37; ++i)
+    {
+      u.push_back(r * std::cos(0.3f * i));
+      v.push_back(r * std::sin(0.3f * i));
+      r = i % 3 == 0 ? std::nextafter(r, 0.0f) : r - 1e-4f;
+    }
+    const int count = static_cast<int>(u.size());
+    std::vector<float> dirs(3 * u.size());
+    std::vector<StatusCode> statuses(u.size());
+    (void)pixelToRayBatch(mf, u.data(), v.data(), count, dirs.data(), statuses.data());
+    for (int i = 0; i < count; ++i)
+    {
+      const RayResult scalar = pixelToRay(mf, Pixel2{u[i], v[i]});
+      EXPECT_EQ(statuses[i], scalar.status) << toString(law) << " lane " << i;
     }
   }
 }
