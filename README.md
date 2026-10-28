@@ -62,7 +62,7 @@ image), not lenses to calibrate.
 | **Model conversion** *(optional, Ceres)* | `convertCameraModel` refits across model families (e.g. KB4 → pinhole+radtan5) with honest fit-quality reporting |
 | **Bulk APIs** | Batch projection / Jacobians with SIMD (AVX2 · SSE2 · NEON) + OpenMP; `InverseLut` for O(1) approximate unprojection |
 | **Jacobians** | Analytical 2×3 point Jacobians and full parameter Jacobians (intrinsics / distortion / ξ·α·β) for optimization |
-| **Remap & rectify** | Undistort/rectify for every model: virtual output-camera generation, OpenCV-compatible `alpha` semantics (pinhole `alpha` and fisheye `balance` unified), map builders, CPU sampling kernel — no OpenCV required |
+| **Remap & rectify** | Undistort/rectify for every model into any projection (pinhole, fisheye laws, sphere models, equirectangular / cylindrical): the output camera is a template scaled by one `alpha` (0 = no invalid pixels, 1 = whole source; pinhole `alpha` and fisheye `balance` in one), map builders, CPU sampling kernel — no OpenCV required |
 | **Interchange** | ROS-free `camxiom::CameraInfo` POD; `makeCameraModel` parses ROS / OpenCV distortion-model strings; per-model import/export profiles (OpenCV-Calib3D, Kalibr, Basalt); `camera_calibration_parsers`-layout YAML writer |
 | **Interop** *(optional)* | `sensor_msgs::msg::CameraInfo` adapters (binning/ROI folded correctly); `cv::Mat` drop-ins, `RemapCache`, unified `solvePnP` working with all models |
 

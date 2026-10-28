@@ -60,7 +60,10 @@ for (;;) {
 
 `build*` wrap the core [remap builders](remap.md) and store `cv::Mat`
 maps; `apply` runs `cv::remap`. Accessors: `isValid()`, `width()`,
-`height()`, `map1()`, `map2()`, `clear()`.
+`height()`, `map1()`, `map2()`, `clear()`. `buildRectify` and
+`rectifyImage` take the core `RectifiedOutputModelOptions` (an output
+template of any projection plus `alpha`; see
+[Rectification](remap.md#rectification)).
 
 ### One-shot helpers and map builders
 

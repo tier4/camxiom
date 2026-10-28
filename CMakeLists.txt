@@ -173,6 +173,13 @@ add_library(camxiom_core
   src/remap_kernel.cpp
 )
 add_library(camxiom::core ALIAS camxiom_core)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  # The rectify fit's interval arithmetic runs at about half speed when
+  # GCC's straight-line vectorizer (on at -O3) packs it into vector
+  # registers (measured with GCC 11).
+  set_source_files_properties(src/remap_rectify.cpp PROPERTIES
+    COMPILE_OPTIONS -fno-tree-slp-vectorize)
+endif()
 
 target_compile_features(camxiom_core PUBLIC cxx_std_17)
 target_compile_options(camxiom_core PRIVATE ${CAMXIOM_WARNING_OPTIONS})
@@ -449,6 +456,10 @@ if(BUILD_TESTING)
     camxiom_add_gtest(camxiom_projection_template_test tests/projection_template_test.cpp)
     camxiom_add_gtest(camxiom_camera_info_yaml_test tests/camera_info_yaml_test.cpp)
     camxiom_add_gtest(camxiom_remap_test tests/remap_test.cpp)
+    # Also drives the rectify fit's internal patch budget (src/remap_rectify.hpp).
+    if(TARGET camxiom_remap_test)
+      target_include_directories(camxiom_remap_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    endif()
     camxiom_add_gtest(camxiom_remap_kernel_test tests/remap_kernel_test.cpp)
     camxiom_add_gtest(camxiom_jacobian_batch_lut_test tests/jacobian_batch_lut_test.cpp)
     # Convenience/umbrella headers (#2). A CORE test so it is built even when

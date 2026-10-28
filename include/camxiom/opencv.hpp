@@ -82,7 +82,8 @@ RemapResult buildUndistortRemapMapCV(
   const SolverOptions &solver_options = SolverOptions{}
 );
 
-/// Build rectification remap maps (pinhole output, no black borders).
+/// Build rectification remap maps for the output camera fitted from
+/// options.output_template and options.alpha (camxiom::buildRectifyRemapMap).
 RectifyRemapResult buildRectifyRemapMapCV(
   const CameraModel &src_model, ImageSize src_size, const RectifiedOutputModelOptions &options,
   cv::Mat &map1, cv::Mat &map2
@@ -114,7 +115,7 @@ public:
     const SolverOptions &solver_options = SolverOptions{}
   );
 
-  /// Build and cache rectification remap maps (pinhole output).
+  /// Build and cache rectification remap maps (see buildRectifyRemapMapCV).
   RectifyRemapResult buildRectify(
     const CameraModel &src_model, ImageSize src_size,
     const RectifiedOutputModelOptions &options = RectifiedOutputModelOptions{}
@@ -157,7 +158,9 @@ private:
   int interpolation = 1, const SolverOptions &solver_options = SolverOptions{}
 );
 
-/// Rectify an image to a pinhole perspective output.
+/// Rectify an image to the output camera fitted from `options` (by default a
+/// square-pixel pinhole showing only valid pixels); the fitted camera is
+/// written to `output_model_out` when it is not null.
 [[nodiscard]] bool rectifyImage(
   const cv::Mat &src, cv::Mat &dst, const CameraModel &src_model,
   const RectifiedOutputModelOptions &options = RectifiedOutputModelOptions{},

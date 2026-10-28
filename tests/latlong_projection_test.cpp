@@ -40,6 +40,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -795,4 +796,59 @@ TEST(LatLongFactory, RejectsBadRanges)
   EXPECT_EQ(makeCylindricalModel(size, -kPi, kPi, -kPi / 2, 0.1, m), StatusCode::INVALID_INPUT);
   EXPECT_EQ(makeCylindricalModel(size, -kPi, kPi, -0.1, kPi / 2, m), StatusCode::INVALID_INPUT);
   EXPECT_EQ(makeCylindricalModel(size, -kPi, kPi, -1.5, 1.5, m), StatusCode::OK);
+}
+
+// A fisheye unwrapped into a full-sphere equirectangular image and back:
+// every output pixel the map fills points at a fisheye pixel whose ray lands
+// on that same output pixel, and the output is upright.
+TEST(LatLongRemap, FisheyeToEquirectangularRoundTrips)
+{
+  CameraModel fisheye;
+  fisheye.projection.type = ProjectionModelType::EQUIDISTANT;
+  fisheye.projection.theta_max = 1.66f;  // 190 degrees across
+  fisheye.intrinsics.fx = 150.0f;
+  fisheye.intrinsics.fy = 150.0f;
+  fisheye.intrinsics.cx = 319.5f;
+  fisheye.intrinsics.cy = 239.5f;
+  const ImageSize fisheye_size{640, 480};
+
+  CameraModel equirect;
+  const ImageSize equirect_size{512, 256};
+  ASSERT_EQ(makeEquirectangularModel(equirect_size, equirect), StatusCode::OK);
+
+  const int n = equirect_size.width * equirect_size.height;
+  std::vector<float> mx(n), my(n);
+  const ImageRemapResult res =
+    buildImageRemapMap(fisheye, fisheye_size, equirect, equirect_size, mx.data(), my.data());
+  ASSERT_EQ(res.status, StatusCode::OK);
+  // Rays up to 95 degrees off the axis cover a bit more than a hemisphere;
+  // the fisheye image crops the circle at the top and bottom.
+  EXPECT_GT(res.source_in_bounds_count, n / 3);
+  EXPECT_LT(res.source_in_bounds_count, 3 * n / 5);
+
+  float worst = 0.0f;
+  for (int v = 0; v < equirect_size.height; ++v)
+  {
+    for (int u = 0; u < equirect_size.width; ++u)
+    {
+      const int i = v * equirect_size.width + u;
+      if (mx[i] < 0.0f) continue;
+      const RayResult ray = pixelToRay(fisheye, Pixel2{mx[i], my[i]});
+      ASSERT_EQ(ray.status, StatusCode::OK);
+      const PixelResult back = rayToPixel(equirect, ray.ray.direction);
+      ASSERT_EQ(back.status, StatusCode::OK);
+      worst = std::max(worst, std::hypot(back.pixel.u - u, back.pixel.v - v));
+    }
+  }
+  EXPECT_LT(worst, 1e-2f);
+
+  // Upright: above the equirectangular centre is above the fisheye centre.
+  const int above = 64 * equirect_size.width + 256;
+  const int below = 192 * equirect_size.width + 256;
+  ASSERT_GE(my[above], 0.0f);
+  ASSERT_GE(my[below], 0.0f);
+  EXPECT_LT(my[above], fisheye.intrinsics.cy);
+  EXPECT_GT(my[below], fisheye.intrinsics.cy);
+  // Straight behind the camera is outside a 190-degree fisheye.
+  EXPECT_LT(mx[128 * equirect_size.width + 0], 0.0f);
 }

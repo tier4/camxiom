@@ -629,7 +629,6 @@ camxiom::projection_template | template <typename T> [[nodiscard]] bool projectT
 namespace camxiom::projection_template
 
 === include/camxiom/remap.hpp ===
-camxiom | BuildRectifyMapResult buildRectifyMap( const CameraModel &src_model, ImageSize src_size, ImageSize dst_size, float alpha, float *map_x, float *map_y, const BuildRectifyMapOptions &options = BuildRectifyMapOptions{} )
 camxiom | FovResult computeFov( const CameraModel &model, ImageSize image_size, const SolverOptions &solver_options = SolverOptions{} )
 camxiom | ImageRemapResult buildImageRemapMap( const CameraModel &src_model, ImageSize src_size, const CameraModel &dst_model, ImageSize dst_size, float *map_x, float *map_y, const ImageRemapOptions &options = ImageRemapOptions{} )
 camxiom | ImageRemapResult buildUndistortImageRemapMap( const CameraModel &src_model, ImageSize image_size, float *map_x, float *map_y, const SolverOptions &solver_options = SolverOptions{} )
@@ -638,13 +637,7 @@ camxiom | RectifyRemapResult buildRectifyRemapMap( const CameraModel &src_model,
 camxiom | RemapResult buildRemapMap( const CameraModel &src_model, const CameraModel &dst_model, int width, int height, float *map_x, float *map_y, const SolverOptions &solver_options = SolverOptions{} )
 camxiom | RemapResult buildUndistortRemapMap( const CameraModel &src_model, int width, int height, float *map_x, float *map_y, const SolverOptions &solver_options = SolverOptions{} )
 camxiom | const char *toString(InvalidPixelPolicy pixel_policy)
-camxiom | const char *toString(RectifiedProjectionType projection_type)
-camxiom | const char *toString(RectifyFitPolicy fit_policy)
 camxiom | enum class InvalidPixelPolicy : std::uint8_t
-camxiom | enum class RectifiedProjectionType : std::uint8_t
-camxiom | enum class RectifyFitPolicy : std::uint8_t
-camxiom | struct BuildRectifyMapOptions
-camxiom | struct BuildRectifyMapResult
 camxiom | struct ImageRemapOptions
 camxiom | struct RectifiedOutputModelOptions
 camxiom | struct [[nodiscard]] FovResult
@@ -652,38 +645,18 @@ camxiom | struct [[nodiscard]] ImageRemapResult
 camxiom | struct [[nodiscard]] RectifiedOutputModelResult
 camxiom | struct [[nodiscard]] RectifyRemapResult
 camxiom | struct [[nodiscard]] RemapResult
-camxiom::BuildRectifyMapOptions | Eigen::Matrix3f src_from_output_rotation
-camxiom::BuildRectifyMapOptions | SolverOptions solver_options
-camxiom::BuildRectifyMapOptions | float source_margin_px
-camxiom::BuildRectifyMapOptions | int boundary_sample_count
-camxiom::BuildRectifyMapResult | CameraModel output_model
-camxiom::BuildRectifyMapResult | ImageRemapResult remap_result
-camxiom::BuildRectifyMapResult | constexpr bool ok() const
-camxiom::BuildRectifyMapResult | constexpr explicit operator bool() const
-camxiom::BuildRectifyMapResult | float alpha_used
-camxiom::BuildRectifyMapResult | float diagonal_fov_deg
-camxiom::BuildRectifyMapResult | float horizontal_fov_deg
-camxiom::BuildRectifyMapResult | float vertical_fov_deg
 camxiom::ImageRemapOptions | Eigen::Matrix3f src_from_dst_rotation
 camxiom::ImageRemapOptions | InvalidPixelPolicy invalid_pixel_policy
 camxiom::ImageRemapOptions | SolverOptions solver_options
 camxiom::ImageRemapOptions | bool require_source_in_bounds
 camxiom::InvalidPixelPolicy | #000 WRITE_NEGATIVE_ONE = 0U
 camxiom::InvalidPixelPolicy | #001 WRITE_RAW_COORDINATE
+camxiom::RectifiedOutputModelOptions | CameraModel output_template
 camxiom::RectifiedOutputModelOptions | Eigen::Matrix3f src_from_output_rotation
 camxiom::RectifiedOutputModelOptions | ImageSize output_size
-camxiom::RectifiedOutputModelOptions | RectifiedProjectionType projection_type
-camxiom::RectifiedOutputModelOptions | RectifyFitPolicy fit_policy
-camxiom::RectifiedOutputModelOptions | float focal_scale
+camxiom::RectifiedOutputModelOptions | SolverOptions solver_options
+camxiom::RectifiedOutputModelOptions | float alpha
 camxiom::RectifiedOutputModelOptions | float source_margin_px
-camxiom::RectifiedOutputModelOptions | int boundary_sample_count
-camxiom::RectifiedProjectionType | #000 PINHOLE = 0U
-camxiom::RectifiedProjectionType | #001 CYLINDRICAL
-camxiom::RectifiedProjectionType | #002 STEREOGRAPHIC
-camxiom::RectifiedProjectionType | #003 LONGITUDE_LATITUDE
-camxiom::RectifyFitPolicy | #000 MAX_INSCRIBED_VALID = 0U
-camxiom::RectifyFitPolicy | #001 ALLOW_INVALID_BORDER
-camxiom::RectifyFitPolicy | #002 ALL_SOURCE_CONTAINED
 namespace camxiom
 
 === include/camxiom/remap_kernel.hpp ===
