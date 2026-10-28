@@ -43,7 +43,8 @@ Two boundary decisions worth spelling out:
   CameraInfo (`ros.hpp` only copies message fields into it), and
   `camxiom::CamxiomCameraInfo`, camxiom's own description of every model.
   The core converts both to and from a model without ROS; storing them
-  in files is left to the application.
+  in files is left to the application (see the
+  [YAML example](../guides/camera-yaml.md)).
 - **No exceptions across the API.** Fallible operations return `StatusCode`
   or result structs; see [Error handling](error-handling.md).
 

@@ -49,7 +49,7 @@ camxiom collapses that into one model set handled uniformly everywhere:
 | [Jacobians](api/jacobians.md) | Analytical 2×3 point Jacobians, batch variants, and full parameter Jacobians (intrinsics / distortion / projection parameters) for optimization |
 | [Inverse LUT](api/lut.md) | Precomputed grid + bilinear interpolation for O(1) approximate `pixelToRay` |
 | [Remap & rectification](api/remap.md) | OpenCV-free undistort / rectify pipeline: an output camera of any projection (the latitude-longitude projections included) fitted from a template and one `alpha`, remap-map builders, CPU sampling kernel |
-| [CameraInfo interchange](api/camera-info.md) | ROS-free `camxiom::CameraInfo` POD (written only when ROS can hold the lens) and camxiom's own `CamxiomCameraInfo` for every model, converted to and from a model |
+| [CameraInfo interchange](api/camera-info.md) | ROS-free `camxiom::CameraInfo` POD (written only when ROS can hold the lens) and camxiom's own `CamxiomCameraInfo` for every model, converted to and from a model; [saving them as YAML](guides/camera-yaml.md) is shown as an example for applications |
 | [Calibration](api/calibration.md) | Default seeds, linear + model-specific init estimators, model-agnostic `PnpSolver` with `FIX_*` staged optimization, single-pass `calibrate()` with covariance and observability diagnostics |
 | [Model conversion](api/conversion.md) | `convertCameraModel`: fit a model of a different family to reproduce a source model's geometry, with honest fit-quality reporting |
 | [ROS / OpenCV interop](api/interop.md) | Optional `sensor_msgs::msg::CameraInfo` conversion layer and `cv::Mat` drop-in layer (`cv::` / `cv::fisheye::` / `cv::omnidir::`-style signatures, `RemapCache`, unified `solvePnP`) |

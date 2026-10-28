@@ -11,7 +11,9 @@ How camera descriptions enter and leave camxiom. There are two formats:
 
 Header: `<camxiom/compat.hpp>` (core, no ROS / no OpenCV). The ROS message
 adapters live in [`<camxiom/ros.hpp>`](interop.md). camxiom does not read or
-write files: storing a description is left to the application.
+write files: storing a description is left to the application, and
+[Camera files in YAML](../guides/camera-yaml.md) shows how to do it with
+yaml-cpp in both layouts.
 
 ## ROS CameraInfo
 

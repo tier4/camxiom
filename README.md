@@ -66,7 +66,7 @@ image), not lenses to calibrate.
 | **Bulk APIs** | Batch projection / Jacobians with SIMD (AVX2 · SSE2 · NEON) + OpenMP; `InverseLut` for O(1) approximate unprojection |
 | **Jacobians** | Analytical 2×3 point Jacobians and full parameter Jacobians (intrinsics / distortion / ξ·α·β) for optimization |
 | **Remap & rectify** | Undistort/rectify for every model into any projection (pinhole, fisheye laws, sphere models, equirectangular / cylindrical): the output camera is a template scaled by one `alpha` (0 = no invalid pixels, 1 = whole source; pinhole `alpha` and fisheye `balance` in one), map builders, CPU sampling kernel — no OpenCV required |
-| **Interchange** | ROS-free `camxiom::CameraInfo` POD, written only when ROS can hold the lens; camxiom's own `CamxiomCameraInfo`, which holds every model; both convert to and from a model |
+| **Interchange** | ROS-free `camxiom::CameraInfo` POD, written only when ROS can hold the lens; camxiom's own `CamxiomCameraInfo`, which holds every model; both convert to and from a model (saving them as YAML: [example](docs/guides/camera-yaml.md)) |
 | **Interop** *(optional)* | `sensor_msgs::msg::CameraInfo` adapters (binning/ROI folded correctly); `cv::Mat` drop-ins, `RemapCache`, unified `solvePnP` working with all models |
 
 ## Quick start

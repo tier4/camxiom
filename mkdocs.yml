@@ -49,6 +49,8 @@ nav:
   - Home: index.md
   - Getting started: getting-started.md
   - Camera models: camera-models.md
+  - Guides:
+      - Camera files in YAML (example): guides/camera-yaml.md
   - API reference:
       - Projection: api/projection.md
       - Batch projection: api/batch.md
