@@ -268,10 +268,9 @@ counts, and per-view RMS/valid counts. `OK` means a finite statistic was
 computed from at least one correspondence; inspect coverage as well as RMS
 before accepting a model. With no projectable points it reports
 `DEGENERATE_CONFIG` and infinite errors. Invalid inputs/models and numeric
-overflow also report failure with infinite errors. The existing six-argument
-overload remains available, but now returns infinity instead of zero for
-failed/empty evaluations. Callers relying on the old zero sentinel must
-check finiteness or use the status-bearing overload.
+overflow also report failure with infinite errors. The six-argument
+overload carries no status: it returns infinity for a failed or empty
+evaluation, so check finiteness or use the status-bearing overload.
 
 ## See also
 
@@ -285,8 +284,8 @@ check finiteness or use the status-bearing overload.
 `PnpSolver::solve` with `PnpInitialGuess64` and `PnpResult64` keeps the input
 model, the write-back after optimization and the returned model as
 `CameraModel64`. It supports single and multiple views and the analytical
-Jacobian, automatic-differentiation and pose-only fast paths. The existing
-`PnpInitialGuess` / `PnpResult` remain float.
+Jacobian, automatic-differentiation and pose-only fast paths.
+`PnpInitialGuess` / `PnpResult` are the float counterparts.
 
 ### Keeping calibration results in double precision
 

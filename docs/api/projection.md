@@ -95,7 +95,7 @@ for (const auto &p : cloud) {
 - The wrapped model is immutable (`get()` to read it); results are
   bit-for-bit identical to the generic path.
 - Member `rayToPixel` / `pixelToRay` overloads mirror the free functions.
-- float32 only (a `ValidatedCameraModel64` may be added later).
+- float32 only.
 
 Measured effect (aarch64 scalar, N=65536 forward loop): roughly 3.3× for
 pinhole+radtan5, 1.9× for fisheye+KB4, 2.8× for pinhole+tilted14 over the
@@ -198,8 +198,6 @@ that needs a narrower field of view can set the limit itself.
 
 Template projection of the omnidirectional, double sphere and EUCM models
 combined with a plane distortion shares every coefficient and the pole checks
-of RATIONAL8, THIN_PRISM12 and TILTED14 with the runtime projection. The
-automatic-differentiation path used to evaluate these models as RADTAN5,
-ignoring the coefficients past the fifth; that is fixed. With a
+of RATIONAL8, THIN_PRISM12 and TILTED14 with the runtime projection. With a
 field-of-view limit of pi, the wide-angle models still reject non-finite ray
 norms and projection denominators.

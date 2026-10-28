@@ -3,8 +3,11 @@
 
 **Unified C++17 camera-geometry library** — one API across the whole
 spectrum of camera models, from narrow-FOV pinhole to 180°+ fisheye and
-catadioptric: **pinhole, fisheye (Kannala–Brandt), omnidirectional (Mei),
-double sphere, and EUCM**, each with its full distortion catalogue.
+catadioptric: **pinhole, the fisheye laws (equidistant with Kannala–Brandt,
+equisolid, stereographic, orthographic), omnidirectional (Mei), double
+sphere, and EUCM**, each with the lens corrections it takes, plus
+the **latitude-longitude projections** (equirectangular and cylindrical) as
+output and remap targets.
 On top of the same model set: a Ceres-based intrinsic calibrator and
 ROS 2 / OpenCV interfaces.
 
@@ -170,6 +173,57 @@ removed from the public headers — use the generic `rayToPixel` /
 now round-trips through `parseDistortionModelType` (some spellings changed);
 and the never-returned `StatusCode` enumerators (`NOT_IMPLEMENTED`,
 `JACOBIAN_SINGULAR`) were dropped.
+
+Unreleased breaking changes (since 0.2.0):
+
+- A camera model is a projection law plus a lens correction, one per slot.
+  `ProjectionModelType` lists the laws: `FISHEYE_THETA` is replaced by
+  `EQUIDISTANT`, `EQUISOLID`, `STEREOGRAPHIC` and `ORTHOGRAPHIC`, and
+  `EQUIRECTANGULAR` and `CYLINDRICAL` are new. `DistortionModelType` keeps
+  only corrections: its `EQUIDISTANT`, `EQUISOLID`, `STEREOGRAPHIC`,
+  `ORTHOGRAPHIC` and `OMNIDIRECTIONAL` entries are gone, and
+  `OPENCV_FISHEYE4` is merged into `KB4` (the same function). The numeric
+  values of both enums changed (`ProjectionModelType::UNKNOWN` is 10,
+  `DistortionModelType::UNKNOWN` 8), so stored integers need migrating.
+- `DistortionModelT::space` is gone (use `distortionSpaceOf(type)`), as are
+  `chooseProjectionModelType` (use `parseProjectionModelType` /
+  `isFisheyeProjection`) and `projection_template::projectFisheye4` (use
+  `projectKB4`). `FisheyeExternalModel` gains `projection_type`.
+- Interchange names: ROS `equidistant`, OpenCV `fisheye` and
+  `opencv_fisheye4` read as `EQUIDISTANT` + `KB4`, and the `CANONICAL`
+  fisheye export writes KB4 as `equidistant` instead of `kb4`. The plain
+  equidistant law is `ideal_equidistant`.
+- The ideal fisheye laws take the `NONE` correction, which carries no
+  coefficients on any law, so a hand-built equisolid, stereographic,
+  orthographic or plain equidistant model needs `count = 0` (0.2.0 accepted
+  zero-filled coefficients there). `makeCameraModel` reads an all-zero `D`
+  for `ideal_equidistant`, `equisolid`, `stereographic` or `orthographic` as
+  none.
+- `makeDistortionFree` keeps the projection law and removes only the
+  correction (an ideal stereographic model stays stereographic instead of
+  turning equidistant).
+- Rectification: `RectifiedProjectionType`, `RectifyFitPolicy`,
+  `focal_scale`, `boundary_sample_count`, `buildRectifyMap` and its options
+  and result are removed. `RectifiedOutputModelOptions` takes an
+  `output_template` camera of any projection and an `alpha`, which
+  `buildRectifyRemapMap` and the OpenCV `RemapCache::buildRectify` /
+  `rectifyImage` use. The fit bounds every ray between the outermost pixel
+  centres instead of sampling the boundary.
+- Rectified cameras differ from 0.2.0: one scale keeps the template's pixel
+  aspect (0.2.0 fitted `fx` and `fy` separately); `alpha = 0` is the widest
+  view without invalid pixels, so a wide fisheye gives a much wider pinhole
+  view (a 1280 × 960 KB4 source with `fx = 320`, `k1 = 0.02`,
+  `k2 = −0.005`: `fx = fy = 50.4` instead of 160.0 / 120.0); `alpha = 1`
+  leaves out source pixels past a distortion fold; an `alpha` outside
+  `[0, 1]` returns `INVALID_INPUT` instead of being clamped. The 0.2.0
+  longitude–latitude output was upside down; an equirectangular template
+  is upright.
+- `ImageSize` moved from `remap.hpp` to `types.hpp`.
+- The latitude-longitude projections are output and remap targets: calibration,
+  `getDefaultSeed`, `convertCameraModel`, PnP (`PnpSolver`,
+  `init::estimatePoseDLT` / `estimatePoseRefined`, the OpenCV layer's
+  `solvePnP` and `undistortPoints`), the full parameter Jacobian and the
+  projection templates reject them.
 
 Breaking changes in 0.2.0 (details in the release notes):
 

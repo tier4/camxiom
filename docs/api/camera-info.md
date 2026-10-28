@@ -68,7 +68,10 @@ Two pitfalls worth knowing:
   plain equidistant law. camxiom reads it as `EQUIDISTANT` + `KB4`, writes
   `KB4` back under that name, and reads `ideal_equidistant` as the plain
   law (`NONE`). ROS has no name for the plain law, so the fisheye exporters
-  write it under `equidistant` with an empty `D`.
+  (`CANONICAL` included) write it under `equidistant` with an empty `D`,
+  which `makeCameraModel` reads back as a KB4 model without coefficients
+  and `validateCameraModel` rejects. Write `ideal_equidistant` yourself to
+  keep the plain law in a file camxiom reads back.
 - For Mei / DS / EUCM, the projection-level parameters ride in the *front*
   of `d` (see the table). They are unpacked into
   `CameraModel::projection`, not kept as distortion coefficients.
@@ -79,9 +82,9 @@ model that `validateCameraModel` rejects. Always validate after parsing.
 ## Strict per-profile import / export
 
 For interchange with specific ecosystems, `compat.hpp` defines profile enums
-and symmetric import/export functions per model family. Unlike the lenient
-`makeCameraModel`, these **enforce the profile's exact coefficient count**
-and validate the result, returning a `StatusCode`.
+and symmetric import/export functions per model family, returning a
+`StatusCode`. Unlike the lenient `makeCameraModel`, the import functions
+**enforce the profile's exact coefficient count** and validate the result.
 
 | Family | External struct | Profiles |
 |---|---|---|
@@ -107,6 +110,27 @@ correction in `distortion_type` (`NONE` with an empty `D`, `KB4`, `KB8`;
 and ROS profiles always mean `EQUIDISTANT` + `KB4`. `toString()` overloads
 exist for every profile enum.
 
+### What export does not check
+
+Export packs the model into the profile's layout; it does not check that
+the profile can represent the camera:
+
+- A profile with a fixed coefficient count (`OPENCV_CALIB3D_D*`,
+  `OPENCV_FISHEYE_D4`, `OPENCV_OMNIDIR_D*`, `BASALT_D0/D4`, `KALIBR_D0/D4`)
+  zero-fills the coefficients the model lacks and drops the ones past the
+  count, non-zero or not: `RATIONAL8` under `OPENCV_CALIB3D_D5` keeps
+  `k1, k2, p1, p2, k3`, `KB8` under `OPENCV_FISHEYE_D4` keeps `k1..k4`, and
+  `BASALT_D0` / `KALIBR_D0` drop the plane correction.
+- The OpenCV and ROS fisheye profiles write any fisheye law as
+  `equidistant` (KB4), so an equisolid, stereographic or orthographic model
+  comes back as the equidistant law. `ROS_CAMERA_INFO_EQUIDISTANT` refuses
+  `KB8` (`INVALID_MODEL`).
+- `CANONICAL` and `ROS_CAMERA_INFO_RAW` write every coefficient the model
+  has.
+
+To know whether an export kept the camera, import the result again and
+compare it with the source model.
+
 ### Exporting to a `CameraInfo` POD
 
 ```cpp
@@ -117,8 +141,10 @@ StatusCode exportPinholeCameraInfo(const CameraModel &, PinholeCompatProfile, Ca
 
 Packs K/D per the profile, sets the family's canonical
 `distortion_model` string, `r = I`, `p = [K | 0]`. `width`/`height` are left
-untouched (the caller owns image geometry). The reverse direction for a raw
-POD is simply `makeCameraModel`.
+untouched (the caller owns image geometry). `exportOmnidirectionalCameraInfo`
+supports only `CANONICAL` (the OpenCV omnidir profiles return
+`INVALID_MODEL` here; `exportOmnidirectionalModel` still writes them). The
+reverse direction for a raw POD is simply `makeCameraModel`.
 
 ## YAML output (`camera_calibration_parsers` layout)
 
@@ -166,8 +192,8 @@ The writer emits what it is given — it does not re-validate K/D consistency
 `export*CameraInfo64` pass intrinsics, distortion coefficients and projection
 parameters through without rounding them to float. To keep that precision in
 YAML, pass `CameraInfoYamlPrecision::ROUND_TRIP` after the camera name.
-Without it, the existing format is unchanged: 6 decimal places for the
-matrices and 12 for the distortion coefficients.
+Without it, the default format applies: 6 decimal places for the matrices
+and 12 for the distortion coefficients.
 
 ```cpp
 camxiom::CameraInfo info;

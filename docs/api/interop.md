@@ -131,8 +131,7 @@ from the calibration layer instead.
 To keep the `double` values of a `CameraInfo` and of each compatibility
 profile, use `makeCameraModel64`, `import*Model64`, `export*Model64` and
 `export*CameraInfo64`. They read and write `CameraModel64` directly, without
-converting to `CameraModel` (float) on the way. The existing float API remains
-available.
+converting to `CameraModel` (float) on the way, alongside the float API.
 
 After changing coefficients directly, refresh the domain with
 `updateThetaMax64`. `makeDistortionFree64` removes the distortion while

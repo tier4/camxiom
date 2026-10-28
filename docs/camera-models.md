@@ -59,7 +59,8 @@ struct CameraModel {                 // = CameraModelT<float>; CameraModel64 = C
 ```
 
 All model types are plain aggregates (no constructors): brace-initializable,
-stack-allocatable (~200 bytes), no virtual functions, no heap. A camera model
+stack-allocatable (176 bytes in float, 352 in double), no virtual functions,
+no heap. A camera model
 is the *composition* of three orthogonal parts:
 
 - **`IntrinsicsModel`** — the affine pixel mapping (`fx`, `fy`, `cx`, `cy`, `skew`).
@@ -220,8 +221,8 @@ s = makeCylindricalModel(ImageSize{2000, 800}, -M_PI, M_PI, -1.2, 1.2, model);
 ```
 
 They return `INVALID_INPUT` (and reset the model) for a non-positive size or
-a range outside `−π ≤ lon_min < lon_max ≤ π`,
-`−π/2 ≤ lat_min < lat_max ≤ π/2` (strict for the cylinder).
+a non-finite range or one outside `−π ≤ lon_min < lon_max ≤ π`,
+`−π/2 ≤ lat_min < lat_max ≤ π/2` (strict at `±π/2` for the cylinder).
 
 `computeFov` reports a latitude-longitude model's longitude span along the
 principal row and latitude span down the principal column (a whole sphere is
@@ -247,8 +248,9 @@ void updateThetaMax64(CameraModel64 &model);
 
 must be called after distortion coefficients are modified by hand or by an
 optimizer. Both functions also overwrite a narrower limit set by the caller,
-and they reset non-fisheye models to their default angular limit. Model
-factories (`makeCameraModel`, `getDefaultSeed`, `calibrate`,
+and they reset the other models to a fixed limit (π/2 − 1e-4 for pinhole, π
+for the sphere-based models and the latitude-longitude projections, which ignore
+it). Model factories (`makeCameraModel`, `getDefaultSeed`, `calibrate`,
 `convertCameraModel` and their double-precision counterparts) already leave
 `theta_max` consistent. To inspect the domain of the current coefficients
 while keeping the caller's own limit, use the non-mutating API described
@@ -279,8 +281,7 @@ the model is still checked for consistency. Only fisheye-law models
 | `theta_limit` | The geometric endpoint, or the first scan sample that failed the evaluation conditions (rad) |
 | `limit` | `ANGULAR_LIMIT` / `MONOTONICITY_LIMIT` / `NUMERIC_LIMIT` |
 
-The polynomial fisheye models (KB4, KB8) share the existing
-512-step scan. It runs from 1e-3 rad to about π − 1e-4 rad and returns as
+The polynomial fisheye models (KB4, KB8) share one 512-step scan. It runs from 1e-3 rad to about π − 1e-4 rad and returns as
 `safe_theta_max` the last sample whose radius is finite and non-negative and
 whose slope is finite and positive. `theta_limit` is not an exact root of the
 fold. A fold narrower than the scan step (about π/512 rad), or one that

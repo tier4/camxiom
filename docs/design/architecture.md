@@ -54,17 +54,19 @@ Two boundary decisions worth spelling out:
   layers. Adding a model changes dispatch tables, not the API.
 - **Composition over inheritance.** `CameraModel` =
   intrinsics ∘ distortion ∘ projection, three plain aggregates in a
-  fixed-size (~200 B), stack-allocatable, vtable-free container. Hot paths
+  fixed-size (176 B in float), stack-allocatable, vtable-free container. Hot paths
   use a single `switch` per call (hoisted out of loops in batch), never
   virtual dispatch, never per-point heap allocation. Derived state (tilt
   matrices, distortion flags, `theta_max`) is precomputed at model build.
   Each slot means one thing: the projection names the law (pinhole, a
-  fisheye law, Mei, double sphere, EUCM) and the distortion only the lens
-  correction on top of it, so dropping the correction never changes the law
+  fisheye law, Mei, double sphere, EUCM, equirectangular, cylindrical) and the
+  distortion only the lens correction on top of it, so dropping the correction
+  never changes the law
   (see [Camera models](../camera-models.md#projection-law-and-lens-correction)).
-- **Forward-only model authoring.** A new model implements forward
-  projection (+ Jacobians); the inverse comes from shared numerical solvers
-  (see [Numerical strategy](numerical-strategy.md)).
+- **Shared inverse solvers.** A new law implements its forward projection,
+  Jacobians and closed-form back-projection where one exists; inverting a
+  lens correction or a fisheye radial function goes through shared
+  numerical solvers (see [Numerical strategy](numerical-strategy.md)).
 - **Single-source float/double.** All types and per-model math are `T`
   templates instantiated exactly twice; the float and double APIs cannot
   drift apart by construction. Batch SIMD is the one deliberate exception
