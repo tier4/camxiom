@@ -8,8 +8,11 @@
 
 include(CMakeFindDependencyMacro)
 
-# Runtime core: Eigen3 is part of camxiom_core's PUBLIC interface.
+# Runtime core: Eigen3 is part of camxiom_core's PUBLIC interface. yaml-cpp
+# is linked privately, but a static camxiom_core still names it in the
+# exported link interface.
 find_dependency(Eigen3)
+find_dependency(yaml-cpp 0.7)
 
 # camxiom_core links OpenMP::OpenMP_CXX privately; as a static library that
 # dependency propagates into the exported link interface, so consumers must be

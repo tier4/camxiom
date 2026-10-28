@@ -45,9 +45,10 @@ unset(_camxiom_pkg_match)
 #
 # Split along the runtime-vs-calibration axis so consumers only pay for what
 # they use:
-#   * camxiom_core   Eigen-only RUNTIME geometry (ray<->pixel projection /
-#                    undistort / remap / jacobian / lut / batch / SIMD /
-#                    compat). NO Ceres, NO calibration machinery.
+#   * camxiom_core   RUNTIME geometry (ray<->pixel projection / undistort /
+#                    remap / jacobian / lut / batch / SIMD / compat) on Eigen,
+#                    plus yaml-cpp for reading camera YAML files. NO Ceres,
+#                    NO calibration machinery.
 #   * camxiom_calib  Everything CALIBRATION: the data-independent default seed,
 #                    all initial-guess estimators (linear + Ceres-polished) and
 #                    the Ceres-based PnP solver / single-pass intrinsics
@@ -65,13 +66,16 @@ unset(_camxiom_pkg_match)
 # available at configure time (Ceres-free, so they stay in the runtime core):
 #   * ROS sensor_msgs found  -> src/compat/ros.cpp   (+ CAMXIOM_HAS_ROS)
 #   * OpenCV found           -> src/opencv/*.cpp      (+ CAMXIOM_HAS_OPENCV)
-# When neither is present, only the dependency-free core is built. ament is
+# When neither is present, only the core is built. ament is
 # itself optional: in a ROS/colcon workspace the ament install/export flow is
 # used, otherwise a plain CMake install/export is emitted.
 # ---------------------------------------------------------------------------
 
 find_package(ament_cmake QUIET)
 find_package(Eigen3 REQUIRED)
+# Reading camera YAML files. 0.7 is the floor because it bounds the parser's
+# nesting depth, which a hostile file could otherwise use to exhaust the stack.
+find_package(yaml-cpp 0.7 REQUIRED)
 find_package(OpenMP)
 # Normalised boolean for the package config template (find_dependency gating).
 if(OpenMP_CXX_FOUND)
@@ -114,7 +118,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 # ---------------------------------------------------------------------------
-# camxiom_core — Eigen-only RUNTIME geometry (no Ceres, no calibration).
+# camxiom_core — RUNTIME geometry on Eigen and yaml-cpp (no Ceres, no
+# calibration).
 # ---------------------------------------------------------------------------
 add_library(camxiom_core
   src/types.cpp
@@ -160,13 +165,9 @@ add_library(camxiom_core
   src/detail/simd_avx2.cpp
   # compat/ — ROS-free, OpenCV-free K/D <-> CameraModel conversions
   # (canonical interchange through the camxiom::CameraInfo POD).
-  src/pinhole/compat.cpp
-  src/fisheye/compat.cpp
-  src/omnidirectional/compat.cpp
-  src/double_sphere/compat.cpp
-  src/eucm/compat.cpp
   src/compat/factory.cpp
   src/compat/camera_info_export.cpp
+  src/compat/camxiom_camera_info.cpp
   src/compat/camera_info_yaml.cpp
   src/remap.cpp
   src/remap_rectify.cpp
@@ -193,6 +194,13 @@ target_include_directories(camxiom_core PRIVATE
 target_link_libraries(camxiom_core PUBLIC
   Eigen3::Eigen
 )
+# yaml-cpp 0.8 names its target yaml-cpp::yaml-cpp, 0.7 only yaml-cpp. It is
+# linked privately: no installed header includes it.
+if(TARGET yaml-cpp::yaml-cpp)
+  target_link_libraries(camxiom_core PRIVATE yaml-cpp::yaml-cpp)
+else()
+  target_link_libraries(camxiom_core PRIVATE yaml-cpp)
+endif()
 
 if(OpenMP_CXX_FOUND)
   target_link_libraries(camxiom_core PRIVATE OpenMP::OpenMP_CXX)
@@ -332,7 +340,7 @@ install(TARGETS ${_camxiom_lib_targets} camxiom
 if(ament_cmake_FOUND)
   # ament_export_targets() installs the EXPORT set into the ament location.
   ament_export_targets(camxiomTargets HAS_LIBRARY_TARGET)
-  set(_camxiom_export_deps Eigen3)
+  set(_camxiom_export_deps Eigen3 yaml-cpp)
   if(CAMXIOM_WITH_OPENMP)
     list(APPEND _camxiom_export_deps OpenMP)
   endif()
@@ -455,6 +463,7 @@ if(BUILD_TESTING)
     camxiom_add_gtest(camxiom_projection_error_paths_test tests/projection_error_paths_test.cpp)
     camxiom_add_gtest(camxiom_projection_template_test tests/projection_template_test.cpp)
     camxiom_add_gtest(camxiom_camera_info_yaml_test tests/camera_info_yaml_test.cpp)
+    camxiom_add_gtest(camxiom_camera_info_export_test tests/camera_info_export_test.cpp)
     camxiom_add_gtest(camxiom_remap_test tests/remap_test.cpp)
     # Also drives the rectify fit's internal patch budget (src/remap_rectify.hpp).
     if(TARGET camxiom_remap_test)
@@ -466,9 +475,9 @@ if(BUILD_TESTING)
     # CAMXIOM_WITH_CERES is OFF, guarding that core.hpp / calibration.hpp /
     # camxiom.hpp stay include-safe (Ceres-free) in a core-only build.
     camxiom_add_gtest(camxiom_convenience_headers_test tests/convenience_headers_test.cpp)
-    # compat POD interchange (src/compat/*, src/<model>/compat.cpp): CameraInfo
-    # <-> CameraModel and the per-model import/export profile conversions. A CORE
-    # test (Ceres/ROS/OpenCV-free) that guards the library's canonical entry point.
+    # compat POD interchange (src/compat/*): CameraInfo -> CameraModel parsing.
+    # A CORE test (Ceres/ROS/OpenCV-free) that guards the library's canonical
+    # entry point.
     camxiom_add_gtest(camxiom_compat_test tests/compat_test.cpp)
     # ValidatedCameraModel (C1): validated-once immutable wrapper. A CORE test
     # (Ceres/ROS/OpenCV-free) asserting bit-for-bit equivalence with the generic

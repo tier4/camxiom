@@ -98,9 +98,9 @@ namespace camxiom
 //     + k3*theta^6 + k4*theta^8) (Kannala-Brandt / OpenCV fisheye); KB8
 //     continues the series to k8*theta^16.
 //   Projection-level parameters (omnidirectional xi, double-sphere xi/alpha,
-//   EUCM alpha/beta) live in ProjectionModelT, NOT in coeffs. (Interchange
-//   formats that pack them into D — e.g. sensor_msgs — are unpacked by the
-//   compat layer.)
+//   EUCM alpha/beta) live in ProjectionModelT, NOT in coeffs; camxiom's own
+//   camera description (CamxiomCameraInfo) keeps them apart from the
+//   coefficients as well.
 // ===========================================================================
 
 /// [[nodiscard]] on the enum makes every function returning a StatusCode by

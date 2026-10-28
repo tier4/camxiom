@@ -24,10 +24,11 @@ ROS 2 / OpenCV interfaces.
   covariance + observability diagnostics, and cross-family model conversion.
 - **Fits the ecosystems you already use.** `sensor_msgs/CameraInfo`
   adapters, `cv::Mat` drop-ins mirroring `cv::` / `cv::fisheye::` /
-  `cv::omnidir::` signatures, OpenCV-Calib3D / Kalibr / Basalt parameter
-  profiles, and ROS-layout calibration YAML.
-- **Light by default.** The runtime core depends only on Eigen; Ceres,
-  OpenCV, ROS 2, and OpenMP are optional layers detected at configure time.
+  `cv::omnidir::` signatures, and ROS-layout calibration YAML, beside
+  camxiom's own camera description for every model.
+- **Light by default.** The runtime core depends only on Eigen and
+  yaml-cpp; Ceres, OpenCV, ROS 2, and OpenMP are optional layers detected
+  at configure time.
   Ament and pure-CMake packaging from the same tree.
 
 License: [Apache-2.0](LICENSE) · Version: 0.2.0 ·
@@ -66,19 +67,19 @@ image), not lenses to calibrate.
 | **Bulk APIs** | Batch projection / Jacobians with SIMD (AVX2 · SSE2 · NEON) + OpenMP; `InverseLut` for O(1) approximate unprojection |
 | **Jacobians** | Analytical 2×3 point Jacobians and full parameter Jacobians (intrinsics / distortion / ξ·α·β) for optimization |
 | **Remap & rectify** | Undistort/rectify for every model into any projection (pinhole, fisheye laws, sphere models, equirectangular / cylindrical): the output camera is a template scaled by one `alpha` (0 = no invalid pixels, 1 = whole source; pinhole `alpha` and fisheye `balance` in one), map builders, CPU sampling kernel — no OpenCV required |
-| **Interchange** | ROS-free `camxiom::CameraInfo` POD; `makeCameraModel` parses ROS / OpenCV distortion-model strings; per-model import/export profiles (OpenCV-Calib3D, Kalibr, Basalt); `camera_calibration_parsers`-layout YAML writer |
+| **Interchange** | ROS-free `camxiom::CameraInfo` POD, written only when ROS can hold the lens; camxiom's own `CamxiomCameraInfo`, which holds every model; YAML for both (`camera_calibration_parsers` layout and camxiom's), read back into a model |
 | **Interop** *(optional)* | `sensor_msgs::msg::CameraInfo` adapters (binning/ROI folded correctly); `cv::Mat` drop-ins, `RemapCache`, unified `solvePnP` working with all models |
 
 ## Quick start
 
 ```cpp
-#include <camxiom/core.hpp>     // Eigen-only runtime geometry, one include
+#include <camxiom/core.hpp>     // the runtime geometry, one include
 
-// Build a model from any ROS/OpenCV-style camera description (no ROS needed):
+// Build a model from a ROS CameraInfo description (no ROS needed):
 camxiom::CameraInfo info;
 info.width = 1280;  info.height = 960;
 info.k = {800.0, 0.0, 639.5,  0.0, 800.0, 479.5,  0.0, 0.0, 1.0};
-info.distortion_model = "plumb_bob";   // or "equidistant", "double_sphere", "eucm", ...
+info.distortion_model = "plumb_bob";   // or "rational_polynomial", "equidistant"
 info.d = {-0.28, 0.07, 0.0001, -0.0002, 0.0};
 camxiom::CameraModel model = camxiom::makeCameraModel(info);
 
@@ -119,7 +120,8 @@ target_link_libraries(my_app PRIVATE camxiom::camxiom)   # or camxiom::core / ca
 
 | Dependency | Min | Role |
 |---|---|---|
-| Eigen3 | 3.3 | **required** — sole dependency of `camxiom::core` |
+| Eigen3 | 3.3 | **required** — `camxiom::core` |
+| yaml-cpp | 0.7 | **required** — `camxiom::core` (reading camera YAML files) |
 | Ceres | 2.0 | optional — enables `camxiom::calib` (`CAMXIOM_WITH_CERES`, auto-detected; Ubuntu 22.04 / JetPack apt package works) |
 | OpenCV / sensor_msgs / OpenMP | any | optional — interop layers & parallelism, auto-detected |
 

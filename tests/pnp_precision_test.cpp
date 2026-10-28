@@ -12,18 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Tests for the ROS-free / OpenCV-free compat interchange layer
-// (src/compat/factory.cpp + src/<model>/compat.cpp).
-//
-// makeCameraModel() is the single canonical K/D/distortion-model-string parser
-// that every adapter (ROS, OpenCV) funnels through, and the per-model
-// import/export*Model functions are the profile-aware conversions used by the
-// interop layers. Until now none of this had a direct test (LOADMAP T3).
-//
-// Strategy: for every model family, round-trip an external description through
-// import -> CameraModel -> export and assert it comes back (K + coefficients +
-// model-specific scalars), plus characterize the makeCameraModel() string
-// parsing and the deterministic error paths. Core test (no Ceres/ROS/OpenCV).
+// PnP with double-precision models: both Ceres cost paths fit and reuse
+// CameraModel64 without rounding it to float, and explicit domain caps
+// survive the solve.
 
 #include "camxiom/compat.hpp"
 #include "camxiom/model.hpp"
@@ -40,21 +31,35 @@ using namespace camxiom::optimizer;
 
 namespace
 {
-CameraModel64 makeModel64(const std::string &family, const std::vector<double> &coeffs)
+// A model of `family` (a ROS name, or a sphere model whose law parameters come
+// first in `values`), described in camxiom's own terms.
+CameraModel64 makeModel64(const std::string &family, const std::vector<double> &values)
 {
-  CameraInfo info;
-  info.k = {
-    513.1234567890123,
-    0.1234567890123,
-    319.9876543210987,
-    0.0,
-    509.9876543210987,
-    239.1234567890123,
-    0.0,
-    0.0,
-    1.0};
-  info.distortion_model = family;
-  info.d = coeffs;
+  CamxiomCameraInfo info;
+  info.intrinsic_parameters = {
+    513.1234567890123, 509.9876543210987, 319.9876543210987, 239.1234567890123, 0.1234567890123};
+  std::size_t law_parameter_count = 0U;
+  if (family == "plumb_bob")
+  {
+    info.projection_model = "pinhole";
+  }
+  else if (family == "equidistant" || family == "ideal_equidistant")
+  {
+    info.projection_model = "equidistant";
+  }
+  else
+  {
+    info.projection_model = family;
+    law_parameter_count = family == "omnidirectional" ? 1U : 2U;
+  }
+  info.projection_parameters.assign(values.begin(), values.begin() + law_parameter_count);
+  info.distortion_parameters.assign(values.begin() + law_parameter_count, values.end());
+  const std::size_t count = info.distortion_parameters.size();
+  info.distortion_model = family == "equidistant" ? "kb4"
+                          : count == 0U           ? "none"
+                          : count == 4U           ? "radtan4"
+                          : count == 5U           ? "radtan5"
+                                                  : "rational8";
   auto model = makeCameraModel64(info);
   if (model.projection.type != ProjectionModelType::PINHOLE)
     model.projection.theta_max = 0.912345678901234;

@@ -23,16 +23,15 @@
 namespace camxiom
 {
 
-/// True when an interchange distortion_model name (e.g. ROS CameraInfo)
-/// denotes a fisheye law: the KB names ("equidistant", "fisheye", "kb4",
-/// "kb8", ...) and the plain law names ("ideal_equidistant", "equisolid",
-/// "stereographic", "orthographic").
+/// True for the ROS CameraInfo distortion_model that names a fisheye law
+/// ("equidistant", KB4 on the equidistant law).
 [[nodiscard]] bool isFisheyeDistortionModel(const std::string &model_name);
+/// True for the ROS CameraInfo distortion_model of the rational correction
+/// ("rational_polynomial").
 [[nodiscard]] bool isRationalDistortionModel(const std::string &model_name);
-/// Distortion (lens correction) names: the canonical toString spellings plus
-/// the interchange aliases ("plumb_bob", "rational_polynomial", and the ROS /
-/// OpenCV names of KB4: "equidistant", "fisheye"). Projection-law names such
-/// as "equisolid" are not distortions and parse to UNKNOWN.
+/// Inverse of toString(DistortionModelType) (case-insensitive); anything
+/// else parses to UNKNOWN. Projection-law names such as "equisolid" are not
+/// corrections and parse to UNKNOWN too.
 [[nodiscard]] DistortionModelType parseDistortionModelType(const std::string &model_name);
 /// Inverse of toString(ProjectionModelType); anything else parses to UNKNOWN.
 [[nodiscard]] ProjectionModelType parseProjectionModelType(const std::string &model_name);

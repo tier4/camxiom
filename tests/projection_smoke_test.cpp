@@ -752,15 +752,4 @@ TEST(ProjectionSmoke, ToStringCoversNewEnums)
     camxiom::toString(camxiom::InvalidPixelPolicy::WRITE_NEGATIVE_ONE), "write_negative_one"
   );
   EXPECT_STREQ(camxiom::toString(camxiom::InterpolationMode::BILINEAR), "bilinear");
-  EXPECT_STREQ(
-    camxiom::toString(camxiom::PinholeCompatProfile::OPENCV_CALIB3D_D5), "opencv_calib3d_d5"
-  );
-  EXPECT_STREQ(
-    camxiom::toString(camxiom::FisheyeCompatProfile::OPENCV_FISHEYE_D4), "opencv_fisheye_d4"
-  );
-  EXPECT_STREQ(
-    camxiom::toString(camxiom::OmnidirectionalCompatProfile::OPENCV_OMNIDIR_D4), "opencv_omnidir_d4"
-  );
-  EXPECT_STREQ(camxiom::toString(camxiom::DoubleSphereCompatProfile::BASALT_D0), "basalt_d0");
-  EXPECT_STREQ(camxiom::toString(camxiom::EucmCompatProfile::KALIBR_D0), "kalibr_d0");
 }

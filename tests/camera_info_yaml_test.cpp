@@ -21,13 +21,19 @@
 #include "camxiom/camera_info_yaml.hpp"
 
 #include "camxiom/compat.hpp"
+#include "camxiom/model.hpp"
 
 #include <gtest/gtest.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <algorithm>
+#include <chrono>
+#include <clocale>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <limits>
@@ -35,6 +41,9 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
 using camxiom::CameraInfo;
 using camxiom::StatusCode;
@@ -340,4 +349,507 @@ TEST(CameraInfoYaml, RoundTripModeUsesYamlNonFiniteSpellings)
   const auto yaml =
     camxiom::toCameraInfoYaml(info, "camera", camxiom::CameraInfoYamlPrecision::ROUND_TRIP);
   EXPECT_NE(yaml.find("data: [.nan, .inf, -.inf]"), std::string::npos);
+}
+
+// ===========================================================================
+// camxiom's own layout, and reading both layouts back.
+// ===========================================================================
+
+namespace
+{
+
+camxiom::CamxiomCameraInfo makeCamxiomInfo()
+{
+  camxiom::CamxiomCameraInfo info;
+  info.image_width = 1280U;
+  info.image_height = 960U;
+  info.projection_model = "equidistant";
+  info.distortion_model = "kb4";
+  info.distortion_parameters = {0.02, -0.005, 0.0, 1.0 / 3.0};
+  info.intrinsic_parameters = {320.0, 320.5, 639.5, 479.5, 0.0};
+  return info;
+}
+
+std::string writeTemp(const std::string &text)
+{
+  char path[] = "/tmp/camxiom_yaml_test_XXXXXX";
+  const int fd = ::mkstemp(path);
+  EXPECT_GE(fd, 0);
+  ::close(fd);
+  std::ofstream file(path, std::ios::out | std::ios::trunc);
+  file << text;
+  return path;
+}
+
+}  // namespace
+
+TEST(CamxiomCameraInfoYaml, EmitsOneKeyPerField)
+{
+  EXPECT_EQ(
+    camxiom::toCamxiomCameraInfoYaml(makeCamxiomInfo()),
+    "image_width: 1280\n"
+    "image_height: 960\n"
+    "projection_model: equidistant\n"
+    "projection_parameters: []\n"
+    "distortion_model: kb4\n"
+    "distortion_parameters: [0.02, -0.005, 0.0, 0.3333333333333333]\n"
+    "intrinsic_parameters: [320.0, 320.5, 639.5, 479.5, 0.0]\n"
+  );
+}
+
+TEST(CamxiomCameraInfoYaml, RoundTripsEveryDoubleExactly)
+{
+  std::mt19937_64 rng(11U);
+  std::uniform_int_distribution<std::uint64_t> bits;
+  camxiom::CamxiomCameraInfo info = makeCamxiomInfo();
+  info.projection_model = "double_sphere";
+  for (int trial = 0; trial < 200; ++trial)
+  {
+    std::vector<double> values;
+    while (values.size() < 11U)
+    {
+      double value = 0.0;
+      const std::uint64_t raw = bits(rng);
+      std::memcpy(&value, &raw, sizeof(value));
+      if (std::isfinite(value))
+      {
+        values.push_back(value);
+      }
+    }
+    info.projection_parameters = {values[0], values[1]};
+    info.distortion_parameters = {values[2], values[3], values[4], values[5]};
+    std::copy(values.begin() + 6, values.end(), info.intrinsic_parameters.begin());
+    camxiom::CamxiomCameraInfo back;
+    ASSERT_EQ(
+      camxiom::parseCamxiomCameraInfoYaml(camxiom::toCamxiomCameraInfoYaml(info), back),
+      StatusCode::OK
+    );
+    EXPECT_EQ(back.projection_parameters, info.projection_parameters);
+    EXPECT_EQ(back.distortion_parameters, info.distortion_parameters);
+    EXPECT_EQ(back.intrinsic_parameters, info.intrinsic_parameters);
+  }
+  info.distortion_parameters = {-0.0, 1e-300, 5e-324, -1.7976931348623157e308};
+  camxiom::CamxiomCameraInfo back;
+  ASSERT_EQ(
+    camxiom::parseCamxiomCameraInfoYaml(camxiom::toCamxiomCameraInfoYaml(info), back),
+    StatusCode::OK
+  );
+  EXPECT_EQ(back.distortion_parameters, info.distortion_parameters);
+  EXPECT_TRUE(std::signbit(back.distortion_parameters[0]));
+}
+
+// A model written in camxiom's layout reads back as the same model with its
+// image size, from text and from a file, in float and in double.
+TEST(CamxiomCameraInfoYaml, ModelsRoundTripThroughTheFile)
+{
+  const camxiom::CameraModel model = camxiom::makeCameraModel(makeCamxiomInfo());
+  ASSERT_EQ(camxiom::validateCameraModel(model), StatusCode::OK);
+  camxiom::CamxiomCameraInfo info;
+  info.image_width = 1280U;
+  info.image_height = 960U;
+  ASSERT_EQ(camxiom::exportCameraInfo(model, info), StatusCode::OK);
+  const std::string path = writeTemp("");
+  ASSERT_EQ(camxiom::saveCamxiomCameraInfoYaml(path, info), StatusCode::OK);
+
+  camxiom::CameraModel back;
+  camxiom::ImageSize size;
+  ASSERT_EQ(camxiom::loadCameraModelYaml(path, back, size), StatusCode::OK);
+  EXPECT_EQ(size.width, 1280);
+  EXPECT_EQ(size.height, 960);
+  EXPECT_EQ(back.projection.type, camxiom::ProjectionModelType::EQUIDISTANT);
+  EXPECT_EQ(back.distortion.type, camxiom::DistortionModelType::KB4);
+  EXPECT_EQ(back.distortion.coeffs, model.distortion.coeffs);
+  EXPECT_EQ(back.intrinsics.fy, model.intrinsics.fy);
+
+  camxiom::CameraModel64 back64;
+  ASSERT_EQ(camxiom::loadCameraModelYaml64(path, back64, size), StatusCode::OK);
+  // Double reads the decimal the float model was written as.
+  EXPECT_EQ(back64.distortion.coeffs[3], info.distortion_parameters[3]);
+  EXPECT_EQ(static_cast<float>(back64.distortion.coeffs[3]), model.distortion.coeffs[3]);
+  std::remove(path.c_str());
+}
+
+// A ROS CameraInfo YAML, as written by toCameraInfoYaml or by hand with
+// comments, reads back through the same entry point.
+TEST(CamxiomCameraInfoYaml, ReadsRosCameraInfoFiles)
+{
+  CameraInfo info = makeTestInfo();
+  CameraInfo back;
+  ASSERT_EQ(
+    camxiom::parseCameraInfoYaml(
+      camxiom::toCameraInfoYaml(info, "front", camxiom::CameraInfoYamlPrecision::ROUND_TRIP), back
+    ),
+    StatusCode::OK
+  );
+  EXPECT_EQ(back.width, info.width);
+  EXPECT_EQ(back.height, info.height);
+  EXPECT_EQ(back.k, info.k);
+  EXPECT_EQ(back.d, info.d);
+  EXPECT_EQ(back.distortion_model, info.distortion_model);
+  EXPECT_EQ(back.r, info.r);
+  EXPECT_EQ(back.p, info.p);
+
+  const std::string handwritten =
+    "# calibrated 2026-10-28\n"
+    "image_width: 640\n"
+    "image_height: 480\n"
+    "camera_name: \"left camera\"  # quoted\n"
+    "camera_matrix:\n"
+    "  rows: 3\n"
+    "  cols: 3\n"
+    "  data: [500.0, 0.0, 319.5,\n"
+    "         0.0, 501.0, 239.5,\n"
+    "         0.0, 0.0, 1.0]\n"
+    "distortion_model: plumb_bob\n"
+    "distortion_coefficients:\n"
+    "  rows: 1\n"
+    "  cols: 5\n"
+    "  data:\n"
+    "  - -0.2\n"
+    "  - 0.05\n"
+    "  - 0.001\n"
+    "  - -0.001\n"
+    "  - 0.0\n";
+  camxiom::CameraModel model;
+  camxiom::ImageSize size;
+  ASSERT_EQ(camxiom::parseCameraModelYaml(handwritten, model, size), StatusCode::OK);
+  EXPECT_EQ(size.width, 640);
+  EXPECT_EQ(size.height, 480);
+  EXPECT_EQ(model.projection.type, camxiom::ProjectionModelType::PINHOLE);
+  EXPECT_EQ(model.distortion.type, camxiom::DistortionModelType::RADTAN5);
+  EXPECT_FLOAT_EQ(model.intrinsics.fy, 501.0f);
+  EXPECT_FLOAT_EQ(model.distortion.coeffs[0], -0.2f);
+}
+
+// The layouts do not mix, and anything that is not YAML or not the layout
+// is refused rather than guessed at.
+TEST(CamxiomCameraInfoYaml, RefusesMalformedDocuments)
+{
+  const std::string good = camxiom::toCamxiomCameraInfoYaml(makeCamxiomInfo());
+  camxiom::CamxiomCameraInfo info;
+  ASSERT_EQ(camxiom::parseCamxiomCameraInfoYaml(good, info), StatusCode::OK);
+  CameraInfo ros;
+  EXPECT_EQ(camxiom::parseCameraInfoYaml(good, ros), StatusCode::INVALID_INPUT);
+  EXPECT_EQ(
+    camxiom::parseCamxiomCameraInfoYaml(camxiom::toCameraInfoYaml(makeTestInfo()), info),
+    StatusCode::INVALID_INPUT
+  );
+
+  const auto replaced = [&good](const std::string &from, const std::string &to) {
+    std::string text = good;
+    const std::size_t at = text.find(from);
+    EXPECT_NE(at, std::string::npos) << from;
+    return text.replace(at, from.size(), to);
+  };
+  const std::vector<std::pair<const char *, std::string>> bad{
+    {"missing key", replaced("image_height: 960\n", "")},
+    {"extra key", good + "camera_name: front\n"},
+    {"duplicate key", good + "image_width: 1280\n"},
+    {"four intrinsics", replaced("479.5, 0.0]", "479.5]")},
+    {"quoted number", replaced("[320.0,", "[\"320.0\",")},
+    {"word for a number", replaced("[320.0,", "[fx,")},
+    {"flow mapping", replaced("projection_parameters: []", "projection_parameters: {}")},
+    {"unclosed sequence", replaced("479.5, 0.0]", "479.5, 0.0")},
+    {"negative size", replaced("image_width: 1280", "image_width: -1280")},
+    {"size beyond 32 bits", replaced("image_width: 1280", "image_width: 4294967296")},
+    {"tab indentation", replaced("image_width: 1280\n", "image_width: 1280\n\timage_height: 9\n")},
+    {"second document", good + "---\nimage_width: 1\n"},
+    {"not a mapping", std::string("- 1\n- 2\n")},
+    {"empty", std::string("")},
+  };
+  for (const auto &[what, text] : bad)
+  {
+    EXPECT_EQ(camxiom::parseCamxiomCameraInfoYaml(text, info), StatusCode::INVALID_INPUT) << what;
+    camxiom::CameraModel model;
+    camxiom::ImageSize size;
+    EXPECT_EQ(camxiom::parseCameraModelYaml(text, model, size), StatusCode::INVALID_INPUT) << what;
+  }
+
+  // An anchor is plain YAML and does not change the value it marks.
+  ASSERT_EQ(
+    camxiom::parseCamxiomCameraInfoYaml(replaced("kb4\n", "&a kb4\n"), info), StatusCode::OK
+  );
+  EXPECT_EQ(info.distortion_model, "kb4");
+
+  // Well-formed, but not a valid model: the validation status, not OK.
+  camxiom::CameraModel model;
+  camxiom::ImageSize size;
+  EXPECT_EQ(
+    camxiom::parseCameraModelYaml(
+      replaced("distortion_model: kb4", "distortion_model: radtan4"), model, size
+    ),
+    StatusCode::INVALID_MODEL
+  );
+  EXPECT_EQ(
+    camxiom::loadCameraModelYaml("/nonexistent/dir/camera.yaml", model, size),
+    StatusCode::INVALID_INPUT
+  );
+}
+
+// strtod follows the C locale's decimal point; reading must not.
+TEST(CamxiomCameraInfoYaml, ReadingIgnoresACommaDecimalCLocale)
+{
+  const char *previous = std::setlocale(LC_NUMERIC, nullptr);
+  const std::string saved = previous != nullptr ? previous : "C";
+  if (std::setlocale(LC_NUMERIC, "de_DE.UTF-8") == nullptr && std::setlocale(LC_NUMERIC, "de_DE") == nullptr)
+  {
+    GTEST_SKIP() << "no comma-decimal locale installed";
+  }
+  camxiom::CamxiomCameraInfo info;
+  const StatusCode status =
+    camxiom::parseCamxiomCameraInfoYaml(camxiom::toCamxiomCameraInfoYaml(makeCamxiomInfo()), info);
+  std::setlocale(LC_NUMERIC, saved.c_str());
+  ASSERT_EQ(status, StatusCode::OK);
+  EXPECT_EQ(info.intrinsic_parameters[1], 320.5);
+  EXPECT_EQ(info.distortion_parameters[3], 1.0 / 3.0);
+}
+
+// The ROS writer stores binning and ROI; the reader folds them into K, P and
+// the image size as the ROS layer does for a message (binning 2, ROI offset
+// (100, 50), ROI 640 x 480 of a 1280 x 960 sensor).
+TEST(CamxiomCameraInfoYaml, FoldsRosBinningAndRoiLikeTheMessagePath)
+{
+  const std::string yaml =
+    "image_width: 1280\n"
+    "image_height: 960\n"
+    "camera_name: binned\n"
+    "camera_matrix:\n"
+    "  rows: 3\n"
+    "  cols: 3\n"
+    "  data: [800.0, 0.0, 640.0, 0.0, 800.0, 480.0, 0.0, 0.0, 1.0]\n"
+    "distortion_model: plumb_bob\n"
+    "distortion_coefficients:\n"
+    "  rows: 1\n"
+    "  cols: 5\n"
+    "  data: [0.0, 0.0, 0.0, 0.0, 0.0]\n"
+    "binning_x: 2\n"
+    "binning_y: 2\n"
+    "roi:\n"
+    "  x_offset: 100\n"
+    "  y_offset: 50\n"
+    "  height: 480\n"
+    "  width: 640\n"
+    "  do_rectify: false\n";
+  CameraInfo info;
+  ASSERT_EQ(camxiom::parseCameraInfoYaml(yaml, info), StatusCode::OK);
+  EXPECT_EQ(info.k[0], 400.0);
+  EXPECT_EQ(info.k[2], 270.0);  // (640 - 100) / 2
+  EXPECT_EQ(info.k[4], 400.0);
+  EXPECT_EQ(info.k[5], 215.0);  // (480 - 50) / 2
+  EXPECT_EQ(info.width, 320U);
+  EXPECT_EQ(info.height, 240U);
+
+  camxiom::CameraModel model;
+  camxiom::ImageSize size;
+  ASSERT_EQ(camxiom::parseCameraModelYaml(yaml, model, size), StatusCode::OK);
+  EXPECT_FLOAT_EQ(model.intrinsics.fx, 400.0f);
+  EXPECT_FLOAT_EQ(model.intrinsics.cx, 270.0f);
+  EXPECT_EQ(size.width, 320);
+  EXPECT_EQ(size.height, 240);
+
+  // The writer's file is in the image's own frame and reads back unchanged.
+  CameraInfo back;
+  ASSERT_EQ(
+    camxiom::parseCameraInfoYaml(
+      camxiom::toCameraInfoYaml(info, "binned", camxiom::CameraInfoYamlPrecision::ROUND_TRIP), back
+    ),
+    StatusCode::OK
+  );
+  EXPECT_EQ(back.k, info.k);
+  EXPECT_EQ(back.width, info.width);
+}
+
+// A block sequence at its key's own indentation may be followed by more keys.
+TEST(CamxiomCameraInfoYaml, ReadsKeysAfterABlockSequenceAtTheKeyIndent)
+{
+  const std::string yaml =
+    "image_width: 640\n"
+    "image_height: 480\n"
+    "projection_model: double_sphere\n"
+    "projection_parameters:\n"
+    "- -0.2\n"
+    "- 0.6\n"
+    "distortion_model: none\n"
+    "distortion_parameters: []\n"
+    "intrinsic_parameters: [400, 400, 320, 240, 0]\n";
+  camxiom::CamxiomCameraInfo info;
+  ASSERT_EQ(camxiom::parseCamxiomCameraInfoYaml(yaml, info), StatusCode::OK);
+  EXPECT_EQ(info.projection_parameters, (std::vector<double>{-0.2, 0.6}));
+  EXPECT_EQ(info.distortion_model, "none");
+}
+
+// A quote is a quoting character only where a scalar starts; inside a plain
+// scalar it is an ordinary character (camera_name: driver's_camera is valid
+// YAML), also before a comment, while a quoted scalar keeps its quotes.
+TEST(CamxiomCameraInfoYaml, ReadsQuotesInsidePlainScalars)
+{
+  const std::string ros =
+    "image_width: 640\n"
+    "image_height: 480\n"
+    "camera_name: driver's_camera  # the left one\n"
+    "camera_matrix:\n"
+    "  rows: 3\n"
+    "  cols: 3\n"
+    "  data: [500.0, 0.0, 319.5, 0.0, 500.0, 239.5, 0.0, 0.0, 1.0]\n"
+    "distortion_model: plumb_bob\n"
+    "distortion_coefficients:\n"
+    "  rows: 1\n"
+    "  cols: 5\n"
+    "  data: [-0.2, 0.05, 0.0, 0.0, 0.0]\n";
+  CameraInfo info;
+  EXPECT_EQ(camxiom::parseCameraInfoYaml(ros, info), StatusCode::OK);
+  std::string no_comment = ros;
+  no_comment.replace(no_comment.find("  # the left one"), 16, "");
+  EXPECT_EQ(camxiom::parseCameraInfoYaml(no_comment, info), StatusCode::OK);
+
+  std::string quoted = ros;
+  quoted.replace(quoted.find("driver's_camera"), 15, "'driver''s camera'");
+  EXPECT_EQ(camxiom::parseCameraInfoYaml(quoted, info), StatusCode::OK);
+  // '' inside single quotes is a quote, so the scalar goes on past it.
+  std::string escaped = ros;
+  escaped.replace(escaped.find("driver's_camera"), 15, "'driver''s camera #1'");
+  EXPECT_EQ(camxiom::parseCameraInfoYaml(escaped, info), StatusCode::OK);
+  // The same in a flow sequence (under a key the ROS reader ignores): the
+  // bracket inside 'it''s ]' is part of the string, not the closing one.
+  EXPECT_EQ(camxiom::parseCameraInfoYaml(ros + "extra: ['it''s ]', 1]\n", info), StatusCode::OK);
+  std::string unterminated = ros;
+  unterminated.replace(unterminated.find("driver's_camera"), 15, "'driver");
+  EXPECT_EQ(camxiom::parseCameraInfoYaml(unterminated, info), StatusCode::INVALID_INPUT);
+}
+
+// A stream that cannot report its size (a pipe) is read up to the limit
+// rather than refused.
+TEST(CamxiomCameraInfoYaml, LoadsFromAPipe)
+{
+  char dir[] = "/tmp/camxiom_yaml_fifo_XXXXXX";
+  ASSERT_NE(::mkdtemp(dir), nullptr);
+  const std::string path = std::string(dir) + "/camera.yaml";
+  ASSERT_EQ(::mkfifo(path.c_str(), 0600), 0);
+  const std::string yaml = camxiom::toCamxiomCameraInfoYaml(makeCamxiomInfo());
+  std::thread writer([&] {
+    std::ofstream out(path, std::ios::out | std::ios::binary);
+    out << yaml;
+  });
+  camxiom::CameraModel model;
+  camxiom::ImageSize size;
+  const StatusCode status = camxiom::loadCameraModelYaml(path, model, size);
+  writer.join();
+  ::unlink(path.c_str());
+  ::rmdir(dir);
+  ASSERT_EQ(status, StatusCode::OK);
+  EXPECT_EQ(size.width, 1280);
+  EXPECT_EQ(model.distortion.type, camxiom::DistortionModelType::KB4);
+}
+
+// Content after the end of the document, and tab indentation, are refused on
+// their own account (no duplicate key involved).
+TEST(CamxiomCameraInfoYaml, RefusesASecondDocumentAndTabIndentation)
+{
+  const std::string good = camxiom::toCamxiomCameraInfoYaml(makeCamxiomInfo());
+  camxiom::CamxiomCameraInfo info;
+  ASSERT_EQ(camxiom::parseCamxiomCameraInfoYaml(good + "...\n", info), StatusCode::OK);
+  ASSERT_EQ(camxiom::parseCamxiomCameraInfoYaml("---\n" + good, info), StatusCode::OK);
+  EXPECT_EQ(
+    camxiom::parseCamxiomCameraInfoYaml(good + "...\n---\n" + good, info), StatusCode::INVALID_INPUT
+  );
+  EXPECT_EQ(
+    camxiom::parseCamxiomCameraInfoYaml(good + "...\nbroken: [\n", info), StatusCode::INVALID_INPUT
+  );
+  std::string tabbed = good;
+  tabbed.replace(tabbed.find("image_height"), 0, "\t");
+  EXPECT_EQ(camxiom::parseCamxiomCameraInfoYaml(tabbed, info), StatusCode::INVALID_INPUT);
+  std::string spaced_tab = good;
+  spaced_tab.replace(spaced_tab.find("image_height"), 0, " \t");
+  EXPECT_EQ(camxiom::parseCamxiomCameraInfoYaml(spaced_tab, info), StatusCode::INVALID_INPUT);
+}
+
+// Hostile input is refused quickly: deep nesting, a long unterminated flow
+// sequence, very many items or keys, aliases that expand without bound, and
+// input past the size limit. Each is
+// added to a valid ROS document under keys the ROS reader ignores, so only
+// the reader's limits refuse it.
+TEST(CamxiomCameraInfoYaml, RefusesHostileInputQuickly)
+{
+  const std::string base = camxiom::toCameraInfoYaml(makeTestInfo());
+  CameraInfo ros;
+  ASSERT_EQ(camxiom::parseCameraInfoYaml(base + "x:\n y:\n  z: 1\n", ros), StatusCode::OK);
+  // Collections nest at most 16 deep (the root mapping is the first).
+  ASSERT_EQ(
+    camxiom::parseCameraInfoYaml(
+      base + "x: " + std::string(15U, '[') + std::string(15U, ']') + "\n", ros
+    ),
+    StatusCode::OK
+  );
+  const std::string past_depth =
+    base + "x: " + std::string(16U, '[') + std::string(16U, ']') + "\n";
+
+  // About 1400 levels fit under the 1 MiB size limit.
+  std::string deep = base;
+  for (int level = 0; level < 1400; ++level)
+  {
+    deep += std::string(static_cast<std::size_t>(level), ' ') + "x:\n";
+  }
+  ASSERT_LT(deep.size(), std::size_t{1} << 20U);
+  const std::string deep_flow =
+    base + "x: " + std::string(400000U, '[') + std::string(400000U, ']') + "\n";
+  ASSERT_LT(deep_flow.size(), std::size_t{1} << 20U);
+  std::string unterminated = base + "x: [\n";
+  for (int i = 0; i < 100000; ++i)
+  {
+    unterminated += "0,\n";
+  }
+  std::string many_items = base + "x: [0";
+  for (int i = 0; i < 10000; ++i)
+  {
+    many_items += ", 0";
+  }
+  many_items += "]\n";
+  std::string many_keys = base;
+  for (int i = 0; i < 40000; ++i)
+  {
+    many_keys += "k" + std::to_string(i) + ": 0\n";
+  }
+  // Aliases that expand nine levels of ten-fold repeats (10^9 nodes), and an
+  // alias inside the collection it names.
+  std::string aliases = base + "l0: &l0 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n";
+  for (int level = 1; level <= 9; ++level)
+  {
+    const std::string below = "*l" + std::to_string(level - 1);
+    aliases += "l" + std::to_string(level) + ": &l" + std::to_string(level) + " [" + below;
+    for (int i = 1; i < 10; ++i)
+    {
+      aliases += ", " + below;
+    }
+    aliases += "]\n";
+  }
+  const std::string cycle = base + "x: &x [*x]\n";
+  std::string huge = base;
+  while (huge.size() <= (std::size_t{1} << 20U))
+  {
+    huge += "# padding padding padding padding padding padding padding padding\n";
+  }
+  for (const auto &[what, text] : std::vector<std::pair<const char *, std::string>>{
+         {"nesting past the limit", past_depth},
+         {"deep nesting", deep},
+         {"deep flow nesting", deep_flow},
+         {"unterminated sequence", unterminated},
+         {"many items", many_items},
+         {"many keys", many_keys},
+         {"expanding aliases", aliases},
+         {"alias cycle", cycle},
+         {"past the size limit", huge}})
+  {
+    const auto start = std::chrono::steady_clock::now();
+    EXPECT_EQ(camxiom::parseCameraInfoYaml(text, ros), StatusCode::INVALID_INPUT) << what;
+    const double seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    EXPECT_LT(seconds, 5.0) << what;
+  }
+
+  // A file past the limit is refused before it is read.
+  const std::string path = writeTemp(huge);
+  camxiom::CameraModel model;
+  camxiom::ImageSize size;
+  EXPECT_EQ(camxiom::loadCameraModelYaml(path, model, size), StatusCode::INVALID_INPUT);
+  std::remove(path.c_str());
 }

@@ -8,7 +8,7 @@ geometry vs calibration** boundary — a semantic split, deliberately *not*
 
 | Target | Alias | Depends on | Contents |
 |---|---|---|---|
-| `camxiom_core` | `camxiom::core` | **Eigen3 only** (+ optional OpenMP; optional ROS / OpenCV interop) | types, model parsing/validation, generic + per-model projection (float & double), Jacobians, LUT, batch + SIMD kernels, remap/rectify, CameraInfo compat + YAML |
+| `camxiom_core` | `camxiom::core` | **Eigen3 + yaml-cpp** (+ optional OpenMP; optional ROS / OpenCV interop) | types, model parsing/validation, generic + per-model projection (float & double), Jacobians, LUT, batch + SIMD kernels, remap/rectify, CameraInfo compat + YAML |
 | `camxiom_calib` | `camxiom::calib` | `camxiom::core` + **Ceres** (PUBLIC) | default seeds, all init estimators, PnP optimizer, `calibrate()`, `convertCameraModel()`. Built only when `CAMXIOM_WITH_CERES`. |
 | `camxiom` | `camxiom::camxiom` | whatever was built | INTERFACE umbrella: core + calib when present. The backward-compatible "link everything" target. |
 
@@ -21,6 +21,8 @@ Two boundary decisions worth spelling out:
 - The ROS and OpenCV **interop layers compile into `core`** (they are
   Ceres-free adapters), guarded by `CAMXIOM_HAS_ROS` / `CAMXIOM_HAS_OPENCV`
   and compiled only when the dependency is found.
+- **YAML reading** goes through yaml-cpp, linked privately into `core`: no
+  installed header includes it, and the writers are plain C++.
 
 ## Dependency policy
 
@@ -38,9 +40,11 @@ Two boundary decisions worth spelling out:
   is exactly what the package config's `find_dependency(Ceres)` expresses).
   The Ceres floor is 2.0 (the 2.0 vs 2.1+ Manifold API difference is
   absorbed at the single call site).
-- **ROS optional.** The canonical interchange type is the ROS-free
-  `camxiom::CameraInfo` POD; `ros.hpp` only copies message fields into it.
-  Calibration YAML files are written by the core without ROS.
+- **ROS optional.** Camera descriptions go through two ROS-free types in
+  the core: `camxiom::CameraInfo`, a POD with the fields of a ROS
+  CameraInfo (`ros.hpp` only copies message fields into it), and
+  `camxiom::CamxiomCameraInfo`, camxiom's own description of every model.
+  Both are written to and read from YAML by the core without ROS.
 - **No exceptions across the API.** Fallible operations return `StatusCode`
   or result structs; see [Error handling](error-handling.md).
 

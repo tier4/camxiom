@@ -31,7 +31,7 @@
 //
 // All conversions funnel through the ROS-free camxiom::CameraInfo POD declared
 // in camxiom/compat.hpp, so the heavy K/D/distortion-model parsing stays in the
-// dependency-free core and is never duplicated here.
+// ROS-free core and is never duplicated here.
 
 #if defined(CAMXIOM_HAS_ROS) && __has_include(<sensor_msgs/msg/camera_info.hpp>)
 
@@ -47,59 +47,18 @@ namespace camxiom
 /// into the camxiom::CameraInfo POD and delegates to the core makeCameraModel).
 ///
 /// Import folds binning/ROI into K/P (the image_geometry adjustment), so the
-/// model maps the published image's pixels. Symmetrically, every export*
-/// function below resets binning_x/binning_y/roi in the output message to
-/// the spec defaults ("no binning / full image") — the exported K/P describe
-/// the model's own pixel frame, and stale metadata would be applied a second
-/// time by the next importer. width/height are left to the caller.
+/// model maps the published image's pixels.
 [[nodiscard]] CameraModel makeCameraModel(const sensor_msgs::msg::CameraInfo &camera_info);
 
-[[nodiscard]] StatusCode importPinholeCameraInfo(
-  const sensor_msgs::msg::CameraInfo &camera_info, PinholeCompatProfile profile,
-  CameraModel &model_out
-);
-
-[[nodiscard]] StatusCode exportPinholeCameraInfo(
-  const CameraModel &model, PinholeCompatProfile profile,
-  sensor_msgs::msg::CameraInfo &camera_info_out
-);
-
-[[nodiscard]] StatusCode importFisheyeCameraInfo(
-  const sensor_msgs::msg::CameraInfo &camera_info, FisheyeCompatProfile profile,
-  CameraModel &model_out
-);
-
-[[nodiscard]] StatusCode exportFisheyeCameraInfo(
-  const CameraModel &model, FisheyeCompatProfile profile,
-  sensor_msgs::msg::CameraInfo &camera_info_out
-);
-
-[[nodiscard]] StatusCode importOmnidirectionalCameraInfo(
-  const sensor_msgs::msg::CameraInfo &camera_info, OmnidirectionalCompatProfile profile,
-  CameraModel &model_out
-);
-
-[[nodiscard]] StatusCode exportOmnidirectionalCameraInfo(
-  const CameraModel &model, OmnidirectionalCompatProfile profile,
-  sensor_msgs::msg::CameraInfo &camera_info_out
-);
-
-[[nodiscard]] StatusCode importDoubleSphereCameraInfo(
-  const sensor_msgs::msg::CameraInfo &camera_info, DoubleSphereCompatProfile profile,
-  CameraModel &model_out
-);
-
-[[nodiscard]] StatusCode exportDoubleSphereCameraInfo(
-  const CameraModel &model, DoubleSphereCompatProfile profile,
-  sensor_msgs::msg::CameraInfo &camera_info_out
-);
-
-[[nodiscard]] StatusCode importEucmCameraInfo(
-  const sensor_msgs::msg::CameraInfo &camera_info, EucmCompatProfile profile, CameraModel &model_out
-);
-
-[[nodiscard]] StatusCode exportEucmCameraInfo(
-  const CameraModel &model, EucmCompatProfile profile, sensor_msgs::msg::CameraInfo &camera_info_out
+/// Export a model as a ROS CameraInfo message with the core
+/// exportCameraInfo rules: written only when a ROS distortion model holds the
+/// same lens, otherwise INVALID_MODEL and the message is left unchanged. On
+/// OK, binning_x/binning_y/roi are reset to the spec defaults ("no binning /
+/// full image") — the exported K/P describe the model's own pixel frame, and
+/// stale metadata would be applied a second time by the next importer.
+/// width/height are left to the caller.
+[[nodiscard]] StatusCode exportCameraInfo(
+  const CameraModel &model, sensor_msgs::msg::CameraInfo &camera_info_out
 );
 
 }  // namespace camxiom

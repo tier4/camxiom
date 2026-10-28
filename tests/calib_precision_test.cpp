@@ -130,13 +130,11 @@ TEST(CalibPrecision, RetainsFittedParametersDiagnosticsAndWarmStart)
     for (std::size_t j = 0; j < views[i].world_points.size(); ++j)
       EXPECT_EQ((residuals[i][j] - result.per_point_residuals[i][j]).squaredNorm(), 0.0);
 
-  CameraInfo info;
-  ASSERT_EQ(
-    exportPinholeCameraInfo64(result.camera_model, PinholeCompatProfile::CANONICAL, info),
-    StatusCode::OK
-  );
+  CamxiomCameraInfo info;
+  ASSERT_EQ(exportCameraInfo64(result.camera_model, info), StatusCode::OK);
   const auto reloaded = makeCameraModel64(info);
   EXPECT_EQ(reloaded.intrinsics.fx, result.camera_model.intrinsics.fx);
+  EXPECT_EQ(reloaded.intrinsics.skew, result.camera_model.intrinsics.skew);
   const auto repeated = calibrate64(views, reloaded, flags, precisionOptions());
   ASSERT_EQ(repeated.status, StatusCode::OK);
   EXPECT_LT(repeated.rms_reprojection_error_px, 1e-9);

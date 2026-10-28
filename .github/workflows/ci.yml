@@ -23,7 +23,7 @@ name: CI
 #
 # The x86-core-simd job is core-only (-DCAMXIOM_WITH_CERES=OFF): the
 # SIMD/batch/lut/jacobian code under test lives entirely in camxiom_core
-# (Eigen-only), and the two SIMD variants stay fast. OpenCV is installed so
+# (Eigen and yaml-cpp), and the two SIMD variants stay fast. OpenCV is installed so
 # the interop tests (LOADMAP T1) run here too.
 #
 # The full-ceres job builds the complete library (ubuntu-24.04 ships
@@ -78,7 +78,8 @@ jobs:
             g++ \
             libeigen3-dev \
             libgtest-dev \
-            libopencv-dev
+            libopencv-dev \
+            libyaml-cpp-dev
 
       - name: Show compiler SIMD macros
         run: |
@@ -122,7 +123,8 @@ jobs:
             libeigen3-dev \
             libgtest-dev \
             libopencv-dev \
-            libceres-dev
+            libceres-dev \
+            libyaml-cpp-dev
 
       - name: Configure (full, Ceres on)
         run: |
@@ -157,7 +159,8 @@ jobs:
             libeigen3-dev \
             libgtest-dev \
             libopencv-dev \
-            libceres-dev
+            libceres-dev \
+            libyaml-cpp-dev
 
       - name: Configure (ASan + UBSan)
         run: |
@@ -198,6 +201,7 @@ jobs:
             cmake \
             g++ \
             libeigen3-dev \
+            libyaml-cpp-dev \
             python3-colcon-common-extensions \
             ros-humble-ament-cmake-gtest \
             ros-humble-sensor-msgs

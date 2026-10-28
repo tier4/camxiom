@@ -75,23 +75,23 @@ TEST(Types, DistortionModelToStringRoundTripsThroughParse)
   }
 }
 
-TEST(Types, OpenCvFisheyeNamesReadAsKb4)
+TEST(Types, OnlyTheToStringNamesParseAsCorrections)
 {
-  // OpenCV's fisheye polynomial theta * (1 + k1 t^2 + k2 t^4 + k3 t^6 + k4 t^8)
-  // is KB4 with the same coefficient order, so its names map to KB4.
-  for (const char *name : {"equidistant", "fisheye", "opencv_fisheye4", "kb4"})
-  {
-    EXPECT_EQ(parseDistortionModelType(name), DistortionModelType::KB4) << name;
-    EXPECT_TRUE(isFisheyeDistortionModel(name)) << name;
-  }
-  // The plain laws are projections, not distortions; they are still fisheye
-  // names for interchange.
-  for (const char *name : {"ideal_equidistant", "equisolid", "stereographic", "orthographic"})
+  // The interchange names (ROS, OpenCV) and older spellings are not
+  // correction names: makeCameraModel reads the ROS names itself.
+  for (const char *name :
+       {"equidistant", "fisheye", "opencv_fisheye4", "plumb_bob", "rational_polynomial",
+        "kannala_brandt", "brown_conrady", "thin_prism_fisheye", "tilted", "ideal_equidistant",
+        "equisolid"})
   {
     EXPECT_EQ(parseDistortionModelType(name), DistortionModelType::UNKNOWN) << name;
-    EXPECT_TRUE(isFisheyeDistortionModel(name)) << name;
   }
+  EXPECT_EQ(parseDistortionModelType("KB4"), DistortionModelType::KB4);
+  EXPECT_TRUE(isFisheyeDistortionModel("equidistant"));
+  EXPECT_FALSE(isFisheyeDistortionModel("kb4"));
   EXPECT_FALSE(isFisheyeDistortionModel("plumb_bob"));
+  EXPECT_TRUE(isRationalDistortionModel("rational_polynomial"));
+  EXPECT_FALSE(isRationalDistortionModel("rational8"));
 }
 
 TEST(Types, ProjectionModelTypeToString)
