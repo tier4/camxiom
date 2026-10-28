@@ -26,12 +26,10 @@
 namespace camxiom
 {
 
-/// ROS-free, OpenCV-free description of a raw camera (the canonical interchange
-/// type used by every compat conversion). It mirrors the field layout of a ROS
-/// sensor_msgs/CameraInfo message but carries no ROS dependency, so the heavy
-/// K/D/distortion-model parsing in makeCameraModel() lives entirely in the
-/// ROS-free core. The optional ROS layer (camxiom/ros.hpp) and OpenCV
-/// layer (camxiom/opencv.hpp) only do trivial field copies into this struct.
+/// A ROS sensor_msgs/CameraInfo without the ROS dependency: the same fields,
+/// so the K/D/distortion_model reading in makeCameraModel() lives in the
+/// ROS-free core and the optional ROS layer (camxiom/ros.hpp) only
+/// copies fields.
 struct CameraInfo
 {
   std::array<double, 9> k{
@@ -69,153 +67,21 @@ struct CamxiomCameraInfo
   std::array<double, 5> intrinsic_parameters{{1.0, 1.0, 0.0, 0.0, 0.0}};
 };
 
-/// Build a CameraModel from a raw camera description (canonical mapping; the
-/// distortion-model string and coefficient packing follow the camxiom
-/// convention shared with the import*CameraInfo profiles below). This is the
-/// single place the K/D/distortion-model parsing lives; ROS and OpenCV adapters
-/// funnel through it.
+/// Build a CameraModel from a raw camera description. The distortion_model
+/// name gives the projection law and the lens correction: the ROS names
+/// `plumb_bob` / `rational_polynomial` (pinhole with radtan / rational, the
+/// correction chosen by the length of d) and `equidistant` (the equidistant
+/// law with KB4), and camxiom's own names (`radtan4`, `radtan5`, `rational8`,
+/// `thin_prism12`, `tilted14`, `kb4`, `kb8`, `ideal_equidistant`, `equisolid`,
+/// `stereographic`, `orthographic`, `omnidirectional` / `double_sphere` /
+/// `eucm` with their projection parameters first in d, and older aliases).
+/// An empty name means pinhole, with the correction chosen by the length of
+/// d. A description that is not a valid model comes back as one that
+/// validateCameraModel rejects.
 [[nodiscard]] CameraModel makeCameraModel(const CameraInfo &camera_info);
 
 /// Parse K/D directly into double storage, without a float intermediate.
 [[nodiscard]] CameraModel64 makeCameraModel64(const CameraInfo &camera_info);
-
-enum class PinholeCompatProfile : std::uint8_t {
-  CANONICAL = 0U,
-  OPENCV_CALIB3D_D4,
-  OPENCV_CALIB3D_D5,
-  OPENCV_CALIB3D_D8,
-  OPENCV_CALIB3D_D12,
-  OPENCV_CALIB3D_D14,
-  ROS_CAMERA_INFO_RAW
-};
-
-enum class FisheyeCompatProfile : std::uint8_t {
-  CANONICAL = 0U,
-  OPENCV_FISHEYE_D4,
-  ROS_CAMERA_INFO_EQUIDISTANT
-};
-
-enum class OmnidirectionalCompatProfile : std::uint8_t {
-  CANONICAL = 0U,
-  OPENCV_OMNIDIR_D4,
-  OPENCV_OMNIDIR_D5,
-  OPENCV_OMNIDIR_D8
-};
-
-enum class DoubleSphereCompatProfile : std::uint8_t { CANONICAL = 0U, BASALT_D0, BASALT_D4 };
-
-enum class EucmCompatProfile : std::uint8_t { CANONICAL = 0U, KALIBR_D0, KALIBR_D4 };
-
-struct PinholeExternalModel
-{
-  std::array<double, 9> K{{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}};
-  std::vector<double> D{};
-};
-
-struct FisheyeExternalModel
-{
-  std::array<double, 9> K{{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}};
-  std::vector<double> D{};
-  /// NONE (with an empty D), KB4 or KB8; UNKNOWN reads D as KB4.
-  DistortionModelType distortion_type{DistortionModelType::UNKNOWN};
-  /// The fisheye law. CANONICAL reads it together with distortion_type;
-  /// the OpenCV and ROS profiles always mean EQUIDISTANT with KB4. Last, so
-  /// brace initialisers written before it existed keep their meaning.
-  ProjectionModelType projection_type{ProjectionModelType::EQUIDISTANT};
-};
-
-struct OmnidirectionalExternalModel
-{
-  std::array<double, 9> K{{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}};
-  std::vector<double> D{};
-  double xi{0.0};
-};
-
-struct DoubleSphereExternalModel
-{
-  std::array<double, 9> K{{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}};
-  std::vector<double> D{};
-  double xi{0.0};
-  double alpha{0.0};
-};
-
-struct EucmExternalModel
-{
-  std::array<double, 9> K{{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}};
-  std::vector<double> D{};
-  double alpha{0.0};
-  double beta{1.0};
-};
-
-[[nodiscard]] StatusCode importPinholeModel(
-  const PinholeExternalModel &external_model, PinholeCompatProfile profile, CameraModel &model_out
-);
-
-[[nodiscard]] StatusCode exportPinholeModel(
-  const CameraModel &model, PinholeCompatProfile profile, PinholeExternalModel &external_model_out
-);
-
-[[nodiscard]] StatusCode importFisheyeModel(
-  const FisheyeExternalModel &external_model, FisheyeCompatProfile profile, CameraModel &model_out
-);
-
-[[nodiscard]] StatusCode exportFisheyeModel(
-  const CameraModel &model, FisheyeCompatProfile profile, FisheyeExternalModel &external_model_out
-);
-
-[[nodiscard]] StatusCode importOmnidirectionalModel(
-  const OmnidirectionalExternalModel &external_model, OmnidirectionalCompatProfile profile,
-  CameraModel &model_out
-);
-
-[[nodiscard]] StatusCode exportOmnidirectionalModel(
-  const CameraModel &model, OmnidirectionalCompatProfile profile,
-  OmnidirectionalExternalModel &external_model_out
-);
-
-[[nodiscard]] StatusCode importDoubleSphereModel(
-  const DoubleSphereExternalModel &external_model, DoubleSphereCompatProfile profile,
-  CameraModel &model_out
-);
-
-[[nodiscard]] StatusCode exportDoubleSphereModel(
-  const CameraModel &model, DoubleSphereCompatProfile profile,
-  DoubleSphereExternalModel &external_model_out
-);
-
-[[nodiscard]] StatusCode importEucmModel(
-  const EucmExternalModel &external_model, EucmCompatProfile profile, CameraModel &model_out
-);
-
-[[nodiscard]] StatusCode exportEucmModel(
-  const CameraModel &model, EucmCompatProfile profile, EucmExternalModel &external_model_out
-);
-
-/// Export a calibrated model into the ROS-free CameraInfo POD: K/D packed per
-/// the profile, distortion_model set to the family's canonical string, r set to
-/// identity and p filled as [K | 0]. width/height are left untouched (the
-/// caller owns the image geometry). This is the single source of the CameraInfo
-/// packing; the optional ROS layer (camxiom/ros.hpp) delegates here and only
-/// copies fields into sensor_msgs.
-[[nodiscard]] StatusCode exportPinholeCameraInfo(
-  const CameraModel &model, PinholeCompatProfile profile, CameraInfo &camera_info_out
-);
-
-[[nodiscard]] StatusCode exportFisheyeCameraInfo(
-  const CameraModel &model, FisheyeCompatProfile profile, CameraInfo &camera_info_out
-);
-
-[[nodiscard]] StatusCode exportOmnidirectionalCameraInfo(
-  const CameraModel &model, OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out
-);
-
-[[nodiscard]] StatusCode exportDoubleSphereCameraInfo(
-  const CameraModel &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out
-);
-
-[[nodiscard]] StatusCode exportEucmCameraInfo(
-  const CameraModel &model, EucmCompatProfile profile, CameraInfo &camera_info_out
-);
 
 /// Export a model as a ROS CameraInfo, only when the ROS distortion models
 /// can hold the same lens:
@@ -264,48 +130,6 @@ struct EucmExternalModel
 [[nodiscard]] StatusCode exportCameraInfo64(
   const CameraModel64 &model, CamxiomCameraInfo &camera_info_out
 );
-
-/// Double-precision counterparts of the profile-aware interchange functions.
-[[nodiscard]] StatusCode importPinholeModel64(
-  const PinholeExternalModel &external_model, PinholeCompatProfile profile, CameraModel64 &model_out);
-[[nodiscard]] StatusCode exportPinholeModel64(
-  const CameraModel64 &model, PinholeCompatProfile profile, PinholeExternalModel &external_model_out);
-[[nodiscard]] StatusCode exportPinholeCameraInfo64(
-  const CameraModel64 &model, PinholeCompatProfile profile, CameraInfo &camera_info_out);
-
-[[nodiscard]] StatusCode importFisheyeModel64(
-  const FisheyeExternalModel &external_model, FisheyeCompatProfile profile, CameraModel64 &model_out);
-[[nodiscard]] StatusCode exportFisheyeModel64(
-  const CameraModel64 &model, FisheyeCompatProfile profile, FisheyeExternalModel &external_model_out);
-[[nodiscard]] StatusCode exportFisheyeCameraInfo64(
-  const CameraModel64 &model, FisheyeCompatProfile profile, CameraInfo &camera_info_out);
-
-[[nodiscard]] StatusCode importOmnidirectionalModel64(
-  const OmnidirectionalExternalModel &external_model, OmnidirectionalCompatProfile profile, CameraModel64 &model_out);
-[[nodiscard]] StatusCode exportOmnidirectionalModel64(
-  const CameraModel64 &model, OmnidirectionalCompatProfile profile, OmnidirectionalExternalModel &external_model_out);
-[[nodiscard]] StatusCode exportOmnidirectionalCameraInfo64(
-  const CameraModel64 &model, OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out);
-
-[[nodiscard]] StatusCode importDoubleSphereModel64(
-  const DoubleSphereExternalModel &external_model, DoubleSphereCompatProfile profile, CameraModel64 &model_out);
-[[nodiscard]] StatusCode exportDoubleSphereModel64(
-  const CameraModel64 &model, DoubleSphereCompatProfile profile, DoubleSphereExternalModel &external_model_out);
-[[nodiscard]] StatusCode exportDoubleSphereCameraInfo64(
-  const CameraModel64 &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out);
-
-[[nodiscard]] StatusCode importEucmModel64(
-  const EucmExternalModel &external_model, EucmCompatProfile profile, CameraModel64 &model_out);
-[[nodiscard]] StatusCode exportEucmModel64(
-  const CameraModel64 &model, EucmCompatProfile profile, EucmExternalModel &external_model_out);
-[[nodiscard]] StatusCode exportEucmCameraInfo64(
-  const CameraModel64 &model, EucmCompatProfile profile, CameraInfo &camera_info_out);
-
-const char *toString(PinholeCompatProfile profile);
-const char *toString(FisheyeCompatProfile profile);
-const char *toString(OmnidirectionalCompatProfile profile);
-const char *toString(DoubleSphereCompatProfile profile);
-const char *toString(EucmCompatProfile profile);
 
 }  // namespace camxiom
 

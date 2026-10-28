@@ -17,15 +17,16 @@
 // This layer is a thin sensor_msgs adapter: every conversion copies the
 // message's k/d/distortion_model/r/p/size fields into the ROS-free
 // camxiom::CameraInfo POD and delegates the actual K/D parsing to the core
-// compat layer (makeCameraModel / import*Model / export*Model). Until now
+// compat layer (makeCameraModel / exportCameraInfo). Until now
 // nothing in the suite included <sensor_msgs/...>, so this bridge had zero
 // regression coverage (LOADMAP T5). The POD path itself is covered by
 // compat_test (T3); here we guard the sensor_msgs <-> CameraModel field wiring.
 //
 // Strategy: (1) makeCameraModel(msg) dispatches by distortion_model string;
-// (2) per family, a hand-authored CameraInfo message round-trips
-// message -> import -> CameraModel -> export -> message with K/D preserved and
-// the rectification/projection matrices filled; (3) deterministic error paths.
+// (2) a hand-authored CameraInfo message round-trips message -> CameraModel ->
+// exportCameraInfo -> message with K/D preserved and the rectification /
+// projection matrices filled, and a lens ROS cannot hold is refused without
+// touching the message; (3) deterministic error paths.
 //
 // Only built when the ROS compat layer was compiled in (CMake gate
 // CAMXIOM_WITH_ROS); the __has_include guard keeps the TU harmless otherwise.
@@ -46,6 +47,7 @@
 #include <cmath>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -80,7 +82,7 @@ void expectDNear(const std::vector<double> &got, const std::vector<double> &want
   }
 }
 
-// export*CameraInfo always writes an identity rectification and a 3x4
+// exportCameraInfo always writes an identity rectification and a 3x4
 // projection matrix built from the pinhole intrinsics (fx,cx / fy,cy).
 void expectIdentityR(const RosCameraInfo &msg)
 {
@@ -163,129 +165,75 @@ TEST(RosCompatMakeCameraModel, EmptyStringIsPinholeNoDistortion)
 }
 
 // ===========================================================================
-// message -> import -> CameraModel -> export -> message round-trips.
+// message -> CameraModel -> exportCameraInfo -> message round-trips.
 // ===========================================================================
 
 TEST(RosCompatRoundTrip, PinholeRadtan5)
 {
   RosCameraInfo msg;
   msg.k = makeK(525.0, 524.0, 319.5, 239.5);
+  msg.distortion_model = "plumb_bob";
   msg.d = {-0.2, 0.05, 0.001, -0.001, 0.01};
 
-  CameraModel model;
-  ASSERT_EQ(
-    importPinholeCameraInfo(msg, PinholeCompatProfile::OPENCV_CALIB3D_D5, model), StatusCode::OK
-  );
+  const CameraModel model = camxiom::makeCameraModel(msg);
   EXPECT_EQ(model.projection.type, ProjectionModelType::PINHOLE);
-  EXPECT_EQ(validateCameraModel(model), StatusCode::OK);
+  ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
 
   RosCameraInfo out;
-  ASSERT_EQ(
-    exportPinholeCameraInfo(model, PinholeCompatProfile::OPENCV_CALIB3D_D5, out), StatusCode::OK
-  );
+  out.width = 640U;  // the export must not touch the image geometry
+  ASSERT_EQ(exportCameraInfo(model, out), StatusCode::OK);
+  EXPECT_EQ(out.distortion_model, "plumb_bob");
   expectKNear(out.k, msg.k);
   expectDNear(out.d, msg.d);
   expectIdentityR(out);
   expectProjectionMatrix(out, 525.0, 524.0, 319.5, 239.5);
-  EXPECT_FALSE(out.distortion_model.empty());
+  EXPECT_EQ(out.width, 640U);
 }
 
-TEST(RosCompatRoundTrip, FisheyeOpencvD4)
+TEST(RosCompatRoundTrip, EquidistantKb4)
 {
   RosCameraInfo msg;
   msg.k = makeK(300.0, 300.0, 320.0, 240.0);
+  msg.distortion_model = "equidistant";
   msg.d = {0.01, 0.001, 0.0001, -0.0002};
 
-  CameraModel model;
-  ASSERT_EQ(
-    importFisheyeCameraInfo(msg, FisheyeCompatProfile::OPENCV_FISHEYE_D4, model), StatusCode::OK
-  );
+  const CameraModel model = camxiom::makeCameraModel(msg);
   EXPECT_EQ(model.projection.type, ProjectionModelType::EQUIDISTANT);
-  EXPECT_EQ(camxiom::distortionSpaceOf(model.distortion.type), DistortionSpace::ANGLE);
-  EXPECT_EQ(validateCameraModel(model), StatusCode::OK);
+  EXPECT_EQ(model.distortion.type, DistortionModelType::KB4);
+  ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
 
   RosCameraInfo out;
-  ASSERT_EQ(
-    exportFisheyeCameraInfo(model, FisheyeCompatProfile::OPENCV_FISHEYE_D4, out), StatusCode::OK
-  );
+  ASSERT_EQ(exportCameraInfo(model, out), StatusCode::OK);
+  EXPECT_EQ(out.distortion_model, "equidistant");
   expectKNear(out.k, msg.k);
   expectDNear(out.d, msg.d);
   expectIdentityR(out);
   expectProjectionMatrix(out, 300.0, 300.0, 320.0, 240.0);
 }
 
-TEST(RosCompatRoundTrip, OmnidirectionalMei)
+// The sphere models read from camxiom's own names, but ROS has no distortion
+// model for them: the export refuses and leaves the message as it was.
+TEST(RosCompatExport, RefusesLensesRosCannotHold)
 {
-  RosCameraInfo msg;
-  msg.k = makeK(200.0, 200.0, 320.0, 240.0);
-  msg.distortion_model = "omnidirectional";
-  msg.d = {1.0};  // xi
+  const std::vector<std::pair<std::string, std::vector<double>>> cases{
+    {"omnidirectional", {1.0}}, {"double_sphere", {-0.2, 0.5}}, {"eucm", {0.5, 1.0}}};
+  for (const auto &[name, d] : cases)
+  {
+    RosCameraInfo msg;
+    msg.k = makeK(200.0, 200.0, 320.0, 240.0);
+    msg.distortion_model = name;
+    msg.d = d;
+    const CameraModel model = camxiom::makeCameraModel(msg);
+    ASSERT_EQ(validateCameraModel(model), StatusCode::OK) << name;
 
-  CameraModel model;
-  ASSERT_EQ(
-    importOmnidirectionalCameraInfo(msg, OmnidirectionalCompatProfile::CANONICAL, model),
-    StatusCode::OK
-  );
-  EXPECT_EQ(model.projection.type, ProjectionModelType::OMNIDIRECTIONAL);
-  EXPECT_NEAR(model.projection.xi, 1.0f, 1e-5);
-  EXPECT_EQ(validateCameraModel(model), StatusCode::OK);
-
-  RosCameraInfo out;
-  ASSERT_EQ(
-    exportOmnidirectionalCameraInfo(model, OmnidirectionalCompatProfile::CANONICAL, out),
-    StatusCode::OK
-  );
-  expectKNear(out.k, msg.k);
-  expectDNear(out.d, msg.d);
-  EXPECT_EQ(out.distortion_model, "omnidirectional");
-  expectIdentityR(out);
-  expectProjectionMatrix(out, 200.0, 200.0, 320.0, 240.0);
-}
-
-TEST(RosCompatRoundTrip, DoubleSphereBasalt)
-{
-  RosCameraInfo msg;
-  msg.k = makeK(200.0, 200.0, 320.0, 240.0);
-  msg.d = {-0.2, 0.5};  // xi, alpha
-
-  CameraModel model;
-  ASSERT_EQ(
-    importDoubleSphereCameraInfo(msg, DoubleSphereCompatProfile::BASALT_D0, model), StatusCode::OK
-  );
-  EXPECT_EQ(model.projection.type, ProjectionModelType::DOUBLE_SPHERE);
-  EXPECT_NEAR(model.projection.xi, -0.2f, 1e-5);
-  EXPECT_NEAR(model.projection.alpha, 0.5f, 1e-5);
-
-  RosCameraInfo out;
-  ASSERT_EQ(
-    exportDoubleSphereCameraInfo(model, DoubleSphereCompatProfile::BASALT_D0, out), StatusCode::OK
-  );
-  expectKNear(out.k, msg.k);
-  expectDNear(out.d, msg.d);
-  EXPECT_EQ(out.distortion_model, "double_sphere");
-  expectIdentityR(out);
-  expectProjectionMatrix(out, 200.0, 200.0, 320.0, 240.0);
-}
-
-TEST(RosCompatRoundTrip, Eucm)
-{
-  RosCameraInfo msg;
-  msg.k = makeK(200.0, 200.0, 320.0, 240.0);
-  msg.d = {0.5, 1.0};  // alpha, beta
-
-  CameraModel model;
-  ASSERT_EQ(importEucmCameraInfo(msg, EucmCompatProfile::KALIBR_D0, model), StatusCode::OK);
-  EXPECT_EQ(model.projection.type, ProjectionModelType::EUCM);
-  EXPECT_NEAR(model.projection.alpha, 0.5f, 1e-5);
-  EXPECT_NEAR(model.projection.beta, 1.0f, 1e-5);
-
-  RosCameraInfo out;
-  ASSERT_EQ(exportEucmCameraInfo(model, EucmCompatProfile::KALIBR_D0, out), StatusCode::OK);
-  expectKNear(out.k, msg.k);
-  expectDNear(out.d, msg.d);
-  EXPECT_EQ(out.distortion_model, "eucm");
-  expectIdentityR(out);
-  expectProjectionMatrix(out, 200.0, 200.0, 320.0, 240.0);
+    RosCameraInfo out;
+    out.distortion_model = "untouched";
+    out.binning_x = 2U;
+    EXPECT_EQ(exportCameraInfo(model, out), StatusCode::INVALID_MODEL) << name;
+    EXPECT_EQ(out.distortion_model, "untouched") << name;
+    EXPECT_TRUE(out.d.empty()) << name;
+    EXPECT_EQ(out.binning_x, 2U) << name;
+  }
 }
 
 // ===========================================================================
@@ -299,36 +247,17 @@ TEST(RosCompatErrors, RejectsNonFiniteK)
   msg.k[0] = std::numeric_limits<double>::quiet_NaN();
   msg.d = {};
 
-  CameraModel model;
-  EXPECT_EQ(
-    importPinholeCameraInfo(msg, PinholeCompatProfile::CANONICAL, model), StatusCode::INVALID_INPUT
-  );
+  EXPECT_NE(validateCameraModel(camxiom::makeCameraModel(msg)), StatusCode::OK);
 }
 
 TEST(RosCompatErrors, RejectsNonFiniteD)
 {
   RosCameraInfo msg;
   msg.k = makeK(500.0, 500.0, 320.0, 240.0);
+  msg.distortion_model = "plumb_bob";
   msg.d = {std::numeric_limits<double>::infinity(), 0.0, 0.0, 0.0, 0.0};
 
-  CameraModel model;
-  EXPECT_EQ(
-    importPinholeCameraInfo(msg, PinholeCompatProfile::OPENCV_CALIB3D_D5, model),
-    StatusCode::INVALID_INPUT
-  );
-}
-
-TEST(RosCompatErrors, RejectsProfileCountMismatch)
-{
-  RosCameraInfo msg;
-  msg.k = makeK(500.0, 500.0, 320.0, 240.0);
-  msg.d = {-0.2, 0.05, 0.001, -0.001};  // 4 coeffs, D5 profile expects 5
-
-  CameraModel model;
-  EXPECT_EQ(
-    importPinholeCameraInfo(msg, PinholeCompatProfile::OPENCV_CALIB3D_D5, model),
-    StatusCode::INVALID_INPUT
-  );
+  EXPECT_NE(validateCameraModel(camxiom::makeCameraModel(msg)), StatusCode::OK);
 }
 
 // ---------------------------------------------------------------------------
@@ -413,15 +342,11 @@ TEST(RosCompatBinningRoi, ExportResetsBinningAndRoi)
   msg.roi.width = 640U;
   msg.roi.height = 480U;
 
-  CameraModel model;
-  ASSERT_EQ(
-    importPinholeCameraInfo(msg, PinholeCompatProfile::OPENCV_CALIB3D_D5, model), StatusCode::OK
-  );
+  const CameraModel model = camxiom::makeCameraModel(msg);
+  ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
   EXPECT_NEAR(model.intrinsics.fx, 500.0, 1e-3);
 
-  ASSERT_EQ(
-    exportPinholeCameraInfo(model, PinholeCompatProfile::OPENCV_CALIB3D_D5, msg), StatusCode::OK
-  );
+  ASSERT_EQ(exportCameraInfo(model, msg), StatusCode::OK);
   EXPECT_EQ(msg.binning_x, 0U);
   EXPECT_EQ(msg.binning_y, 0U);
   EXPECT_EQ(msg.roi.x_offset, 0U);
@@ -431,10 +356,8 @@ TEST(RosCompatBinningRoi, ExportResetsBinningAndRoi)
 
   // The republished message must round-trip to the SAME model — not one
   // with the binning folded in twice.
-  CameraModel again;
-  ASSERT_EQ(
-    importPinholeCameraInfo(msg, PinholeCompatProfile::OPENCV_CALIB3D_D5, again), StatusCode::OK
-  );
+  const CameraModel again = camxiom::makeCameraModel(msg);
+  ASSERT_EQ(validateCameraModel(again), StatusCode::OK);
   EXPECT_NEAR(again.intrinsics.fx, model.intrinsics.fx, 1e-6);
   EXPECT_NEAR(again.intrinsics.fy, model.intrinsics.fy, 1e-6);
   EXPECT_NEAR(again.intrinsics.cx, model.intrinsics.cx, 1e-6);
@@ -505,22 +428,20 @@ TEST(RosCompatBinningRoi, DefaultBinningAndFullRoiAreNoOp)
   }
 }
 
-TEST(RosCompatBinningRoi, ProfileImportUsesAdjustedK)
+TEST(RosCompatBinningRoi, FisheyeImportUsesAdjustedK)
 {
-  // The profile-based imports read K through the same adjustment (they used
-  // to copy the raw message K directly).
+  // A fisheye message reads K through the same adjustment.
   RosCameraInfo msg;
   msg.k = makeK(600.0, 600.0, 640.0, 480.0);
+  msg.distortion_model = "equidistant";
   msg.d = {0.01, 0.001, 0.0001, -0.0002};
   msg.width = 1280U;
   msg.height = 960U;
   msg.binning_x = 2U;
   msg.binning_y = 2U;
 
-  CameraModel model;
-  ASSERT_EQ(
-    importFisheyeCameraInfo(msg, FisheyeCompatProfile::OPENCV_FISHEYE_D4, model), StatusCode::OK
-  );
+  const CameraModel model = camxiom::makeCameraModel(msg);
+  ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
   EXPECT_NEAR(model.intrinsics.fx, 300.0, 1e-3);
   EXPECT_NEAR(model.intrinsics.cx, 320.0, 1e-3);
   EXPECT_NEAR(model.intrinsics.cy, 240.0, 1e-3);

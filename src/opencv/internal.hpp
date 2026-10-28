@@ -28,6 +28,7 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <string>
 #include <vector>
 
 namespace camxiom::opencv
@@ -251,25 +252,68 @@ inline bool parseProjectionMatrix(
   return true;
 }
 
-inline camxiom::PinholeCompatProfile choosePinholeProfile(const std::size_t d_size)
+// Build a model from camxiom's own description of K and the coefficients,
+// and check that it is valid and uses the expected projection law. K's
+// non-intrinsic entries (row 2, and the zero below the diagonal) are ignored.
+inline StatusCode buildModel(
+  const std::array<double, 9> &K, const char *law, const std::vector<double> &law_parameters,
+  const char *correction, const std::vector<double> &coefficients, CameraModel &model_out
+)
 {
-  using camxiom::PinholeCompatProfile;
-  switch (d_size)
+  for (const std::vector<double> *values : {&law_parameters, &coefficients})
+  {
+    for (const double value : *values)
+    {
+      if (!std::isfinite(value))
+      {
+        return StatusCode::INVALID_INPUT;
+      }
+    }
+  }
+  for (const double value : K)
+  {
+    if (!std::isfinite(value))
+    {
+      return StatusCode::INVALID_INPUT;
+    }
+  }
+  camxiom::CamxiomCameraInfo info;
+  info.projection_model = law;
+  info.projection_parameters = law_parameters;
+  info.distortion_model = correction;
+  info.distortion_parameters = coefficients;
+  info.intrinsic_parameters = {K[0], K[4], K[2], K[5], K[1]};
+  model_out = camxiom::makeCameraModel(info);
+  const StatusCode status = camxiom::validateCameraModel(model_out);
+  if (status != StatusCode::OK)
+  {
+    return status;
+  }
+  return toString(model_out.projection.type) == std::string(law) ? StatusCode::OK
+                                                                 : StatusCode::INVALID_MODEL;
+}
+
+// OpenCV's calib3d distortion vector, (k1, k2, p1, p2[, k3[, k4, k5, k6[, s1,
+// s2, s3, s4[, tx, ty]]]]), is in camxiom's coefficient order; its length
+// picks the correction. Any other length is not an OpenCV distortion vector.
+inline const char *opencvPlaneCorrection(const std::size_t count)
+{
+  switch (count)
   {
     case 0:
-      return PinholeCompatProfile::CANONICAL;
+      return "none";
     case 4:
-      return PinholeCompatProfile::OPENCV_CALIB3D_D4;
+      return "radtan4";
     case 5:
-      return PinholeCompatProfile::OPENCV_CALIB3D_D5;
+      return "radtan5";
     case 8:
-      return PinholeCompatProfile::OPENCV_CALIB3D_D8;
+      return "rational8";
     case 12:
-      return PinholeCompatProfile::OPENCV_CALIB3D_D12;
+      return "thin_prism12";
     case 14:
-      return PinholeCompatProfile::OPENCV_CALIB3D_D14;
+      return "tilted14";
     default:
-      return PinholeCompatProfile::CANONICAL;
+      return nullptr;
   }
 }
 
@@ -283,12 +327,15 @@ inline StatusCode buildPinholeModel(
     return StatusCode::INVALID_INPUT;
   }
   const std::vector<double> D = extractD(dist_coeffs);
-  camxiom::PinholeExternalModel ext;
-  ext.K = K;
-  ext.D = D;
-  return camxiom::importPinholeModel(ext, choosePinholeProfile(D.size()), model_out);
+  const char *correction = opencvPlaneCorrection(D.size());
+  if (correction == nullptr)
+  {
+    return StatusCode::INVALID_INPUT;
+  }
+  return buildModel(K, "pinhole", {}, correction, D, model_out);
 }
 
+// cv::fisheye's four coefficients are KB4 on the equidistant law.
 inline StatusCode buildFisheyeModel(
   const cv::Mat &camera_matrix, const cv::Mat &dist_coeffs, CameraModel &model_out
 )
@@ -299,12 +346,11 @@ inline StatusCode buildFisheyeModel(
     return StatusCode::INVALID_INPUT;
   }
   const std::vector<double> D = extractD(dist_coeffs);
-  camxiom::FisheyeExternalModel ext;
-  ext.K = K;
-  ext.D = D;
-  return camxiom::importFisheyeModel(
-    ext, camxiom::FisheyeCompatProfile::OPENCV_FISHEYE_D4, model_out
-  );
+  if (D.size() != 4U)
+  {
+    return StatusCode::INVALID_INPUT;
+  }
+  return buildModel(K, "equidistant", {}, "kb4", D, model_out);
 }
 
 inline StatusCode buildPinholeModelWithNewK(
@@ -361,24 +407,8 @@ inline StatusCode buildFisheyeModelWithNewK(
   return StatusCode::OK;
 }
 
-inline camxiom::OmnidirectionalCompatProfile chooseOmniProfile(const std::size_t d_size)
-{
-  using camxiom::OmnidirectionalCompatProfile;
-  switch (d_size)
-  {
-    case 0:
-      return OmnidirectionalCompatProfile::CANONICAL;
-    case 4:
-      return OmnidirectionalCompatProfile::OPENCV_OMNIDIR_D4;
-    case 5:
-      return OmnidirectionalCompatProfile::OPENCV_OMNIDIR_D5;
-    case 8:
-      return OmnidirectionalCompatProfile::OPENCV_OMNIDIR_D8;
-    default:
-      return OmnidirectionalCompatProfile::OPENCV_OMNIDIR_D4;
-  }
-}
-
+// cv::omnidir's model: xi and the radtan coefficients (k1, k2, p1, p2); camxiom
+// also takes none, radtan5 and rational8 after xi.
 inline StatusCode buildOmniModel(
   const cv::Mat &camera_matrix, const cv::Mat &dist_coeffs, const double xi, CameraModel &model_out
 )
@@ -389,11 +419,12 @@ inline StatusCode buildOmniModel(
     return StatusCode::INVALID_INPUT;
   }
   const std::vector<double> D = extractD(dist_coeffs);
-  camxiom::OmnidirectionalExternalModel ext;
-  ext.K = K;
-  ext.D = D;
-  ext.xi = xi;
-  return camxiom::importOmnidirectionalModel(ext, chooseOmniProfile(D.size()), model_out);
+  const char *correction = opencvPlaneCorrection(D.size());
+  if (correction == nullptr || D.size() > 8U)
+  {
+    return StatusCode::INVALID_INPUT;
+  }
+  return buildModel(K, "omnidirectional", {xi}, correction, D, model_out);
 }
 
 inline StatusCode buildOmniModelWithNewK(

@@ -165,11 +165,6 @@ add_library(camxiom_core
   src/detail/simd_avx2.cpp
   # compat/ — ROS-free, OpenCV-free K/D <-> CameraModel conversions
   # (canonical interchange through the camxiom::CameraInfo POD).
-  src/pinhole/compat.cpp
-  src/fisheye/compat.cpp
-  src/omnidirectional/compat.cpp
-  src/double_sphere/compat.cpp
-  src/eucm/compat.cpp
   src/compat/factory.cpp
   src/compat/camera_info_export.cpp
   src/compat/camxiom_camera_info.cpp
@@ -480,9 +475,9 @@ if(BUILD_TESTING)
     # CAMXIOM_WITH_CERES is OFF, guarding that core.hpp / calibration.hpp /
     # camxiom.hpp stay include-safe (Ceres-free) in a core-only build.
     camxiom_add_gtest(camxiom_convenience_headers_test tests/convenience_headers_test.cpp)
-    # compat POD interchange (src/compat/*, src/<model>/compat.cpp): CameraInfo
-    # <-> CameraModel and the per-model import/export profile conversions. A CORE
-    # test (Ceres/ROS/OpenCV-free) that guards the library's canonical entry point.
+    # compat POD interchange (src/compat/*): CameraInfo -> CameraModel parsing.
+    # A CORE test (Ceres/ROS/OpenCV-free) that guards the library's canonical
+    # entry point.
     camxiom_add_gtest(camxiom_compat_test tests/compat_test.cpp)
     # ValidatedCameraModel (C1): validated-once immutable wrapper. A CORE test
     # (Ceres/ROS/OpenCV-free) asserting bit-for-bit equivalence with the generic

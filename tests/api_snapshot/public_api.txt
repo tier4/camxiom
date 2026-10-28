@@ -181,53 +181,8 @@ camxiom | [[nodiscard]] StatusCode exportCameraInfo( const CameraModel &model, C
 camxiom | [[nodiscard]] StatusCode exportCameraInfo(const CameraModel &model, CameraInfo &camera_info_out)
 camxiom | [[nodiscard]] StatusCode exportCameraInfo64( const CameraModel64 &model, CameraInfo &camera_info_out )
 camxiom | [[nodiscard]] StatusCode exportCameraInfo64( const CameraModel64 &model, CamxiomCameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportDoubleSphereCameraInfo( const CameraModel &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportDoubleSphereCameraInfo64( const CameraModel64 &model, DoubleSphereCompatProfile profile, CameraInfo &camera_info_out)
-camxiom | [[nodiscard]] StatusCode exportDoubleSphereModel( const CameraModel &model, DoubleSphereCompatProfile profile, DoubleSphereExternalModel &external_model_out )
-camxiom | [[nodiscard]] StatusCode exportDoubleSphereModel64( const CameraModel64 &model, DoubleSphereCompatProfile profile, DoubleSphereExternalModel &external_model_out)
-camxiom | [[nodiscard]] StatusCode exportEucmCameraInfo( const CameraModel &model, EucmCompatProfile profile, CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportEucmCameraInfo64( const CameraModel64 &model, EucmCompatProfile profile, CameraInfo &camera_info_out)
-camxiom | [[nodiscard]] StatusCode exportEucmModel( const CameraModel &model, EucmCompatProfile profile, EucmExternalModel &external_model_out )
-camxiom | [[nodiscard]] StatusCode exportEucmModel64( const CameraModel64 &model, EucmCompatProfile profile, EucmExternalModel &external_model_out)
-camxiom | [[nodiscard]] StatusCode exportFisheyeCameraInfo( const CameraModel &model, FisheyeCompatProfile profile, CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportFisheyeCameraInfo64( const CameraModel64 &model, FisheyeCompatProfile profile, CameraInfo &camera_info_out)
-camxiom | [[nodiscard]] StatusCode exportFisheyeModel( const CameraModel &model, FisheyeCompatProfile profile, FisheyeExternalModel &external_model_out )
-camxiom | [[nodiscard]] StatusCode exportFisheyeModel64( const CameraModel64 &model, FisheyeCompatProfile profile, FisheyeExternalModel &external_model_out)
-camxiom | [[nodiscard]] StatusCode exportOmnidirectionalCameraInfo( const CameraModel &model, OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportOmnidirectionalCameraInfo64( const CameraModel64 &model, OmnidirectionalCompatProfile profile, CameraInfo &camera_info_out)
-camxiom | [[nodiscard]] StatusCode exportOmnidirectionalModel( const CameraModel &model, OmnidirectionalCompatProfile profile, OmnidirectionalExternalModel &external_model_out )
-camxiom | [[nodiscard]] StatusCode exportOmnidirectionalModel64( const CameraModel64 &model, OmnidirectionalCompatProfile profile, OmnidirectionalExternalModel &external_model_out)
-camxiom | [[nodiscard]] StatusCode exportPinholeCameraInfo( const CameraModel &model, PinholeCompatProfile profile, CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportPinholeCameraInfo64( const CameraModel64 &model, PinholeCompatProfile profile, CameraInfo &camera_info_out)
-camxiom | [[nodiscard]] StatusCode exportPinholeModel( const CameraModel &model, PinholeCompatProfile profile, PinholeExternalModel &external_model_out )
-camxiom | [[nodiscard]] StatusCode exportPinholeModel64( const CameraModel64 &model, PinholeCompatProfile profile, PinholeExternalModel &external_model_out)
-camxiom | [[nodiscard]] StatusCode importDoubleSphereModel( const DoubleSphereExternalModel &external_model, DoubleSphereCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importDoubleSphereModel64( const DoubleSphereExternalModel &external_model, DoubleSphereCompatProfile profile, CameraModel64 &model_out)
-camxiom | [[nodiscard]] StatusCode importEucmModel( const EucmExternalModel &external_model, EucmCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importEucmModel64( const EucmExternalModel &external_model, EucmCompatProfile profile, CameraModel64 &model_out)
-camxiom | [[nodiscard]] StatusCode importFisheyeModel( const FisheyeExternalModel &external_model, FisheyeCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importFisheyeModel64( const FisheyeExternalModel &external_model, FisheyeCompatProfile profile, CameraModel64 &model_out)
-camxiom | [[nodiscard]] StatusCode importOmnidirectionalModel( const OmnidirectionalExternalModel &external_model, OmnidirectionalCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importOmnidirectionalModel64( const OmnidirectionalExternalModel &external_model, OmnidirectionalCompatProfile profile, CameraModel64 &model_out)
-camxiom | [[nodiscard]] StatusCode importPinholeModel( const PinholeExternalModel &external_model, PinholeCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importPinholeModel64( const PinholeExternalModel &external_model, PinholeCompatProfile profile, CameraModel64 &model_out)
-camxiom | const char *toString(DoubleSphereCompatProfile profile)
-camxiom | const char *toString(EucmCompatProfile profile)
-camxiom | const char *toString(FisheyeCompatProfile profile)
-camxiom | const char *toString(OmnidirectionalCompatProfile profile)
-camxiom | const char *toString(PinholeCompatProfile profile)
-camxiom | enum class DoubleSphereCompatProfile : std::uint8_t
-camxiom | enum class EucmCompatProfile : std::uint8_t
-camxiom | enum class FisheyeCompatProfile : std::uint8_t
-camxiom | enum class OmnidirectionalCompatProfile : std::uint8_t
-camxiom | enum class PinholeCompatProfile : std::uint8_t
 camxiom | struct CameraInfo
 camxiom | struct CamxiomCameraInfo
-camxiom | struct DoubleSphereExternalModel
-camxiom | struct EucmExternalModel
-camxiom | struct FisheyeExternalModel
-camxiom | struct OmnidirectionalExternalModel
-camxiom | struct PinholeExternalModel
 camxiom::CameraInfo | std::array<double, 12> p
 camxiom::CameraInfo | std::array<double, 9> k
 camxiom::CameraInfo | std::array<double, 9> r
@@ -242,43 +197,6 @@ camxiom::CamxiomCameraInfo | std::uint32_t image_height
 camxiom::CamxiomCameraInfo | std::uint32_t image_width
 camxiom::CamxiomCameraInfo | std::vector<double> distortion_parameters
 camxiom::CamxiomCameraInfo | std::vector<double> projection_parameters
-camxiom::DoubleSphereCompatProfile | #000 CANONICAL = 0U
-camxiom::DoubleSphereCompatProfile | #001 BASALT_D0
-camxiom::DoubleSphereCompatProfile | #002 BASALT_D4
-camxiom::DoubleSphereExternalModel | double alpha
-camxiom::DoubleSphereExternalModel | double xi
-camxiom::DoubleSphereExternalModel | std::array<double, 9> K
-camxiom::DoubleSphereExternalModel | std::vector<double> D
-camxiom::EucmCompatProfile | #000 CANONICAL = 0U
-camxiom::EucmCompatProfile | #001 KALIBR_D0
-camxiom::EucmCompatProfile | #002 KALIBR_D4
-camxiom::EucmExternalModel | double alpha
-camxiom::EucmExternalModel | double beta
-camxiom::EucmExternalModel | std::array<double, 9> K
-camxiom::EucmExternalModel | std::vector<double> D
-camxiom::FisheyeCompatProfile | #000 CANONICAL = 0U
-camxiom::FisheyeCompatProfile | #001 OPENCV_FISHEYE_D4
-camxiom::FisheyeCompatProfile | #002 ROS_CAMERA_INFO_EQUIDISTANT
-camxiom::FisheyeExternalModel | DistortionModelType distortion_type
-camxiom::FisheyeExternalModel | ProjectionModelType projection_type
-camxiom::FisheyeExternalModel | std::array<double, 9> K
-camxiom::FisheyeExternalModel | std::vector<double> D
-camxiom::OmnidirectionalCompatProfile | #000 CANONICAL = 0U
-camxiom::OmnidirectionalCompatProfile | #001 OPENCV_OMNIDIR_D4
-camxiom::OmnidirectionalCompatProfile | #002 OPENCV_OMNIDIR_D5
-camxiom::OmnidirectionalCompatProfile | #003 OPENCV_OMNIDIR_D8
-camxiom::OmnidirectionalExternalModel | double xi
-camxiom::OmnidirectionalExternalModel | std::array<double, 9> K
-camxiom::OmnidirectionalExternalModel | std::vector<double> D
-camxiom::PinholeCompatProfile | #000 CANONICAL = 0U
-camxiom::PinholeCompatProfile | #001 OPENCV_CALIB3D_D4
-camxiom::PinholeCompatProfile | #002 OPENCV_CALIB3D_D5
-camxiom::PinholeCompatProfile | #003 OPENCV_CALIB3D_D8
-camxiom::PinholeCompatProfile | #004 OPENCV_CALIB3D_D12
-camxiom::PinholeCompatProfile | #005 OPENCV_CALIB3D_D14
-camxiom::PinholeCompatProfile | #006 ROS_CAMERA_INFO_RAW
-camxiom::PinholeExternalModel | std::array<double, 9> K
-camxiom::PinholeExternalModel | std::vector<double> D
 namespace camxiom
 
 === include/camxiom/core.hpp ===
@@ -692,16 +610,7 @@ namespace camxiom
 
 === include/camxiom/ros.hpp ===
 camxiom | [[nodiscard]] CameraModel makeCameraModel(const sensor_msgs::msg::CameraInfo &camera_info)
-camxiom | [[nodiscard]] StatusCode exportDoubleSphereCameraInfo( const CameraModel &model, DoubleSphereCompatProfile profile, sensor_msgs::msg::CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportEucmCameraInfo( const CameraModel &model, EucmCompatProfile profile, sensor_msgs::msg::CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportFisheyeCameraInfo( const CameraModel &model, FisheyeCompatProfile profile, sensor_msgs::msg::CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportOmnidirectionalCameraInfo( const CameraModel &model, OmnidirectionalCompatProfile profile, sensor_msgs::msg::CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode exportPinholeCameraInfo( const CameraModel &model, PinholeCompatProfile profile, sensor_msgs::msg::CameraInfo &camera_info_out )
-camxiom | [[nodiscard]] StatusCode importDoubleSphereCameraInfo( const sensor_msgs::msg::CameraInfo &camera_info, DoubleSphereCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importEucmCameraInfo( const sensor_msgs::msg::CameraInfo &camera_info, EucmCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importFisheyeCameraInfo( const sensor_msgs::msg::CameraInfo &camera_info, FisheyeCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importOmnidirectionalCameraInfo( const sensor_msgs::msg::CameraInfo &camera_info, OmnidirectionalCompatProfile profile, CameraModel &model_out )
-camxiom | [[nodiscard]] StatusCode importPinholeCameraInfo( const sensor_msgs::msg::CameraInfo &camera_info, PinholeCompatProfile profile, CameraModel &model_out )
+camxiom | [[nodiscard]] StatusCode exportCameraInfo( const CameraModel &model, sensor_msgs::msg::CameraInfo &camera_info_out )
 namespace camxiom
 
 === include/camxiom/types.hpp ===
