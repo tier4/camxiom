@@ -25,6 +25,7 @@
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/jacobian.hpp"
 #include "camxiom/jacobian64.hpp"
+#include "camxiom/jacobian_batch64.hpp"
 #include "camxiom/jacobian_with_distortion_deriv64.hpp"
 #include "camxiom/lut.hpp"
 #include "camxiom/model.hpp"
@@ -526,6 +527,41 @@ TEST(LatLongProjection, JacobianMatchesFiniteDifferences)
     const ProjectionJacobian64 jd = rayToPixelWithJacobian64(m, Eigen::Vector3d(0.3, -0.2, 0.9));
     ASSERT_EQ(jf.status, StatusCode::OK);
     EXPECT_LT((jf.J.cast<double>() - jd.J).norm(), 1e-3 * jd.J.norm());
+  }
+}
+
+// The seam ray (X = 0 behind the camera) projects onto the left edge, but u
+// jumps to the right edge for any X > 0, so the pixel has no derivative
+// there. Just off the seam on either side the Jacobian is ordinary.
+TEST(LatLongProjection, SeamHasNoJacobian)
+{
+  for (const auto type : kTypes)
+  {
+    const CameraModel64 m = latLongModel<double>(type);
+    const CameraModel mf = latLongModel<float>(type);
+    for (const double x : {0.0, -0.0})
+    {
+      const Eigen::Vector3d seam(x, 0.2, -1.0);
+      ASSERT_EQ(rayToPixel64(m, seam).status, StatusCode::OK);
+      EXPECT_EQ(rayToPixelWithJacobian64(m, seam).status, StatusCode::DOMAIN_ERROR);
+      EXPECT_EQ(rayToPixelWithJacobian(mf, seam.cast<float>()).status, StatusCode::DOMAIN_ERROR);
+
+      Eigen::Matrix3Xd rays(3, 3);
+      rays.col(0) = Eigen::Vector3d(0.3, -0.2, 0.9);
+      rays.col(1) = seam;
+      rays.col(2) = Eigen::Vector3d(-0.3, 0.1, 0.9);
+      Eigen::Matrix2Xd pixels(2, 3);
+      Eigen::Matrix<double, 2, 3> jacobians[3];
+      StatusCode statuses[3];
+      EXPECT_EQ(rayToPixelWithJacobianBatch64(m, rays, pixels, jacobians, statuses), 2);
+      EXPECT_EQ(statuses[0], StatusCode::OK);
+      EXPECT_EQ(statuses[1], StatusCode::DOMAIN_ERROR);
+      EXPECT_EQ(statuses[2], StatusCode::OK);
+    }
+    for (const double x : {1e-9, -1e-9})
+    {
+      EXPECT_EQ(rayToPixelWithJacobian64(m, Eigen::Vector3d(x, 0.2, -1.0)).status, StatusCode::OK);
+    }
   }
 }
 

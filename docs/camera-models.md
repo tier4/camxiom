@@ -191,6 +191,9 @@ Domain, enforced rather than wrapped:
   Converting a `float` model to `double` does not undo the rounding of its
   intrinsics, so the converted model is not guaranteed to accept the image
   edge itself.
+- The seam ray projects, but has no Jacobian: `u` jumps from the left edge
+  to the right one for any ray just to its right, so `rayToPixelWithJacobian`
+  (and the batch form) returns `DOMAIN_ERROR` for it.
 - `CYLINDRICAL` spaces its rows evenly in `tan φ`, so it covers any latitude
   short of the poles, at a cost of stretching rows near them.
 

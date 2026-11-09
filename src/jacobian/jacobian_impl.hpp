@@ -643,6 +643,13 @@ inline ProjectionJacobianT<T> rayToPixelWithJacobian(
   const T X = ray_direction.x();
   const T Y = ray_direction.y();
   const T Z = ray_direction.z();
+  // On the seam (X = 0 behind the camera) the ray projects onto the left
+  // edge, but u jumps to the right edge for any X > 0: the pixel has no
+  // derivative there.
+  if (X == T(0) && Z < T(0))
+  {
+    return invalidJacobian<T>(StatusCode::DOMAIN_ERROR);
+  }
   const T h_sq = X * X + Z * Z;
   const T h = std::sqrt(h_sq);
 

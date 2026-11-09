@@ -13,8 +13,9 @@ Supported for every projection law (PINHOLE, the fisheye laws EQUIDISTANT /
 EQUISOLID / STEREOGRAPHIC / ORTHOGRAPHIC, OMNIDIRECTIONAL, DOUBLE_SPHERE,
 EUCM) with any correction the law takes. The latitude-longitude projections
 (EQUIRECTANGULAR, CYLINDRICAL) have the point Jacobian (`DOMAIN_ERROR` at
-the poles) but no full parameter Jacobian, which serves calibration only:
-it returns `INVALID_MODEL` for them.
+the poles, and on the seam straight behind the camera, where `u` jumps from
+one image edge to the other) but no full parameter Jacobian, which serves
+calibration only: it returns `INVALID_MODEL` for them.
 
 Headers: `<camxiom/jacobian.hpp>`, `<camxiom/jacobian64.hpp>`,
 `<camxiom/jacobian_batch.hpp>`, `<camxiom/jacobian_batch64.hpp>`,

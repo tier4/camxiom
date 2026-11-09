@@ -50,7 +50,9 @@ using ProjectionJacobian = ProjectionJacobianT<float>;
 ///
 /// Supported for every projection law: PINHOLE, the fisheye laws, OMNIDIRECTIONAL,
 /// DOUBLE_SPHERE, EUCM and the lat-long projections (EQUIRECTANGULAR,
-/// CYLINDRICAL; DOMAIN_ERROR at the poles, where the longitude is undefined).
+/// CYLINDRICAL; DOMAIN_ERROR at the poles, where the longitude is undefined,
+/// and on the seam straight behind the camera, where u jumps from one image
+/// edge to the other).
 ProjectionJacobian rayToPixelWithJacobian(
   const CameraModel &model, const Eigen::Vector3f &ray_direction
 );
