@@ -196,10 +196,12 @@ Domain, enforced rather than wrapped:
 
 Both take no lens correction and ignore `theta_max` (like `PINHOLE`); they
 project, unproject, batch, take Jacobians and build remap maps like any
-other model. The calibration layer does not estimate them and rejects
-them: `calibrate`, `PnpSolver`, `init::estimatePoseDLT` and
-`estimatePoseRefined`, `convertCameraModel`, `getDefaultSeed`, the
-parameter Jacobian and the autodiff template. The OpenCV-layer
+other model. They are outside the calibration layer, which works with the
+laws its cost functions are written for: `calibrate`, `PnpSolver`,
+`init::estimatePoseDLT` and `estimatePoseRefined`, `convertCameraModel`,
+`getDefaultSeed`, the parameter Jacobian and the autodiff template do not
+support them. This is a limit of scope, not of geometry: the ray Jacobian
+exists, and a pose from their rays is well defined. The OpenCV-layer
 `undistortPoints` and `solvePnP` take them, for pixels whose ray is in front
 of the camera: the normalized image plane they use cannot tell a ray from its
 opposite.

@@ -14,6 +14,7 @@
 
 #include "camxiom/init/dlt_pnp.hpp"
 
+#include "calib/supported_laws.hpp"
 #include "camxiom/optimizer/pnp_solver.hpp"
 #include "camxiom/projection64.hpp"
 
@@ -531,10 +532,12 @@ StatusCode estimatePoseDLT(
 {
   // ------------------------------------------------------------------
   // 1. Input validation (no out-param mutation on failure). Pose estimation
-  //    belongs to the calibration layer, which does not take the lat-long
-  //    projections.
+  //    belongs to the calibration layer and takes the laws it supports. The
+  //    bearing-based solve below would handle a lat-long model as well; the
+  //    refusal is the layer's scope, so that this DLT and the refinement
+  //    after it (estimatePoseRefined) accept the same models.
   // ------------------------------------------------------------------
-  if (isLatLongProjection(model.projection.type))
+  if (camxiom::detail::isOutsideCalibrationLayer(model.projection.type))
   {
     return StatusCode::INVALID_MODEL;
   }

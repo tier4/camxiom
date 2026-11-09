@@ -14,6 +14,7 @@
 
 #include "camxiom/calib/convert.hpp"
 
+#include "calib/supported_laws.hpp"
 #include "camxiom/model.hpp"
 #include "camxiom/optimizer/pnp_flag.hpp"
 #include "camxiom/optimizer/pnp_solver.hpp"
@@ -58,10 +59,12 @@ Result convertCameraModelImpl(
     result.status = StatusCode::INVALID_INPUT;
     return result;
   }
-  // The fit runs the calibration solver, which does not estimate lat-long
-  // models; a lat-long source has no single image plane to sample either.
+  // Conversion belongs to the calibration layer: the fit runs its solver on
+  // the destination, and both models are kept to the laws the layer
+  // supports.
   if (camxiom::detail::validateModel(src_model) != StatusCode::OK || camxiom::detail::validateModel(dst_seed) != StatusCode::OK ||
-      isLatLongProjection(src_model.projection.type) || isLatLongProjection(dst_seed.projection.type))
+      camxiom::detail::isOutsideCalibrationLayer(src_model.projection.type) ||
+      camxiom::detail::isOutsideCalibrationLayer(dst_seed.projection.type))
   {
     result.status = StatusCode::INVALID_MODEL;
     return result;
