@@ -14,6 +14,7 @@
 
 #include "camxiom/optimizer/pnp_solver.hpp"
 
+#include "calib/supported_laws.hpp"
 #include "camxiom/jacobian_with_distortion_deriv64.hpp"
 #include "camxiom/model.hpp"
 #include "camxiom/projection64.hpp"
@@ -518,9 +519,9 @@ bool PnpSolver::Impl::solve(
       return false;
     }
   }
-  // The cost functions have no lat-long form (lat-long models are not
-  // calibrated).
-  if (isLatLongProjection(initial_guess.camera_model.projection.type))
+  // The cost functions are written for the laws the calibration layer
+  // supports.
+  if (camxiom::detail::isOutsideCalibrationLayer(initial_guess.camera_model.projection.type))
   {
     return false;
   }

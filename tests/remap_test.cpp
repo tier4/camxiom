@@ -1288,11 +1288,11 @@ TEST(Rectify, AlphaOneHoldsTheBorderInTurnedOutputs)
   }
 }
 
-// The seam of a lat-long output with skew: its two sides land on the same
-// source pixels but at opposite output edges, and with skew the two edges
-// are not mirror images. Every pixel of a cropped equirectangular source
-// (all longitudes, a band of latitudes) lands inside.
-TEST(Rectify, AlphaOneHoldsBothSidesOfASkewedLatLongSeam)
+// The seam of a lat-long output: its two sides land on the same source
+// pixels but at opposite output edges. Every pixel of a cropped
+// equirectangular source (all longitudes, a band of latitudes) lands inside.
+// A skewed lat-long template is not a valid model and is refused.
+TEST(Rectify, AlphaOneHoldsBothSidesOfALatLongSeam)
 {
   CameraModel src;
   ASSERT_EQ(
@@ -1303,11 +1303,15 @@ TEST(Rectify, AlphaOneHoldsBothSidesOfASkewedLatLongSeam)
   );
   RectifiedOutputModelOptions opts;
   opts.output_template = makeTemplate(ProjectionModelType::EQUIRECTANGULAR);
-  opts.output_template.intrinsics.skew = 5.0f;
   opts.output_size = ImageSize{640, 480};
   opts.src_from_output_rotation =
     Eigen::AngleAxisf(0.1f, Eigen::Vector3f::UnitY()).toRotationMatrix();
   opts.alpha = 1.0f;
+  RectifiedOutputModelOptions skewed = opts;
+  skewed.output_template.intrinsics.skew = 5.0f;
+  EXPECT_EQ(
+    makeRectifiedOutputModel(src, ImageSize{4096, 200}, skewed).status, StatusCode::INVALID_INPUT
+  );
   const RectifiedOutputModelResult r = makeRectifiedOutputModel(src, ImageSize{4096, 200}, opts);
   ASSERT_EQ(r.status, StatusCode::OK);
   EXPECT_EQ(
@@ -1885,6 +1889,37 @@ TEST(ComputeFov, WideAngleModelsProduceWideFov)
   const camxiom::FovResult omni = camxiom::computeFov(makeMEIOmni(), camxiom::ImageSize{640, 480});
   ASSERT_TRUE(omni.ok());
   EXPECT_GT(omni.horizontal_fov_deg, 90.0f);
+}
+
+// A field wider than 180 degrees: the angle between the two edge rays folds
+// back below 180, so the reported field is the angle the ray sweeps across
+// the image. An ideal equidistant fisheye with its edges at +-120 degrees
+// (fx = 150/pi px per radian, 100 px from the centre to each edge) spans
+// 240 x 240; a narrower one keeps the angle between its edge rays.
+TEST(ComputeFov, FieldsWiderThan180AreNotFolded)
+{
+  CameraModel m;
+  m.intrinsics.fx = static_cast<float>(150.0 / M_PI);
+  m.intrinsics.fy = static_cast<float>(150.0 / M_PI);
+  m.intrinsics.cx = 100.0f;
+  m.intrinsics.cy = 100.0f;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
+  m.projection.theta_max = 3.0f;
+  m.distortion.type = DistortionModelType::NONE;
+  ASSERT_EQ(validateCameraModel(m), StatusCode::OK);
+
+  const camxiom::FovResult wide = camxiom::computeFov(m, camxiom::ImageSize{201, 201});
+  ASSERT_TRUE(wide.ok());
+  EXPECT_NEAR(wide.horizontal_fov_deg, 240.0f, 1e-2f);
+  EXPECT_NEAR(wide.vertical_fov_deg, 240.0f, 1e-2f);
+
+  // Edges at +-60 degrees: 120, the angle between the edge rays.
+  m.intrinsics.fx = static_cast<float>(300.0 / M_PI);
+  m.intrinsics.fy = static_cast<float>(300.0 / M_PI);
+  const camxiom::FovResult narrow = camxiom::computeFov(m, camxiom::ImageSize{201, 201});
+  ASSERT_TRUE(narrow.ok());
+  EXPECT_NEAR(narrow.horizontal_fov_deg, 120.0f, 1e-2f);
+  EXPECT_NEAR(narrow.vertical_fov_deg, 120.0f, 1e-2f);
 }
 
 TEST(ComputeFov, RejectsInvalidInputs)

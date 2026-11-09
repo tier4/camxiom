@@ -166,7 +166,9 @@ to the two image axes. With `h = √(X²+Z²)`:
   it grows with `v` like the rest of the frame.
 
 The intrinsics then apply as for every model (`u = fx·x + skew·y + cx`,
-`v = fy·y + cy`), so a model is upright with `fy > 0`. Rotating the
+`v = fy·y + cy`), so a model is upright with `fy > 0`. The skew must be 0:
+it would shift the longitude with the latitude, so the image columns would
+not be meridians, and `validateCameraModel` rejects it. Rotating the
 view (a different "forward" or "up") is the caller's rotation, as for
 any camera; there is no separate axis setting.
 
@@ -191,17 +193,23 @@ Domain, enforced rather than wrapped:
   Converting a `float` model to `double` does not undo the rounding of its
   intrinsics, so the converted model is not guaranteed to accept the image
   edge itself.
+- The seam ray projects, but has no Jacobian: `u` jumps from the left edge
+  to the right one for any ray just to its right, so `rayToPixelWithJacobian`
+  (and the batch form) returns `DOMAIN_ERROR` for it.
 - `CYLINDRICAL` spaces its rows evenly in `tan φ`, so it covers any latitude
   short of the poles, at a cost of stretching rows near them.
 
 Both take no lens correction and ignore `theta_max` (like `PINHOLE`); they
 project, unproject, batch, take Jacobians and build remap maps like any
-other model. The calibration layer does not estimate them and rejects
-them: `calibrate`, `PnpSolver`, `init::estimatePoseDLT` and
-`estimatePoseRefined`, `convertCameraModel`, `getDefaultSeed`, the
-parameter Jacobian and the autodiff template, and the OpenCV-layer
-`undistortPoints` and `solvePnP` (the normalized image plane they use
-cannot tell such a ray from its opposite).
+other model. They are outside the calibration layer, which works with the
+laws its cost functions are written for: `calibrate`, `PnpSolver`,
+`init::estimatePoseDLT` and `estimatePoseRefined`, `convertCameraModel`,
+`getDefaultSeed`, the parameter Jacobian and the autodiff template do not
+support them. This is a limit of scope, not of geometry: the ray Jacobian
+exists, and a pose from their rays is well defined. The OpenCV-layer
+`undistortPoints` and `solvePnP` take them, for pixels whose ray is in front
+of the camera: the normalized image plane they use cannot tell a ray from its
+opposite.
 
 Factories in `<camxiom/model.hpp>` build a model from the angular range its
 image should cover, edge to edge (the left edge of column 0 is `lon_min`,

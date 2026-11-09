@@ -31,8 +31,7 @@ using ProjectionJacobian64 = ProjectionJacobianT<double>;
 
 /// Compute forward projection AND its 2x3 Jacobian simultaneously (double precision).
 ///
-/// Supported for every projection law: PINHOLE, the fisheye laws, OMNIDIRECTIONAL,
-/// DOUBLE_SPHERE, and EUCM.
+/// Supported for every projection law, as rayToPixelWithJacobian (camxiom/jacobian.hpp).
 ProjectionJacobian64 rayToPixelWithJacobian64(
   const CameraModel64 &model, const Eigen::Vector3d &ray_direction
 );

@@ -25,6 +25,7 @@
 #include "camxiom/internal/constants.hpp"
 #include "camxiom/jacobian.hpp"
 #include "camxiom/jacobian64.hpp"
+#include "camxiom/jacobian_batch64.hpp"
 #include "camxiom/jacobian_with_distortion_deriv64.hpp"
 #include "camxiom/lut.hpp"
 #include "camxiom/model.hpp"
@@ -490,8 +491,7 @@ TEST(LatLongProjection, JacobianMatchesFiniteDifferences)
 {
   for (const auto type : kTypes)
   {
-    CameraModel64 m = latLongModel<double>(type);
-    m.intrinsics.skew = 3.0;
+    const CameraModel64 m = latLongModel<double>(type);
     for (const Eigen::Vector3d &unit : sphereRays(300))
     {
       const Eigen::Vector3d ray = 2.5 * unit;  // not unit length on purpose
@@ -526,6 +526,41 @@ TEST(LatLongProjection, JacobianMatchesFiniteDifferences)
     const ProjectionJacobian64 jd = rayToPixelWithJacobian64(m, Eigen::Vector3d(0.3, -0.2, 0.9));
     ASSERT_EQ(jf.status, StatusCode::OK);
     EXPECT_LT((jf.J.cast<double>() - jd.J).norm(), 1e-3 * jd.J.norm());
+  }
+}
+
+// The seam ray (X = 0 behind the camera) projects onto the left edge, but u
+// jumps to the right edge for any X > 0, so the pixel has no derivative
+// there. Just off the seam on either side the Jacobian is ordinary.
+TEST(LatLongProjection, SeamHasNoJacobian)
+{
+  for (const auto type : kTypes)
+  {
+    const CameraModel64 m = latLongModel<double>(type);
+    const CameraModel mf = latLongModel<float>(type);
+    for (const double x : {0.0, -0.0})
+    {
+      const Eigen::Vector3d seam(x, 0.2, -1.0);
+      ASSERT_EQ(rayToPixel64(m, seam).status, StatusCode::OK);
+      EXPECT_EQ(rayToPixelWithJacobian64(m, seam).status, StatusCode::DOMAIN_ERROR);
+      EXPECT_EQ(rayToPixelWithJacobian(mf, seam.cast<float>()).status, StatusCode::DOMAIN_ERROR);
+
+      Eigen::Matrix3Xd rays(3, 3);
+      rays.col(0) = Eigen::Vector3d(0.3, -0.2, 0.9);
+      rays.col(1) = seam;
+      rays.col(2) = Eigen::Vector3d(-0.3, 0.1, 0.9);
+      Eigen::Matrix2Xd pixels(2, 3);
+      Eigen::Matrix<double, 2, 3> jacobians[3];
+      StatusCode statuses[3];
+      EXPECT_EQ(rayToPixelWithJacobianBatch64(m, rays, pixels, jacobians, statuses), 2);
+      EXPECT_EQ(statuses[0], StatusCode::OK);
+      EXPECT_EQ(statuses[1], StatusCode::DOMAIN_ERROR);
+      EXPECT_EQ(statuses[2], StatusCode::OK);
+    }
+    for (const double x : {1e-9, -1e-9})
+    {
+      EXPECT_EQ(rayToPixelWithJacobian64(m, Eigen::Vector3d(x, 0.2, -1.0)).status, StatusCode::OK);
+    }
   }
 }
 
@@ -744,34 +779,23 @@ TEST(LatLongFactory, FovIsClippedToTheSphere)
   EXPECT_NEAR(fov.vertical_fov_deg, 180.0f, 1e-3f);
 }
 
-TEST(LatLongFactory, FovCountsOnlyValidPixelsUnderSkew)
+// Skew would shift the longitude with the latitude, so the image columns
+// would not be meridians: no lat-long model has it, in either precision, and
+// a skewed lat-long template cannot be a rectify output either.
+TEST(LatLongProjection, RejectsSkew)
 {
-  // With skew the principal column runs across longitudes: lambda =
-  // -skew * y / fx. Here only |y| <= pi / 100 keeps it within [-pi, pi],
-  // a 3.6 degree latitude span, although the rows reach |y| = 1.005.
   for (const auto type : kTypes)
   {
     CameraModel m = latLongModel<float>(type);
-    m.intrinsics.fx = 100.0f;
-    m.intrinsics.fy = 100.0f;
-    m.intrinsics.cx = 100.0f;
-    m.intrinsics.cy = 100.0f;
-    m.intrinsics.skew = 10000.0f;
+    CameraModel64 m64 = latLongModel<double>(type);
     ASSERT_EQ(validateCameraModel(m), StatusCode::OK);
-    const FovResult fov = computeFov(m, ImageSize{201, 201});
-    ASSERT_EQ(fov.status, StatusCode::OK);
-    const double y_seam = kPi / 100.0;
-    const double expected =
-      type == ProjectionModelType::EQUIRECTANGULAR ? 2.0 * y_seam : 2.0 * std::atan(y_seam);
-    EXPECT_NEAR(fov.vertical_fov_deg, expected * 180.0 / kPi, 1e-3) << toString(type);
-    EXPECT_NEAR(fov.horizontal_fov_deg, 201.0 / 100.0 * 180.0 / kPi, 1e-3) << toString(type);
-
-    // The rows counted are exactly the valid ones: just inside the limit
-    // unprojects, just past it does not.
-    const float v_in = 100.0f + 100.0f * static_cast<float>(y_seam) * 0.999f;
-    const float v_out = 100.0f + 100.0f * static_cast<float>(y_seam) * 1.001f;
-    EXPECT_EQ(pixelToRay(m, Pixel2{100.0f, v_in}).status, StatusCode::OK);
-    EXPECT_EQ(pixelToRay(m, Pixel2{100.0f, v_out}).status, StatusCode::OUT_OF_FOV);
+    ASSERT_EQ(validateCameraModel64(m64), StatusCode::OK);
+    m.intrinsics.skew = 3.0f;
+    m64.intrinsics.skew = 3.0;
+    EXPECT_EQ(validateCameraModel(m), StatusCode::INVALID_MODEL) << toString(type);
+    EXPECT_EQ(validateCameraModel64(m64), StatusCode::INVALID_MODEL) << toString(type);
+    EXPECT_EQ(rayToPixel(m, Eigen::Vector3f(0.1f, 0.2f, 1.0f)).status, StatusCode::INVALID_MODEL);
+    EXPECT_EQ(computeFov(m, ImageSize{201, 201}).status, StatusCode::INVALID_MODEL);
   }
 }
 

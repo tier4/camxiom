@@ -37,14 +37,6 @@ bool solvePnP(
   {
     return false;
   }
-  // The observations go through the normalized image plane, which cannot
-  // tell a lat-long ray from its opposite; pose estimation does not take
-  // the lat-long projections.
-  if (isLatLongProjection(model.projection.type))
-  {
-    return false;
-  }
-
   std::vector<cv::Point2f> normalized;
   const int undist_ok =
     undistortPoints(model, image_points, normalized, cv::Mat(), cv::Mat(), solver_options);
@@ -58,6 +50,8 @@ bool solvePnP(
     return false;
   }
 
+  // Points whose ray lies behind the camera have no normalized coordinates
+  // (undistortPoints writes NaN for them) and are left out of the solve.
   std::vector<cv::Point3f> filtered_object_points;
   std::vector<cv::Point2f> filtered_normalized_points;
   filtered_object_points.reserve(object_points.size());

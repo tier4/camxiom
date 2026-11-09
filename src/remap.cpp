@@ -159,6 +159,18 @@ void estimateCoverage(
   out_total = total;
 }
 
+float angleDeg(const Eigen::Vector3f &a, const Eigen::Vector3f &b)
+{
+  const float dot = a.dot(b);
+  return static_cast<float>(std::acos(std::clamp(dot, -1.0f, 1.0f)) * 180.0f / detail::kPi);
+}
+
+// The angle the ray sweeps from one boundary pixel to the other. The angle
+// between the two edge rays cannot exceed 180 degrees, so a wider field (a
+// fisheye past 180) goes through the middle pixel: when the two halves add
+// up to more than 180, that sum is the field. Only an edge ray at or behind
+// the camera's side plane (z <= 0) can belong to such a field; with both in
+// front the angle between them is kept without the extra unprojection.
 float computeFovDeg(
   const CameraModel &model, float u0, float v0, float u1, float v1,
   const SolverOptions &solver_options = SolverOptions{}
@@ -167,8 +179,14 @@ float computeFovDeg(
   const RayResult r0 = pixelToRay(model, Pixel2{u0, v0}, solver_options);
   const RayResult r1 = pixelToRay(model, Pixel2{u1, v1}, solver_options);
   if (r0.status != StatusCode::OK || r1.status != StatusCode::OK) return 0.0f;
-  const float dot = r0.ray.direction.dot(r1.ray.direction);
-  return static_cast<float>(std::acos(std::clamp(dot, -1.0f, 1.0f)) * 180.0f / detail::kPi);
+  const float direct = angleDeg(r0.ray.direction, r1.ray.direction);
+  if (r0.ray.direction.z() > 0.0f && r1.ray.direction.z() > 0.0f) return direct;
+  const RayResult mid =
+    pixelToRay(model, Pixel2{0.5f * (u0 + u1), 0.5f * (v0 + v1)}, solver_options);
+  if (mid.status != StatusCode::OK) return direct;
+  const float swept =
+    angleDeg(r0.ray.direction, mid.ray.direction) + angleDeg(mid.ray.direction, r1.ray.direction);
+  return swept > 180.0f ? swept : direct;
 }
 
 // Length of [a, b] (either order) inside [lo, hi], in degrees.
@@ -188,7 +206,6 @@ FovResult latLongFov(const CameraModel &model, const ImageSize image_size)
   const double fy = model.intrinsics.fy;
   const double cx = model.intrinsics.cx;
   const double cy = model.intrinsics.cy;
-  const double skew = model.intrinsics.skew;
   const double right = static_cast<double>(image_size.width) - 0.5;
   const double bottom = static_cast<double>(image_size.height) - 0.5;
 
@@ -197,22 +214,11 @@ FovResult latLongFov(const CameraModel &model, const ImageSize image_size)
   result.horizontal_fov_deg =
     clippedSpanDeg((-0.5 - cx) / fx, (right - cx) / fx, -constants::kPi, constants::kPi);
 
-  // Down the principal column (u = cx) the longitude is -skew * y_d / fx, so
-  // with skew the column leaves the valid range once that passes the seam; only
-  // the rows where it stays inside [-pi, pi] count.
-  double y_lo = std::min((-0.5 - cy) / fy, (bottom - cy) / fy);
-  double y_hi = std::max((-0.5 - cy) / fy, (bottom - cy) / fy);
-  if (skew != 0.0)
-  {
-    const double y_seam = constants::kPi * std::abs(fx / skew);
-    y_lo = std::max(y_lo, -y_seam);
-    y_hi = std::min(y_hi, y_seam);
-  }
-  if (y_lo >= y_hi)
-  {
-    result.vertical_fov_deg = 0.0f;
-  }
-  else if (model.projection.type == ProjectionModelType::EQUIRECTANGULAR)
+  // Down the principal column (u = cx, longitude 0; a lat-long model has no
+  // skew) the vertical coordinate is (v - cy) / fy.
+  const double y_lo = std::min((-0.5 - cy) / fy, (bottom - cy) / fy);
+  const double y_hi = std::max((-0.5 - cy) / fy, (bottom - cy) / fy);
+  if (model.projection.type == ProjectionModelType::EQUIRECTANGULAR)
   {
     result.vertical_fov_deg = clippedSpanDeg(y_lo, y_hi, -constants::kHalfPi, constants::kHalfPi);
   }

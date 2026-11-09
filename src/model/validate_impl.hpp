@@ -196,6 +196,12 @@ inline StatusCode validateCameraModelQueryImpl(const CameraModelT<T> &model)
   {
     return StatusCode::INVALID_MODEL;
   }
+  if (isLatLongProjection(projection.type) && model.intrinsics.skew != T(0))
+  {
+    // Skew would shift the longitude with the latitude: the image columns
+    // would no longer be meridians, which no lat-long image has.
+    return StatusCode::INVALID_MODEL;
+  }
   if (projection.type == ProjectionModelType::ORTHOGRAPHIC && projection.theta_max > static_cast<T>(camxiom::constants::kHalfPiF))
   {
     // theta_d = sin(theta) folds over past pi/2; the inverse bracket assumes

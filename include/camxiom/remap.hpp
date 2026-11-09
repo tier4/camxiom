@@ -141,9 +141,11 @@ struct [[nodiscard]] FovResult
 /// Field of view of `model` over an image of `image_size`, in degrees.
 ///
 /// Works for ANY camera model. For pinhole, the fisheye laws,
-/// omnidirectional, double sphere and EUCM, each angle is measured between
-/// the unprojected rays of two boundary pixels (pixelToRay), the same
-/// computation the rectify APIs use to fill their *_fov_deg fields.
+/// omnidirectional, double sphere and EUCM, each angle is the one the ray
+/// sweeps between two boundary pixels (pixelToRay): the angle between their
+/// rays, or, for a field wider than 180 degrees, the angles from each edge
+/// to the middle pixel added together. The rectify APIs fill their
+/// *_fov_deg fields with the same computation.
 ///   * horizontal: (0, cy) .. (width-1, cy) along the principal-point row
 ///   * vertical:   (cx, 0) .. (cx, height-1) along the principal-point column
 ///   * diagonal:   (0, 0) .. (width-1, height-1)
@@ -154,8 +156,7 @@ struct [[nodiscard]] FovResult
 ///   * horizontal: the longitude span of the principal-point row, from the
 ///     left edge of column 0 (u = -0.5) to the right edge of the last column
 ///   * vertical:   the latitude span of the principal-point column (u = cx),
-///     top edge to bottom edge. With skew that column's longitude changes
-///     from row to row; rows where it passes the seam are not counted.
+///     top edge to bottom edge.
 /// A full equirectangular image reports 360 x 180. A lat-long model has no
 /// diagonal angle; diagonal_fov_deg is 0.
 ///

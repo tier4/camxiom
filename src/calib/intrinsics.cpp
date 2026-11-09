@@ -14,6 +14,7 @@
 
 #include "camxiom/calib/intrinsics.hpp"
 
+#include "calib/supported_laws.hpp"
 #include "calib/uncertainty_detail.hpp"
 #include "camxiom/init/dlt_pnp.hpp"
 #include "camxiom/jacobian_with_distortion_deriv64.hpp"
@@ -747,10 +748,10 @@ Result calibrateImpl(
       return failedCalibrationResult<Result>(StatusCode::INVALID_INPUT);
     }
   }
-  // Lat-long models are not calibrated: the cost functions and the parameter
-  // Jacobian have no lat-long form.
+  // The cost functions and the parameter Jacobian are written for the laws
+  // the calibration layer supports.
   if (camxiom::detail::validateModel(initial_model) != StatusCode::OK ||
-      isLatLongProjection(initial_model.projection.type))
+      camxiom::detail::isOutsideCalibrationLayer(initial_model.projection.type))
   {
     return failedCalibrationResult<Result>(StatusCode::INVALID_MODEL);
   }

@@ -64,12 +64,14 @@ namespace camxiom
 //                so it grows with v like the rest of the frame.
 //   EQUIRECTANGULAR uses (x_d, y_d) = (lambda, phi); CYLINDRICAL uses
 //   (x_d, y_d) = (lambda, tan(phi)) = (lambda, Y / h). The intrinsics then
-//   apply as for every other model. A pole (h = 0) has no longitude and is
-//   a DOMAIN_ERROR in both directions: rayToPixel for the ray, pixelToRay
-//   for a pixel that unprojects onto it (the equirectangular rows at
-//   phi = +-pi/2). pixelToRay rejects pixels whose longitude falls outside
-//   [-pi, pi) or (equirectangular) whose latitude falls past +-pi/2 with
-//   OUT_OF_FOV instead of wrapping them. A longitude within a few float
+//   apply as for every other model, with skew = 0: validateCameraModel
+//   rejects a skewed lat-long model, whose columns would not be meridians.
+//   A pole (h = 0) has no longitude and is a DOMAIN_ERROR in both
+//   directions: rayToPixel for the ray, pixelToRay for a pixel that
+//   unprojects onto it (the equirectangular rows at phi = +-pi/2).
+//   pixelToRay rejects pixels whose longitude falls outside [-pi, pi) or
+//   (equirectangular) whose latitude falls past +-pi/2 with OUT_OF_FOV
+//   instead of wrapping them. A longitude within a few float
 //   ulps (about 6e-6 rad, in both precisions) below -pi is the seam itself
 //   (an image edge recovers it only to rounding), and the left edge always
 //   unprojects to the ray behind the camera and projects back onto the left
