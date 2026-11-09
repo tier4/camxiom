@@ -75,9 +75,12 @@ FovResult computeFov(const CameraModel &model, ImageSize image_size,
 
 Horizontal / vertical / diagonal FOV in degrees.
 
-- Pinhole, fisheye laws, omnidirectional, double sphere, EUCM: the angle
-  between the unprojected rays of two boundary pixels — `(0, cy)`..`(W−1, cy)`,
-  `(cx, 0)`..`(cx, H−1)` and the two opposite corners. A boundary pixel that
+- Pinhole, fisheye laws, omnidirectional, double sphere, EUCM: the angle the
+  ray sweeps between two boundary pixels — `(0, cy)`..`(W−1, cy)`,
+  `(cx, 0)`..`(cx, H−1)` and the two opposite corners. That is the angle
+  between the two edge rays, or, for a field wider than 180° (a wide
+  fisheye), the angles from each edge to the middle pixel added together,
+  so a 240° fisheye reports 240. A boundary pixel that
   cannot be unprojected reports that single component as `0.0` with overall
   status `OK`.
 - `EQUIRECTANGULAR`, `CYLINDRICAL`: angular spans of valid pixels, edge to

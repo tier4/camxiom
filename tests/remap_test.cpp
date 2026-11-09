@@ -1887,6 +1887,37 @@ TEST(ComputeFov, WideAngleModelsProduceWideFov)
   EXPECT_GT(omni.horizontal_fov_deg, 90.0f);
 }
 
+// A field wider than 180 degrees: the angle between the two edge rays folds
+// back below 180, so the reported field is the angle the ray sweeps across
+// the image. An ideal equidistant fisheye with its edges at +-120 degrees
+// (fx = 150/pi px per radian, 100 px from the centre to each edge) spans
+// 240 x 240; a narrower one keeps the angle between its edge rays.
+TEST(ComputeFov, FieldsWiderThan180AreNotFolded)
+{
+  CameraModel m;
+  m.intrinsics.fx = static_cast<float>(150.0 / M_PI);
+  m.intrinsics.fy = static_cast<float>(150.0 / M_PI);
+  m.intrinsics.cx = 100.0f;
+  m.intrinsics.cy = 100.0f;
+  m.projection.type = ProjectionModelType::EQUIDISTANT;
+  m.projection.theta_max = 3.0f;
+  m.distortion.type = DistortionModelType::NONE;
+  ASSERT_EQ(validateCameraModel(m), StatusCode::OK);
+
+  const camxiom::FovResult wide = camxiom::computeFov(m, camxiom::ImageSize{201, 201});
+  ASSERT_TRUE(wide.ok());
+  EXPECT_NEAR(wide.horizontal_fov_deg, 240.0f, 1e-2f);
+  EXPECT_NEAR(wide.vertical_fov_deg, 240.0f, 1e-2f);
+
+  // Edges at +-60 degrees: 120, the angle between the edge rays.
+  m.intrinsics.fx = static_cast<float>(300.0 / M_PI);
+  m.intrinsics.fy = static_cast<float>(300.0 / M_PI);
+  const camxiom::FovResult narrow = camxiom::computeFov(m, camxiom::ImageSize{201, 201});
+  ASSERT_TRUE(narrow.ok());
+  EXPECT_NEAR(narrow.horizontal_fov_deg, 120.0f, 1e-2f);
+  EXPECT_NEAR(narrow.vertical_fov_deg, 120.0f, 1e-2f);
+}
+
 TEST(ComputeFov, RejectsInvalidInputs)
 {
   const CameraModel m = makePinholeNoDistortion();
