@@ -156,8 +156,7 @@ struct [[nodiscard]] FovResult
 ///   * horizontal: the longitude span of the principal-point row, from the
 ///     left edge of column 0 (u = -0.5) to the right edge of the last column
 ///   * vertical:   the latitude span of the principal-point column (u = cx),
-///     top edge to bottom edge. With skew that column's longitude changes
-///     from row to row; rows where it passes the seam are not counted.
+///     top edge to bottom edge.
 /// A full equirectangular image reports 360 x 180. A lat-long model has no
 /// diagonal angle; diagonal_fov_deg is 0.
 ///

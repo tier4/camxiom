@@ -206,7 +206,6 @@ FovResult latLongFov(const CameraModel &model, const ImageSize image_size)
   const double fy = model.intrinsics.fy;
   const double cx = model.intrinsics.cx;
   const double cy = model.intrinsics.cy;
-  const double skew = model.intrinsics.skew;
   const double right = static_cast<double>(image_size.width) - 0.5;
   const double bottom = static_cast<double>(image_size.height) - 0.5;
 
@@ -215,22 +214,11 @@ FovResult latLongFov(const CameraModel &model, const ImageSize image_size)
   result.horizontal_fov_deg =
     clippedSpanDeg((-0.5 - cx) / fx, (right - cx) / fx, -constants::kPi, constants::kPi);
 
-  // Down the principal column (u = cx) the longitude is -skew * y_d / fx, so
-  // with skew the column leaves the valid range once that passes the seam; only
-  // the rows where it stays inside [-pi, pi] count.
-  double y_lo = std::min((-0.5 - cy) / fy, (bottom - cy) / fy);
-  double y_hi = std::max((-0.5 - cy) / fy, (bottom - cy) / fy);
-  if (skew != 0.0)
-  {
-    const double y_seam = constants::kPi * std::abs(fx / skew);
-    y_lo = std::max(y_lo, -y_seam);
-    y_hi = std::min(y_hi, y_seam);
-  }
-  if (y_lo >= y_hi)
-  {
-    result.vertical_fov_deg = 0.0f;
-  }
-  else if (model.projection.type == ProjectionModelType::EQUIRECTANGULAR)
+  // Down the principal column (u = cx, longitude 0; a lat-long model has no
+  // skew) the vertical coordinate is (v - cy) / fy.
+  const double y_lo = std::min((-0.5 - cy) / fy, (bottom - cy) / fy);
+  const double y_hi = std::max((-0.5 - cy) / fy, (bottom - cy) / fy);
+  if (model.projection.type == ProjectionModelType::EQUIRECTANGULAR)
   {
     result.vertical_fov_deg = clippedSpanDeg(y_lo, y_hi, -constants::kHalfPi, constants::kHalfPi);
   }

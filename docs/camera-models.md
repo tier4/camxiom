@@ -166,7 +166,9 @@ to the two image axes. With `h = √(X²+Z²)`:
   it grows with `v` like the rest of the frame.
 
 The intrinsics then apply as for every model (`u = fx·x + skew·y + cx`,
-`v = fy·y + cy`), so a model is upright with `fy > 0`. Rotating the
+`v = fy·y + cy`), so a model is upright with `fy > 0`. The skew must be 0:
+it would shift the longitude with the latitude, so the image columns would
+not be meridians, and `validateCameraModel` rejects it. Rotating the
 view (a different "forward" or "up") is the caller's rotation, as for
 any camera; there is no separate axis setting.
 

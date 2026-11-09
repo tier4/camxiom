@@ -1288,11 +1288,11 @@ TEST(Rectify, AlphaOneHoldsTheBorderInTurnedOutputs)
   }
 }
 
-// The seam of a lat-long output with skew: its two sides land on the same
-// source pixels but at opposite output edges, and with skew the two edges
-// are not mirror images. Every pixel of a cropped equirectangular source
-// (all longitudes, a band of latitudes) lands inside.
-TEST(Rectify, AlphaOneHoldsBothSidesOfASkewedLatLongSeam)
+// The seam of a lat-long output: its two sides land on the same source
+// pixels but at opposite output edges. Every pixel of a cropped
+// equirectangular source (all longitudes, a band of latitudes) lands inside.
+// A skewed lat-long template is not a valid model and is refused.
+TEST(Rectify, AlphaOneHoldsBothSidesOfALatLongSeam)
 {
   CameraModel src;
   ASSERT_EQ(
@@ -1303,11 +1303,15 @@ TEST(Rectify, AlphaOneHoldsBothSidesOfASkewedLatLongSeam)
   );
   RectifiedOutputModelOptions opts;
   opts.output_template = makeTemplate(ProjectionModelType::EQUIRECTANGULAR);
-  opts.output_template.intrinsics.skew = 5.0f;
   opts.output_size = ImageSize{640, 480};
   opts.src_from_output_rotation =
     Eigen::AngleAxisf(0.1f, Eigen::Vector3f::UnitY()).toRotationMatrix();
   opts.alpha = 1.0f;
+  RectifiedOutputModelOptions skewed = opts;
+  skewed.output_template.intrinsics.skew = 5.0f;
+  EXPECT_EQ(
+    makeRectifiedOutputModel(src, ImageSize{4096, 200}, skewed).status, StatusCode::INVALID_INPUT
+  );
   const RectifiedOutputModelResult r = makeRectifiedOutputModel(src, ImageSize{4096, 200}, opts);
   ASSERT_EQ(r.status, StatusCode::OK);
   EXPECT_EQ(

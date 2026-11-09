@@ -491,8 +491,7 @@ TEST(LatLongProjection, JacobianMatchesFiniteDifferences)
 {
   for (const auto type : kTypes)
   {
-    CameraModel64 m = latLongModel<double>(type);
-    m.intrinsics.skew = 3.0;
+    const CameraModel64 m = latLongModel<double>(type);
     for (const Eigen::Vector3d &unit : sphereRays(300))
     {
       const Eigen::Vector3d ray = 2.5 * unit;  // not unit length on purpose
@@ -780,34 +779,23 @@ TEST(LatLongFactory, FovIsClippedToTheSphere)
   EXPECT_NEAR(fov.vertical_fov_deg, 180.0f, 1e-3f);
 }
 
-TEST(LatLongFactory, FovCountsOnlyValidPixelsUnderSkew)
+// Skew would shift the longitude with the latitude, so the image columns
+// would not be meridians: no lat-long model has it, in either precision, and
+// a skewed lat-long template cannot be a rectify output either.
+TEST(LatLongProjection, RejectsSkew)
 {
-  // With skew the principal column runs across longitudes: lambda =
-  // -skew * y / fx. Here only |y| <= pi / 100 keeps it within [-pi, pi],
-  // a 3.6 degree latitude span, although the rows reach |y| = 1.005.
   for (const auto type : kTypes)
   {
     CameraModel m = latLongModel<float>(type);
-    m.intrinsics.fx = 100.0f;
-    m.intrinsics.fy = 100.0f;
-    m.intrinsics.cx = 100.0f;
-    m.intrinsics.cy = 100.0f;
-    m.intrinsics.skew = 10000.0f;
+    CameraModel64 m64 = latLongModel<double>(type);
     ASSERT_EQ(validateCameraModel(m), StatusCode::OK);
-    const FovResult fov = computeFov(m, ImageSize{201, 201});
-    ASSERT_EQ(fov.status, StatusCode::OK);
-    const double y_seam = kPi / 100.0;
-    const double expected =
-      type == ProjectionModelType::EQUIRECTANGULAR ? 2.0 * y_seam : 2.0 * std::atan(y_seam);
-    EXPECT_NEAR(fov.vertical_fov_deg, expected * 180.0 / kPi, 1e-3) << toString(type);
-    EXPECT_NEAR(fov.horizontal_fov_deg, 201.0 / 100.0 * 180.0 / kPi, 1e-3) << toString(type);
-
-    // The rows counted are exactly the valid ones: just inside the limit
-    // unprojects, just past it does not.
-    const float v_in = 100.0f + 100.0f * static_cast<float>(y_seam) * 0.999f;
-    const float v_out = 100.0f + 100.0f * static_cast<float>(y_seam) * 1.001f;
-    EXPECT_EQ(pixelToRay(m, Pixel2{100.0f, v_in}).status, StatusCode::OK);
-    EXPECT_EQ(pixelToRay(m, Pixel2{100.0f, v_out}).status, StatusCode::OUT_OF_FOV);
+    ASSERT_EQ(validateCameraModel64(m64), StatusCode::OK);
+    m.intrinsics.skew = 3.0f;
+    m64.intrinsics.skew = 3.0;
+    EXPECT_EQ(validateCameraModel(m), StatusCode::INVALID_MODEL) << toString(type);
+    EXPECT_EQ(validateCameraModel64(m64), StatusCode::INVALID_MODEL) << toString(type);
+    EXPECT_EQ(rayToPixel(m, Eigen::Vector3f(0.1f, 0.2f, 1.0f)).status, StatusCode::INVALID_MODEL);
+    EXPECT_EQ(computeFov(m, ImageSize{201, 201}).status, StatusCode::INVALID_MODEL);
   }
 }
 
