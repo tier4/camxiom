@@ -25,10 +25,24 @@
 
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <vector>
 
 namespace camxiom::opencv
 {
+namespace
+{
+
+// `keep ? value : NaN` without a select, which compilers turn back into a
+// branch on the point (see undistortPoints): value * 1 is value exactly, and
+// value * NaN is NaN.
+inline double keptOrNaN(const double value, const bool keep)
+{
+  static constexpr double kFactor[2] = {std::numeric_limits<double>::quiet_NaN(), 1.0};
+  return value * kFactor[static_cast<int>(keep)];
+}
+
+}  // namespace
 
 int projectPoints(
   const CameraModel &model, const std::vector<cv::Point3f> &object_points, const cv::Vec3d &rvec,
@@ -98,12 +112,6 @@ int undistortPoints(
   {
     return -1;
   }
-  // A lat-long ray and its opposite land on the same normalized-plane point
-  // (x/z, y/z), so the lat-long projections have no normalized image here.
-  if (isLatLongProjection(model.projection.type))
-  {
-    return -1;
-  }
 
   const int n = static_cast<int>(src_points.size());
   if (n == 0)
@@ -144,66 +152,48 @@ int undistortPoints(
     return -1;
   }
 
+  // A ray and its opposite share the normalized point (x/z, y/z), so only a
+  // ray in front of the camera has one. Wide fisheye / sphere models and the
+  // lat-long projections also unproject pixels to rays at or behind z = 0
+  // (and R can turn a ray behind the rectified camera); those points have no
+  // normalized coordinates and are written as NaN. The loop has no branch
+  // on the point: which points are behind depends on the data (a wide
+  // fisheye mixes both), where branches mispredict. Every point is divided
+  // through, and the tests only decide what is written.
+  const bool has_R = !R_mat.empty();
   int valid_count_out = 0;
   dst_points_out.resize(static_cast<std::size_t>(n));
   for (int i = 0; i < n; ++i)
   {
     const std::size_t idx = static_cast<std::size_t>(i);
-    if (statuses[idx] != StatusCode::OK)
-    {
-      dst_points_out[idx] = cv::Point2f(kNaN, kNaN);
-      continue;
-    }
-
     const std::size_t base = idx * 3;
     const double dz = static_cast<double>(dirs_xyz[base + 2]);
-    if (!std::isfinite(dz) || std::abs(dz) <= kDivisionEpsilon)
-    {
-      dst_points_out[idx] = cv::Point2f(kNaN, kNaN);
-      continue;
-    }
+    bool ok = (statuses[idx] == StatusCode::OK) & std::isfinite(dz) & (dz > kDivisionEpsilon);
     const double iz = 1.0 / dz;
     double xn = static_cast<double>(dirs_xyz[base + 0]) * iz;
     double yn = static_cast<double>(dirs_xyz[base + 1]) * iz;
-    if (!std::isfinite(xn) || !std::isfinite(yn))
-    {
-      dst_points_out[idx] = cv::Point2f(kNaN, kNaN);
-      continue;
-    }
 
-    if (!R_mat.empty())
+    if (has_R)
     {
       const double xr = R(0, 0) * xn + R(0, 1) * yn + R(0, 2);
       const double yr = R(1, 0) * xn + R(1, 1) * yn + R(1, 2);
       const double zr = R(2, 0) * xn + R(2, 1) * yn + R(2, 2);
-      if (!std::isfinite(zr) || std::abs(zr) <= kDivisionEpsilon)
-      {
-        dst_points_out[idx] = cv::Point2f(kNaN, kNaN);
-        continue;
-      }
+      ok &= std::isfinite(zr) & (zr > kDivisionEpsilon);
       const double izr = 1.0 / zr;
       xn = xr * izr;
       yn = yr * izr;
-      if (!std::isfinite(xn) || !std::isfinite(yn))
-      {
-        dst_points_out[idx] = cv::Point2f(kNaN, kNaN);
-        continue;
-      }
     }
 
     if (has_P)
     {
       xn = pfx * xn + pcx;
       yn = pfy * yn + pcy;
-      if (!std::isfinite(xn) || !std::isfinite(yn))
-      {
-        dst_points_out[idx] = cv::Point2f(kNaN, kNaN);
-        continue;
-      }
     }
 
-    dst_points_out[idx] = cv::Point2f(static_cast<float>(xn), static_cast<float>(yn));
-    ++valid_count_out;
+    ok &= std::isfinite(xn) & std::isfinite(yn);
+    dst_points_out[idx] =
+      cv::Point2f(static_cast<float>(keptOrNaN(xn, ok)), static_cast<float>(keptOrNaN(yn, ok)));
+    valid_count_out += static_cast<int>(ok);
   }
   return valid_count_out;
 }

@@ -48,11 +48,11 @@ struct SolvePnPConfig
   bool use_fallback{true};  // Try fallback on failure
 };
 
-/// Solve PnP using camxiom's unified undistortion for any camera model
-/// except the lat-long projections (EQUIRECTANGULAR, CYLINDRICAL), which it
-/// refuses: their rays span both sides of the camera and lose that side on
-/// the normalized image plane.
-/// @return true on success; false for invalid input or a lat-long model.
+/// Solve PnP using camxiom's unified undistortion for any camera model.
+/// Points whose ray lies behind the camera (wide fisheye / sphere models,
+/// the lat-long projections) have no normalized image coordinates and are
+/// left out; at least 4 points must remain.
+/// @return true on success; false for invalid input or a failed solve.
 [[nodiscard]] bool solvePnP(
   const CameraModel &model, const std::vector<cv::Point3f> &object_points,
   const std::vector<cv::Point2f> &image_points, cv::Vec3d &rvec_out, cv::Vec3d &tvec_out,

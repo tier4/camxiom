@@ -199,9 +199,10 @@ project, unproject, batch, take Jacobians and build remap maps like any
 other model. The calibration layer does not estimate them and rejects
 them: `calibrate`, `PnpSolver`, `init::estimatePoseDLT` and
 `estimatePoseRefined`, `convertCameraModel`, `getDefaultSeed`, the
-parameter Jacobian and the autodiff template, and the OpenCV-layer
-`undistortPoints` and `solvePnP` (the normalized image plane they use
-cannot tell such a ray from its opposite).
+parameter Jacobian and the autodiff template. The OpenCV-layer
+`undistortPoints` and `solvePnP` take them, for pixels whose ray is in front
+of the camera: the normalized image plane they use cannot tell a ray from its
+opposite.
 
 Factories in `<camxiom/model.hpp>` build a model from the angular range its
 image should cover, edge to edge (the left edge of column 0 is `lon_min`,

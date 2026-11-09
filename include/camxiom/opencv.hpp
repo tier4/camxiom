@@ -188,10 +188,13 @@ private:
 );
 
 /// Undistort pixel coordinates to normalized image coordinates.
+/// A ray and its opposite share the normalized point (x/z, y/z), so a pixel
+/// whose ray is not in front of the camera (z <= 0) -- possible for fisheye
+/// and sphere models wider than 180 degrees and for the lat-long projections
+/// -- or, with R, not in front of the rectified camera, is written as
+/// (NaN, NaN) and not counted, like a pixel that fails to unproject.
 /// @return Number of successfully undistorted points, or -1 on invalid
-/// input/model. The lat-long projections (EQUIRECTANGULAR, CYLINDRICAL)
-/// return -1: their rays span both sides of the camera, which the
-/// normalized image plane (x/z, y/z) cannot tell apart.
+/// input/model.
 [[nodiscard]] int undistortPoints(
   const CameraModel &model, const std::vector<cv::Point2f> &src_points,
   std::vector<cv::Point2f> &dst_points_out, const cv::Mat &R = cv::Mat(),

@@ -606,44 +606,136 @@ TEST(OpenCVInteropPnp, RejectsTooFewPoints)
   );
 }
 
-// The lat-long projections have no normalized image plane (a ray and its
-// opposite share x/z, y/z), so undistortPoints and solvePnP refuse them
-// rather than return a pose that may face the wrong way.
-TEST(OpenCVInteropPnp, RejectsLatLongProjections)
+// A ray and its opposite share the normalized point (x/z, y/z). A pixel whose
+// ray is not in front of the camera -- a fisheye wider than 180 degrees, a
+// lat-long projection, or a ray that R turns behind the rectified camera --
+// has no normalized coordinates: undistortPoints writes NaN and does not
+// count it, instead of returning the opposite ray's point.
+TEST(OpenCVInteropPoints, UndistortPointsSkipsRaysBehindTheCamera)
 {
-  for (const auto type : {ProjectionModelType::EQUIRECTANGULAR, ProjectionModelType::CYLINDRICAL})
-  {
-    CameraModel model;
-    model.projection.type = type;
-    model.intrinsics.fx = 2048.0f / (2.0f * 3.14159265f);
-    model.intrinsics.fy = 1024.0f / 3.14159265f;
-    model.intrinsics.cx = 1023.5f;
-    model.intrinsics.cy = 511.5f;
-    ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
+  const float kPi = 3.14159265f;
+  CameraModel wide;
+  wide.intrinsics.fx = 300.0f;
+  wide.intrinsics.fy = 300.0f;
+  wide.intrinsics.cx = 640.0f;
+  wide.intrinsics.cy = 640.0f;
+  wide.projection.type = ProjectionModelType::EQUIDISTANT;
+  wide.projection.theta_max = 3.0f;
+  ASSERT_EQ(validateCameraModel(wide), StatusCode::OK);
 
-    std::vector<cv::Point3f> object_points;
-    for (int r = 0; r < 5; ++r)
+  CameraModel equirect;
+  ASSERT_EQ(
+    camxiom::makeEquirectangularModel(camxiom::ImageSize{2048, 1024}, equirect), StatusCode::OK
+  );
+
+  for (const CameraModel &model : {wide, equirect})
+  {
+    // Front: 60 deg off the axis to the right. Behind: 100 deg (fisheye) or
+    // 150 deg (lat-long) off the axis, so x/z of the behind ray is finite.
+    const float behind = isLatLongProjection(model.projection.type) ? 150.0f : 100.0f;
+    const Eigen::Vector3f front_ray(
+      std::sin(60.0f * kPi / 180.0f), 0.1f, std::cos(60.0f * kPi / 180.0f)
+    );
+    const Eigen::Vector3f back_ray(
+      std::sin(behind * kPi / 180.0f), 0.1f, std::cos(behind * kPi / 180.0f)
+    );
+    const camxiom::PixelResult front_px = camxiom::rayToPixel(model, front_ray);
+    const camxiom::PixelResult back_px = camxiom::rayToPixel(model, back_ray);
+    ASSERT_TRUE(front_px.ok());
+    ASSERT_TRUE(back_px.ok());
+
+    const std::vector<cv::Point2f> pixels{
+      {front_px.pixel.u, front_px.pixel.v}, {back_px.pixel.u, back_px.pixel.v}};
+    std::vector<cv::Point2f> normalized;
+    ASSERT_EQ(cvx::undistortPoints(model, pixels, normalized), 1);
+    ASSERT_EQ(normalized.size(), 2U);
+    EXPECT_NEAR(normalized[0].x, front_ray.x() / front_ray.z(), 1e-4);
+    EXPECT_NEAR(normalized[0].y, front_ray.y() / front_ray.z(), 1e-4);
+    EXPECT_TRUE(std::isnan(normalized[1].x) && std::isnan(normalized[1].y));
+  }
+
+  // R turns 90 degrees about +Y: the ray 60 deg to the right ends up behind
+  // the rectified camera, the ray 60 deg to the left in front of it.
+  const CameraModel pinhole = makePinholeNoDistortion();
+  const float t60 = std::tan(60.0f * kPi / 180.0f);
+  const std::vector<cv::Point2f> pixels{
+    {pinhole.intrinsics.cx + pinhole.intrinsics.fx * t60, pinhole.intrinsics.cy},
+    {pinhole.intrinsics.cx - pinhole.intrinsics.fx * t60, pinhole.intrinsics.cy}};
+  const cv::Mat R = (cv::Mat_<double>(3, 3) << 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, -1.0, 0.0, 0.0);
+  std::vector<cv::Point2f> rectified;
+  ASSERT_EQ(cvx::undistortPoints(pinhole, pixels, rectified, R), 1);
+  EXPECT_TRUE(std::isnan(rectified[0].x) && std::isnan(rectified[0].y));
+  // (-sin60, 0, cos60) -> (cos60, 0, sin60): x/z = 1/tan60.
+  EXPECT_NEAR(rectified[1].x, 1.0f / t60, 1e-4);
+  EXPECT_NEAR(rectified[1].y, 0.0f, 1e-6);
+}
+
+// solvePnP goes through undistortPoints, so it takes every model and leaves
+// out the points behind the camera. A planar target in front of a lat-long or
+// wider-than-180 fisheye camera, plus four points behind it, gives the pose
+// of the target.
+TEST(OpenCVInteropPnp, SolvesFromPointsInFrontOfWideAndLatLongCameras)
+{
+  CameraModel wide;
+  wide.intrinsics.fx = 300.0f;
+  wide.intrinsics.fy = 300.0f;
+  wide.intrinsics.cx = 640.0f;
+  wide.intrinsics.cy = 640.0f;
+  wide.projection.type = ProjectionModelType::EQUIDISTANT;
+  wide.projection.theta_max = 3.0f;
+  CameraModel equirect;
+  CameraModel cylinder;
+  ASSERT_EQ(
+    camxiom::makeEquirectangularModel(camxiom::ImageSize{2048, 1024}, equirect), StatusCode::OK
+  );
+  ASSERT_EQ(
+    camxiom::makeCylindricalModel(
+      camxiom::ImageSize{2048, 1024}, -3.14159265, 3.14159265, -1.2, 1.2, cylinder
+    ),
+    StatusCode::OK
+  );
+
+  const cv::Vec3d rvec_gt(0.04, -0.08, 0.02);
+  const cv::Vec3d tvec_gt(0.03, 0.01, 1.4);
+  const cv::Matx33d R_gt = rodrigues(rvec_gt);
+
+  std::vector<cv::Point3f> object_points;
+  for (int r = 0; r < 5; ++r)
+  {
+    for (int c = 0; c < 5; ++c)
     {
-      for (int c = 0; c < 5; ++c)
-      {
-        object_points.emplace_back(
-          static_cast<float>(c) * 0.05f - 0.1f, static_cast<float>(r) * 0.05f - 0.1f, 0.0f
-        );
-      }
+      object_points.emplace_back(
+        static_cast<float>(c) * 0.05f - 0.1f, static_cast<float>(r) * 0.05f - 0.1f, 0.0f
+      );
     }
+  }
+  // Points behind the camera (camera frame z < 0), back in the object frame.
+  for (const cv::Vec3d &behind :
+       {cv::Vec3d(0.5, 0.1, -1.0), cv::Vec3d(-0.4, -0.2, -1.5), cv::Vec3d(0.2, 0.3, -2.0),
+        cv::Vec3d(-0.3, 0.2, -0.8)})
+  {
+    const cv::Vec3d object = R_gt.t() * (behind - tvec_gt);
+    object_points.emplace_back(
+      static_cast<float>(object[0]), static_cast<float>(object[1]), static_cast<float>(object[2])
+    );
+  }
+
+  for (const CameraModel &model : {wide, equirect, cylinder})
+  {
+    ASSERT_EQ(validateCameraModel(model), StatusCode::OK);
     std::vector<cv::Point2f> image_points;
     ASSERT_EQ(
-      cvx::projectPoints(
-        model, object_points, cv::Vec3d(0.04, -0.08, 0.02), cv::Vec3d(0.03, 0.01, 1.4), image_points
-      ),
+      cvx::projectPoints(model, object_points, rvec_gt, tvec_gt, image_points),
       static_cast<int>(object_points.size())
     );
 
-    std::vector<cv::Point2f> normalized;
-    EXPECT_EQ(cvx::undistortPoints(model, image_points, normalized), -1);
-    cv::Vec3d rvec;
-    cv::Vec3d tvec;
-    EXPECT_FALSE(cvx::solvePnP(model, object_points, image_points, rvec, tvec));
+    cv::Vec3d rvec_est;
+    cv::Vec3d tvec_est;
+    ASSERT_TRUE(cvx::solvePnP(model, object_points, image_points, rvec_est, tvec_est));
+    EXPECT_LT(cvx::reprojectRmse(model, object_points, image_points, rvec_est, tvec_est), 0.5);
+    EXPECT_NEAR(tvec_est[0], tvec_gt[0], 5e-2);
+    EXPECT_NEAR(tvec_est[1], tvec_gt[1], 5e-2);
+    EXPECT_NEAR(tvec_est[2], tvec_gt[2], 5e-2);
   }
 }
 
